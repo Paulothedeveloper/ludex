@@ -1,0 +1,2275 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import "./PlayboxLauncher.css";
+
+async function pickImageFile() {
+  try {
+    const selected = await openDialog({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "Imagem", extensions: ["png", "jpg", "jpeg", "webp", "bmp"] }],
+    });
+    return typeof selected === "string" ? selected : null;
+  } catch (e) {
+    console.error("dialog open", e);
+    return null;
+  }
+}
+
+const MODAL_EXIT_MS = 220;
+
+const THEMES = [
+  {
+    id: "switch-dark",
+    name: "Switch Dark",
+    swatch: ["#161616", "#2a2a2a", "#fff"],
+    vars: { "--theme-bg": "#161616", "--theme-surface": "#1a1a1a", "--theme-card": "#2a2a2a", "--theme-text": "#fff", "--theme-muted": "#888", "--theme-border": "#2a2a2a" },
+  },
+  {
+    id: "ps3-wave",
+    name: "PS3 Wave",
+    swatch: ["#001a3a", "#1d4ed8", "#ffd700"],
+    vars: { "--theme-bg": "#021232", "--theme-surface": "#0a1f4a", "--theme-card": "#0e2a5a", "--theme-text": "#e8f1ff", "--theme-muted": "#7d9bc4", "--theme-border": "#0e2a5a" },
+  },
+  {
+    id: "sunset",
+    name: "Sunset",
+    swatch: ["#2a0a1a", "#ff6b35", "#fcd34d"],
+    vars: { "--theme-bg": "#1a0a14", "--theme-surface": "#2a1424", "--theme-card": "#3a1830", "--theme-text": "#fff8f0", "--theme-muted": "#c9a8b8", "--theme-border": "#3a1830" },
+  },
+  {
+    id: "forest",
+    name: "Forest",
+    swatch: ["#0a1a0a", "#22c55e", "#86efac"],
+    vars: { "--theme-bg": "#0a1612", "--theme-surface": "#142822", "--theme-card": "#1a3a30", "--theme-text": "#e8fff2", "--theme-muted": "#9bc4a8", "--theme-border": "#1a3a30" },
+  },
+  {
+    id: "pure-light",
+    name: "Pure Light",
+    swatch: ["#f5f5f5", "#3b82f6", "#1f2937"],
+    vars: { "--theme-bg": "#ededed", "--theme-surface": "#fafafa", "--theme-card": "#fff", "--theme-text": "#1a1a1a", "--theme-muted": "#666", "--theme-border": "#d4d4d4" },
+  },
+];
+
+function useClock() {
+  const [time, setTime] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return time.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// ---------- Web Audio: sons procedurais ----------
+let _audioCtx = null;
+function audioCtx() {
+  if (!_audioCtx) {
+    try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+  }
+  // Browser autoplay policy: contexto pode estar "suspended" até primeira interação
+  if (_audioCtx && _audioCtx.state === "suspended") {
+    _audioCtx.resume().catch(() => {});
+  }
+  return _audioCtx;
+}
+
+function unlockAudio() {
+  // Garante que o contexto está rodando — chamar em qualquer user gesture
+  const ctx = audioCtx();
+  if (ctx && ctx.state !== "running") {
+    ctx.resume().catch(() => {});
+  }
+}
+
+function playTone(freq, duration, type = "sine", volume = 0.05, when = 0) {
+  const ctx = audioCtx();
+  if (!ctx) return;
+  try {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    const start = ctx.currentTime + when;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.01);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(start);
+    gain.gain.exponentialRampToValueAtTime(0.0005, start + duration);
+    osc.stop(start + duration + 0.02);
+  } catch {}
+}
+
+// Toca uma nota com vibrato leve (mais "musical" que tom puro)
+function playNote(freq, duration, volume = 0.06, when = 0) {
+  const ctx = audioCtx();
+  if (!ctx) return;
+  try {
+    const osc = ctx.createOscillator();
+    const sub = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const subGain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.value = freq;
+    sub.type = "sine";
+    sub.frequency.value = freq * 2; // harmônico
+    subGain.gain.value = volume * 0.25;
+    const start = ctx.currentTime + when;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0005, start + duration);
+    osc.connect(gain);
+    sub.connect(subGain);
+    subGain.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(start); sub.start(start);
+    osc.stop(start + duration + 0.05);
+    sub.stop(start + duration + 0.05);
+  } catch {}
+}
+
+const sfx = {
+  nav: () => playTone(520, 0.04, "sine", 0.035),
+  switchSys: () => playTone(380, 0.06, "sine", 0.04),
+  confirm: () => { playTone(660, 0.06, "triangle", 0.05); setTimeout(() => playTone(880, 0.08, "triangle", 0.05), 50); },
+  back: () => playTone(220, 0.08, "sine", 0.04),
+  fav: () => { playTone(700, 0.05, "triangle", 0.05); setTimeout(() => playTone(1100, 0.08, "triangle", 0.05), 60); },
+  click: () => playTone(880, 0.025, "square", 0.025),
+  toggle: () => { playTone(440, 0.03, "triangle", 0.04); setTimeout(() => playTone(660, 0.04, "triangle", 0.04), 30); },
+  open: () => { playTone(330, 0.05, "sine", 0.04); setTimeout(() => playTone(495, 0.07, "sine", 0.04), 40); },
+  achievement: () => {
+    playTone(523, 0.1, "triangle", 0.06);
+    setTimeout(() => playTone(659, 0.1, "triangle", 0.06), 90);
+    setTimeout(() => playTone(784, 0.18, "triangle", 0.06), 180);
+  },
+  // Intro melódica — arpejo ascendente C major + acorde final (~1.4s)
+  intro: () => {
+    unlockAudio();
+    // Arpejo: C5 E5 G5 C6
+    playNote(523.25, 0.18, 0.07, 0.00);   // C5
+    playNote(659.25, 0.18, 0.07, 0.12);   // E5
+    playNote(783.99, 0.18, 0.07, 0.24);   // G5
+    playNote(1046.50, 0.45, 0.08, 0.36);  // C6 (sustain)
+    // Acorde final empilhado em cima
+    playNote(523.25, 0.55, 0.05, 0.36);
+    playNote(659.25, 0.55, 0.05, 0.36);
+    playNote(783.99, 0.55, 0.05, 0.36);
+    // Brilho — quinta acima no fim
+    playNote(1318.51, 0.30, 0.04, 0.55);  // E6
+  },
+  // Shutdown CRT: queda ~600ms + thump de descarga eletrica no fim
+  shutdown: () => {
+    // varredura descendente (tubo se descarregando)
+    playTone(880, 0.08, "sine",    0.05, 0.00);
+    playTone(523, 0.10, "sine",    0.06, 0.05);
+    playTone(330, 0.12, "sine",    0.06, 0.13);
+    playTone(220, 0.14, "sine",    0.06, 0.22);
+    // pop seco no momento do colapso pra linha (~350ms = 45% da animacao)
+    playTone(80,  0.06, "square",  0.10, 0.36);
+    // zumbido grave do CRT residual (afterglow)
+    playTone(60,  0.30, "triangle", 0.05, 0.45);
+    // tick final do ponto sumindo
+    playTone(2400, 0.04, "square", 0.04, 0.78);
+  },
+};
+
+// Jingles por plataforma — 2-3 notas curtas (~250-400ms cada)
+const PLATFORM_JINGLES = {
+  switch:     () => { playNote(659.25, 0.12, 0.06); playNote(987.77, 0.22, 0.06, 0.10); }, // E-B (Switch click)
+  wiiu:       () => { playNote(440.00, 0.10, 0.05); playNote(554.37, 0.10, 0.05, 0.08); playNote(659.25, 0.20, 0.06, 0.16); }, // A-C#-E
+  wii:        () => { playNote(880.00, 0.10, 0.05); playNote(587.33, 0.20, 0.06, 0.10); }, // A-D (Wii Remote chime)
+  gc:         () => { playNote(523.25, 0.08, 0.05); playNote(659.25, 0.08, 0.05, 0.08); playNote(783.99, 0.18, 0.06, 0.16); }, // C-E-G
+  n64:        () => { playNote(739.99, 0.08, 0.05); playNote(523.25, 0.08, 0.05, 0.08); playNote(415.30, 0.20, 0.06, 0.16); }, // F#-C-G# (N64 startup vibe)
+  gba:        () => { playTone(987.77, 0.08, "square", 0.04, 0.00); playTone(1318.51, 0.18, "square", 0.04, 0.08); }, // chiptune
+  ps3:        () => { playNote(329.63, 0.10, 0.05); playNote(440.00, 0.10, 0.05, 0.10); playNote(587.33, 0.22, 0.06, 0.20); }, // E-A-D (PS3 wave)
+  ps2:        () => { playNote(196.00, 0.20, 0.07); playNote(293.66, 0.25, 0.05, 0.08); }, // G-D (PS2 brap baixo)
+  ps1:        () => { playNote(174.61, 0.28, 0.07); playNote(220.00, 0.28, 0.05, 0.04); playNote(261.63, 0.28, 0.05, 0.08); }, // F-A-C (PS1 chord)
+  ps4:        () => { playNote(246.94, 0.10, 0.05); playNote(329.63, 0.10, 0.05, 0.08); playNote(493.88, 0.22, 0.06, 0.16); }, // B-E-B
+  xbox:       () => { playTone(329.63, 0.20, "sine", 0.06, 0.00); playTone(246.94, 0.28, "sine", 0.05, 0.12); }, // E-B (Xbox sphere)
+  retro:      () => { playTone(880, 0.04, "square", 0.04, 0.00); playTone(1318, 0.06, "square", 0.04, 0.04); playTone(1760, 0.12, "square", 0.04, 0.10); }, // arpejo chiptune
+  _favorites: () => { playNote(880.00, 0.08, 0.05); playNote(1108.73, 0.16, 0.06, 0.06); }, // A-C#
+};
+
+function playPlatformJingle(systemId) {
+  const fn = PLATFORM_JINGLES[systemId];
+  if (fn) fn();
+  else sfx.switchSys();
+}
+
+// ---------- Achievements ----------
+const ACHIEVEMENTS = [
+  { id: "first_launch",   name: "Primeiro Jogo",   desc: "Lancou seu primeiro jogo",      check: (p) => p.total_launches >= 1 },
+  { id: "ten_launches",   name: "Aquecendo",       desc: "Lancou 10 jogos",                check: (p) => p.total_launches >= 10 },
+  { id: "fifty_launches", name: "Veterano",        desc: "Lancou 50 jogos",                check: (p) => p.total_launches >= 50 },
+  { id: "multi_console",  name: "Multi-Console",   desc: "Jogou em 3+ sistemas diferentes", check: (p) => new Set(Object.keys(p.play_time || {})).size >= 3 },
+  { id: "five_systems",   name: "Polimata",        desc: "Jogou em 5+ sistemas diferentes", check: (p) => new Set(Object.keys(p.play_time || {})).size >= 5 },
+  { id: "ten_favorites",  name: "Curador",         desc: "Marcou 10 favoritos",            check: (p) => (p.favorites || []).length >= 10 },
+  { id: "marathon",       name: "Maratona",        desc: "Acumulou 1 hora de jogo total",  check: (p) => Object.values(p.play_time || {}).reduce((a, b) => a + b, 0) >= 3600 },
+];
+
+function formatPlayTime(seconds) {
+  if (!seconds || seconds < 60) return `${Math.floor(seconds || 0)}s`;
+  const m = Math.floor(seconds / 60);
+  if (m < 60) return `${m}min`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}min`;
+}
+
+function GearIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+function CloseIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>); }
+function PowerIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M18.36 6.64a9 9 0 1 1-12.73 0" /><line x1="12" y1="2" x2="12" y2="12" /></svg>); }
+function FullscreenIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /></svg>); }
+function RefreshIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21 12a9 9 0 1 1-3.51-7.13" /><polyline points="21 4 21 10 15 10" /></svg>); }
+function PlusIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>); }
+function TrashIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>); }
+function EditIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>); }
+function RotateIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>); }
+function UserIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>); }
+function SearchIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>); }
+function StarIcon({ filled }) {
+  return (
+    <svg viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+function PlayIcon() { return (<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden><polygon points="6 4 20 12 6 20 6 4" /></svg>); }
+function FolderIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>); }
+function InfoIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>); }
+function SortIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="15" y2="12" /><line x1="3" y1="18" x2="9" y2="18" /></svg>); }
+function ImageIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>); }
+function GamepadIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><line x1="6" y1="11" x2="10" y2="11" /><line x1="8" y1="9" x2="8" y2="13" /><line x1="15" y1="12" x2="15.01" y2="12" /><line x1="18" y1="10" x2="18.01" y2="10" /><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258A4 4 0 0 0 17.32 5z" /></svg>); }
+
+function SystemIcon({ id }) {
+  const fill = "currentColor";
+  switch (id) {
+    case "switch":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="8" width="20" height="48" rx="9" fill={fill} /><rect x="38" y="8" width="20" height="48" rx="9" fill={fill} /><circle cx="16" cy="20" r="3" fill="#1c1c1c" /><circle cx="48" cy="44" r="3" fill="#1c1c1c" /><circle cx="16" cy="36" r="1.6" fill="#1c1c1c" /><circle cx="13" cy="40" r="1.2" fill="#1c1c1c" /><circle cx="19" cy="40" r="1.2" fill="#1c1c1c" /><circle cx="16" cy="44" r="1.2" fill="#1c1c1c" /><circle cx="48" cy="20" r="1.2" fill="#1c1c1c" /><circle cx="44" cy="24" r="1.2" fill="#1c1c1c" /><circle cx="52" cy="24" r="1.2" fill="#1c1c1c" /><circle cx="48" cy="28" r="1.2" fill="#1c1c1c" /></svg>);
+    case "wiiu":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="4" y="14" width="56" height="36" rx="8" fill={fill} /><rect x="14" y="22" width="36" height="20" rx="2" fill="#1c1c1c" /><circle cx="9" cy="32" r="2" fill="#1c1c1c" /><circle cx="55" cy="32" r="2" fill="#1c1c1c" /></svg>);
+    case "wii":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="24" y="6" width="16" height="52" rx="4" fill={fill} /><circle cx="32" cy="14" r="3" fill="#1c1c1c" /><rect x="28" y="22" width="8" height="2" fill="#1c1c1c" /><rect x="31" y="19" width="2" height="8" fill="#1c1c1c" /><circle cx="32" cy="34" r="2.5" fill="#1c1c1c" /><circle cx="32" cy="42" r="1.5" fill="#1c1c1c" /><rect x="28" y="48" width="8" height="2" fill="#1c1c1c" /></svg>);
+    case "gc":
+      return (<svg viewBox="0 0 64 64" aria-hidden><path d="M32 6 L56 18 L56 44 L32 56 L8 44 L8 18 Z" fill={fill} /><path d="M32 6 L56 18 L32 30 L8 18 Z" fill="#1c1c1c" opacity="0.25" /><path d="M32 30 L32 56 L8 44 L8 18 Z" fill="#1c1c1c" opacity="0.4" /><text x="32" y="40" textAnchor="middle" fill="#1c1c1c" fontSize="14" fontWeight="900" fontFamily="system-ui">G</text></svg>);
+    case "n64":
+      return (<svg viewBox="0 0 64 64" aria-hidden><path d="M32 8 L48 24 L32 24 Z" fill={fill} /><path d="M32 8 L16 24 L32 24 Z" fill={fill} opacity="0.7" /><path d="M32 56 L48 40 L32 40 Z" fill={fill} opacity="0.5" /><path d="M32 56 L16 40 L32 40 Z" fill={fill} opacity="0.85" /><rect x="14" y="22" width="36" height="20" rx="2" fill="none" stroke={fill} strokeWidth="3" /></svg>);
+    case "ps3": case "ps2": case "ps1":
+      return (<svg viewBox="0 0 64 64" aria-hidden><text x="32" y="48" textAnchor="middle" fill={fill} fontSize="44" fontWeight="900" fontStyle="italic" fontFamily="Impact, system-ui">PS</text></svg>);
+    case "ps4":
+      return (<svg viewBox="0 0 64 64" aria-hidden><text x="20" y="46" textAnchor="middle" fill={fill} fontSize="36" fontWeight="900" fontStyle="italic" fontFamily="Impact, system-ui">PS</text><text x="46" y="46" textAnchor="middle" fill={fill} fontSize="36" fontWeight="900" fontFamily="Impact, system-ui">4</text></svg>);
+    case "gba":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="4" y="18" width="56" height="28" rx="6" fill={fill} /><rect x="20" y="22" width="24" height="20" rx="2" fill="#1c1c1c" /><circle cx="11" cy="32" r="2.4" fill="#1c1c1c" /><rect x="9" y="30" width="4" height="1.5" fill={fill} /><rect x="10" y="29" width="2" height="6" fill={fill} /><circle cx="50" cy="29" r="2.2" fill="#1c1c1c" /><circle cx="55" cy="34" r="2.2" fill="#1c1c1c" /></svg>);
+    case "xbox":
+      return (
+        <svg viewBox="0 0 64 64" aria-hidden>
+          {/* Xbox sphere com X */}
+          <circle cx="32" cy="32" r="26" fill={fill} />
+          <path d="M16 14 Q32 32 48 14" stroke="#1c1c1c" strokeWidth="5" fill="none" strokeLinecap="round" />
+          <path d="M16 50 Q32 32 48 50" stroke="#1c1c1c" strokeWidth="5" fill="none" strokeLinecap="round" />
+        </svg>
+      );
+    case "retro":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="28" y="10" width="8" height="22" rx="3" fill={fill} /><circle cx="32" cy="12" r="6" fill={fill} /><ellipse cx="32" cy="44" rx="20" ry="14" fill={fill} /><circle cx="22" cy="44" r="3" fill="#1c1c1c" /><circle cx="32" cy="44" r="3" fill="#1c1c1c" /><circle cx="42" cy="44" r="3" fill="#1c1c1c" /></svg>);
+    default: return null;
+  }
+}
+
+function ContinueBanner({ lastPlayed, system, coverSrc, onResume }) {
+  return (
+    <div className="pb-continue" onClick={onResume}>
+      {coverSrc && <img className="pb-continue-cover" src={coverSrc} alt="" aria-hidden />}
+      <div className="pb-continue-overlay" />
+      <div className="pb-continue-content">
+        <div className="pb-continue-label">
+          <PlayIcon /> CONTINUAR ONDE PAROU
+        </div>
+        <div className="pb-continue-title">{lastPlayed.rom_name}</div>
+        <div className="pb-continue-system">
+          <span className="pb-continue-sys-icon" style={{ color: system?.color }}>
+            <SystemIcon id={lastPlayed.system_id} />
+          </span>
+          {system?.name || lastPlayed.system_id}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SearchOverlay({ systems, onPick, onClose, closing }) {
+  const [query, setQuery] = useState("");
+  const trimmed = query.trim().toLowerCase();
+  const results = useMemo(() => {
+    if (!trimmed) return [];
+    const out = [];
+    for (const s of systems) {
+      for (const g of s.games) {
+        if (g.name.toLowerCase().includes(trimmed)) {
+          out.push({ system: s, game: g });
+          if (out.length >= 60) return out;
+        }
+      }
+    }
+    return out;
+  }, [trimmed, systems]);
+
+  return (
+    <div className={`pb-search-backdrop ${closing ? "closing" : ""}`} onClick={onClose}>
+      <div className={`pb-search-box ${closing ? "closing" : ""}`} onClick={(e) => e.stopPropagation()}>
+        <div className="pb-search-input-wrap">
+          <SearchIcon />
+          <input
+            autoFocus
+            type="text"
+            className="pb-search-input"
+            placeholder="Buscar jogo em todos os sistemas..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") { e.preventDefault(); onClose(); }
+              if (e.key === "Enter" && results[0]) { e.preventDefault(); onPick(results[0]); }
+            }}
+          />
+          <span className="pb-search-count">{trimmed ? `${results.length}` : ""}</span>
+        </div>
+        <div className="pb-search-results">
+          {results.map(({ system, game }) => (
+            <button key={game.path} className="pb-search-item" onClick={() => onPick({ system, game })}>
+              <span className="pb-search-item-sys" style={{ background: system.color }}>
+                <SystemIcon id={system.id} />
+              </span>
+              <span className="pb-search-item-name">{game.name}</span>
+              <span className="pb-search-item-meta">{system.name}</span>
+            </button>
+          ))}
+          {trimmed && results.length === 0 && (
+            <div className="pb-search-empty">Nenhum jogo encontrado</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AchievementToast({ achievement, onDone }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 4500);
+    return () => clearTimeout(t);
+  }, [onDone]);
+  return (
+    <div className="pb-achievement">
+      <div className="pb-achievement-icon"><StarIcon filled /></div>
+      <div className="pb-achievement-text">
+        <div className="pb-achievement-label">CONQUISTA DESBLOQUEADA</div>
+        <div className="pb-achievement-name">{achievement.name}</div>
+        <div className="pb-achievement-desc">{achievement.desc}</div>
+      </div>
+    </div>
+  );
+}
+
+function SplashScreen({ profileName }) {
+  return (
+    <div className="pb-splash">
+      <div className="pb-splash-content">
+        <div className="pb-splash-logo">PLAYBOX</div>
+        <div className="pb-splash-tagline">EMULATION STATION</div>
+        {profileName && <div className="pb-splash-welcome">Bem-vindo, {profileName}</div>}
+        <div className="pb-splash-bar"><div className="pb-splash-bar-fill" /></div>
+      </div>
+    </div>
+  );
+}
+
+function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onUpdate, onClose, closing }) {
+  // mode: "list" | "create" | { mode: "edit", id }
+  const [mode, setMode] = useState("list");
+  const [name, setName] = useState("");
+  const [photoPath, setPhotoPath] = useState(null);
+  const [clearPhoto, setClearPhoto] = useState(false);
+  const [photoErr, setPhotoErr] = useState(null);
+
+  const editingProfile = mode?.mode === "edit"
+    ? profiles.find((p) => p.id === mode.id)
+    : null;
+
+  function startEdit(profile) {
+    setMode({ mode: "edit", id: profile.id });
+    setName(profile.name);
+    setPhotoPath(null);
+    setClearPhoto(false);
+    setPhotoErr(null);
+  }
+
+  function startCreate() {
+    setMode("create");
+    setName("");
+    setPhotoPath(null);
+    setClearPhoto(false);
+    setPhotoErr(null);
+  }
+
+  function backToList() {
+    setMode("list");
+    setName("");
+    setPhotoPath(null);
+    setClearPhoto(false);
+  }
+
+  async function pickPhoto() {
+    setPhotoErr(null);
+    const path = await pickImageFile();
+    if (!path) return;
+    setPhotoPath(path);
+    setClearPhoto(false);
+  }
+
+  async function submit() {
+    if (!name.trim()) return;
+    if (mode === "create") {
+      await onCreate({ name: name.trim(), photoSourcePath: photoPath });
+    } else if (editingProfile) {
+      await onUpdate({
+        id: editingProfile.id,
+        name: name.trim(),
+        photoSourcePath: photoPath,
+        clearPhoto,
+      });
+    }
+    backToList();
+  }
+
+  const isFormMode = mode === "create" || mode?.mode === "edit";
+  const headerTitle = mode === "create"
+    ? "Novo Perfil"
+    : mode?.mode === "edit"
+      ? "Editar Perfil"
+      : "Quem está jogando?";
+
+  // Preview da foto atual no modo edit (se nao escolheu nova e nao marcou pra remover)
+  const currentPhotoSrc = editingProfile && !clearPhoto && !photoPath && editingProfile.photo_path
+    ? convertFileSrc(editingProfile.photo_path)
+    : null;
+
+  return (
+    <div className={`pb-modal-backdrop ${closing ? "closing" : ""}`} onClick={onClose}>
+      <div className={`pb-modal pb-profile-modal ${closing ? "closing" : ""}`} onClick={(e) => e.stopPropagation()}>
+        <header className="pb-modal-header">
+          <h2>{headerTitle}</h2>
+          <button className="pb-icon-btn" onClick={() => { sfx.back(); onClose(); }}><CloseIcon /></button>
+        </header>
+
+        {!isFormMode ? (
+          <div className="pb-profile-grid">
+            {profiles.map((p) => (
+              <div key={p.id} className={`pb-profile-card ${p.id === activeId ? "active" : ""}`}>
+                <button className="pb-profile-pick" onClick={() => { sfx.confirm(); onSelect(p.id); }}>
+                  <div className="pb-profile-avatar">
+                    {p.photo_path
+                      ? <img src={convertFileSrc(p.photo_path)} alt={p.name} />
+                      : <UserIcon />}
+                  </div>
+                  <div className="pb-profile-name">{p.name}</div>
+                </button>
+                <button
+                  className="pb-profile-edit"
+                  onClick={() => { sfx.click(); startEdit(p); }}
+                  title="Editar perfil"
+                >
+                  <EditIcon />
+                </button>
+                {profiles.length > 1 && (
+                  <button className="pb-profile-del" onClick={() => { sfx.back(); onDelete(p.id); }} title="Deletar perfil">
+                    <TrashIcon />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button className="pb-profile-card pb-profile-add" onClick={() => { sfx.click(); startCreate(); }}>
+              <div className="pb-profile-avatar pb-profile-avatar-add"><PlusIcon /></div>
+              <div className="pb-profile-name">Novo Perfil</div>
+            </button>
+          </div>
+        ) : (
+          <div className="pb-profile-create">
+            <button type="button" className="pb-profile-photo-picker" onClick={pickPhoto}>
+              {photoPath
+                ? <img src={convertFileSrc(photoPath)} alt="preview" />
+                : currentPhotoSrc
+                  ? <img src={currentPhotoSrc} alt="atual" />
+                  : <span><UserIcon /><br />Escolher foto</span>}
+            </button>
+            {(photoPath || currentPhotoSrc) && (
+              <button
+                type="button"
+                className="pb-btn pb-btn-ghost pb-btn-sm"
+                onClick={() => { setPhotoPath(null); setClearPhoto(true); }}
+              >
+                Remover foto
+              </button>
+            )}
+            {photoErr && <div className="pb-warn">{photoErr}</div>}
+            <input
+              type="text"
+              className="pb-input"
+              placeholder="Nome do perfil"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={30}
+              autoFocus
+            />
+            <div className="pb-modal-actions">
+              <button className="pb-btn pb-btn-ghost" onClick={() => { sfx.back(); backToList(); }}>
+                Cancelar
+              </button>
+              <button className="pb-btn pb-btn-primary" disabled={!name.trim()} onClick={() => { sfx.confirm(); submit(); }}>
+                {mode === "create" ? "Criar" : "Salvar"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SettingsPanel({
+  closing, onClose, systems, romsRoot, emulatorsRoot,
+  onToggleFullscreen, onQuit, isFullscreen,
+  config, onSetTheme, onPickWallpaper, onClearWallpaper,
+  onSyncCovers, syncStatus, onRescan, rescanBusy,
+  onOpenProfiles, activeProfile,
+  onSetupSwitchKeys, switchKeysStatus,
+  onToggleSavesIsolation, savesStatus,
+}) {
+  const [discordId, setDiscordId] = useState(config.discord_app_id || "");
+  const [discordStatus, setDiscordStatus] = useState(null);
+  useEffect(() => { setDiscordId(config.discord_app_id || ""); }, [config.discord_app_id]);
+  async function saveDiscord() {
+    try {
+      const ok = await invoke("discord_set_app_id", { appId: discordId.trim() || null });
+      setDiscordStatus(ok ? { kind: "ok", text: "Conectado ao Discord!" } : { kind: "warn", text: "Salvo. Discord pode não estar rodando — abre o Discord e tenta de novo." });
+    } catch (e) {
+      setDiscordStatus({ kind: "error", text: String(e) });
+    }
+    setTimeout(() => setDiscordStatus(null), 4000);
+  }
+  const totalPlayTime = activeProfile
+    ? Object.values(activeProfile.play_time || {}).reduce((a, b) => a + b, 0)
+    : 0;
+  const unlocked = activeProfile
+    ? ACHIEVEMENTS.filter((a) => (activeProfile.achievements || []).includes(a.id))
+    : [];
+  const locked = activeProfile
+    ? ACHIEVEMENTS.filter((a) => !(activeProfile.achievements || []).includes(a.id))
+    : ACHIEVEMENTS;
+  return (
+    <>
+      <div className={`pb-settings-backdrop ${closing ? "closing" : ""}`} onClick={() => { sfx.back(); onClose(); }} />
+      <aside className={`pb-settings ${closing ? "closing" : ""}`} onClick={(e) => e.stopPropagation()}>
+        <header className="pb-settings-header">
+          <h2>Configuracoes</h2>
+          <button className="pb-icon-btn" onClick={() => { sfx.back(); onClose(); }} title="Fechar (Esc)"><CloseIcon /></button>
+        </header>
+
+        <div className="pb-settings-section">
+          <h3>Perfil ativo</h3>
+          {activeProfile ? (
+            <button className="pb-active-profile" onClick={() => { sfx.open(); onOpenProfiles(); }}>
+              <div className="pb-profile-avatar pb-profile-avatar-sm">
+                {activeProfile.photo_path
+                  ? <img src={convertFileSrc(activeProfile.photo_path)} alt="" />
+                  : <UserIcon />}
+              </div>
+              <span>{activeProfile.name}</span>
+              <span className="pb-active-profile-action">Trocar</span>
+            </button>
+          ) : (
+            <button className="pb-settings-btn" onClick={() => { sfx.open(); onOpenProfiles(); }}>
+              <UserIcon /> Criar perfil
+            </button>
+          )}
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>Tema</h3>
+          <div className="pb-theme-grid">
+            {THEMES.map((t) => (
+              <button
+                key={t.id}
+                className={`pb-theme-card ${config.theme_id === t.id ? "active" : ""}`}
+                onClick={() => onSetTheme(t.id)}
+              >
+                <div className="pb-theme-swatch">
+                  {t.swatch.map((c, i) => <span key={i} style={{ background: c }} />)}
+                </div>
+                <span>{t.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>Papel de parede</h3>
+          {config.wallpaper_path && (
+            <div className="pb-wallpaper-preview">
+              <img src={convertFileSrc(config.wallpaper_path)} alt="" />
+              <button className="pb-wallpaper-clear" onClick={onClearWallpaper} title="Remover">
+                <CloseIcon />
+              </button>
+            </div>
+          )}
+          <button className="pb-settings-btn" style={{ justifyContent: "center" }} onClick={() => { sfx.click(); onPickWallpaper(); }}>
+            <PlusIcon />
+            {config.wallpaper_path ? "Trocar imagem" : "Escolher imagem"}
+          </button>
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>Capas dos jogos</h3>
+          <button className="pb-settings-btn" onClick={() => { sfx.click(); onSyncCovers(); }} disabled={syncStatus.busy}>
+            <RefreshIcon />
+            {syncStatus.busy ? `Sincronizando ${syncStatus.text}...` : "Sincronizar capas (limpa cache)"}
+          </button>
+          <p className="pb-settings-hint">
+            Apaga capas em cache e re-busca pelo IGDB. Use se alguma capa veio errada.
+          </p>
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>Biblioteca</h3>
+          <button className="pb-settings-btn" onClick={() => { sfx.click(); onRescan(); }} disabled={rescanBusy}>
+            <RefreshIcon />
+            {rescanBusy ? "Re-escaneando..." : "Re-escanear pasta de ROMs"}
+          </button>
+          <p className="pb-settings-hint">
+            Detecta jogos novos sem precisar reabrir o app.
+          </p>
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>Switch — Yuzu</h3>
+          <button className="pb-settings-btn" onClick={() => { sfx.click(); onSetupSwitchKeys(); }} disabled={switchKeysStatus.busy}>
+            <RefreshIcon />
+            {switchKeysStatus.busy ? "Copiando..." : "Instalar keys + firmware (Yuzu)"}
+          </button>
+          {switchKeysStatus.message && (
+            <p className="pb-settings-hint" style={{ color: switchKeysStatus.kind === "error" ? "#fca5a5" : "#86efac" }}>
+              {switchKeysStatus.message}
+            </p>
+          )}
+          <p className="pb-settings-hint">
+            Copia <code>prod.keys</code>, <code>title.keys</code> e firmware NCA da pasta KEYS pra <code>%APPDATA%\yuzu\</code>.
+          </p>
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>Saves separados por perfil</h3>
+          <button
+            className={`pb-settings-btn ${savesStatus.enabled ? "pb-settings-btn-danger" : ""}`}
+            onClick={() => { sfx.toggle(); onToggleSavesIsolation(); }}
+            disabled={savesStatus.busy || !activeProfile}
+          >
+            <PowerIcon />
+            {savesStatus.busy ? "Aplicando..." : (savesStatus.enabled ? "Desativar (restaurar pasta unica)" : "Ativar (saves separados)")}
+          </button>
+          {savesStatus.message && (
+            <p className="pb-settings-hint" style={{ color: savesStatus.kind === "error" ? "#fca5a5" : "#86efac", whiteSpace: "pre-wrap" }}>
+              {savesStatus.message}
+            </p>
+          )}
+          <p className="pb-settings-hint">
+            Quando ativo, cada perfil tem saves proprios (Yuzu, PCSX2, Dolphin, DuckStation, RPCS3, Project64). Trocar perfil = troca os saves automaticamente. Funciona via junctions Windows (NTFS).
+          </p>
+        </div>
+
+        {activeProfile && (
+          <div className="pb-settings-section">
+            <h3>Estatisticas — {activeProfile.name}</h3>
+            <div className="pb-stats">
+              <div className="pb-stat"><strong>{activeProfile.total_launches || 0}</strong><span>jogos lancados</span></div>
+              <div className="pb-stat"><strong>{(activeProfile.favorites || []).length}</strong><span>favoritos</span></div>
+              <div className="pb-stat"><strong>{formatPlayTime(totalPlayTime)}</strong><span>tempo total</span></div>
+              <div className="pb-stat"><strong>{Object.keys(activeProfile.play_time || {}).length}</strong><span>jogos abertos</span></div>
+            </div>
+          </div>
+        )}
+
+        {activeProfile && (
+          <div className="pb-settings-section">
+            <h3>Conquistas ({unlocked.length}/{ACHIEVEMENTS.length})</h3>
+            <ul className="pb-achievement-list">
+              {[...unlocked, ...locked].map((a) => {
+                const isUnlocked = unlocked.includes(a);
+                return (
+                  <li key={a.id} className={isUnlocked ? "unlocked" : "locked"}>
+                    <span className="pb-achievement-list-icon"><StarIcon filled={isUnlocked} /></span>
+                    <div>
+                      <strong>{a.name}</strong>
+                      <span>{a.desc}</span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
+        <div className="pb-settings-section">
+          <h3>Discord Rich Presence</h3>
+          <p className="pb-settings-hint" style={{ marginBottom: 10 }}>
+            Mostra o jogo que você tá jogando no seu perfil do Discord.
+            Crie uma "Application" em <code>discord.com/developers/applications</code> e cole o <strong>Client ID</strong> abaixo.
+          </p>
+          <input
+            type="text"
+            className="pb-input"
+            placeholder="Discord Application ID (ex: 1234567890123456789)"
+            value={discordId}
+            onChange={(e) => setDiscordId(e.target.value)}
+            style={{ marginBottom: 10 }}
+          />
+          <button className="pb-settings-btn" onClick={() => { sfx.click(); saveDiscord(); }}>
+            <RefreshIcon /> Salvar e conectar
+          </button>
+          {discordStatus && (
+            <p className="pb-settings-hint" style={{ color: discordStatus.kind === "error" ? "#fca5a5" : discordStatus.kind === "warn" ? "#fcd34d" : "#86efac" }}>
+              {discordStatus.text}
+            </p>
+          )}
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>Pasta de ROMs</h3>
+          <code className="pb-settings-path">{romsRoot}</code>
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>Pasta dos Emuladores</h3>
+          <code className="pb-settings-path">{emulatorsRoot}</code>
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>Emuladores</h3>
+          <ul className="pb-settings-list">
+            {systems.map((s) => (
+              <li key={s.id}>
+                <span className={`pb-status ${s.emulator_exists ? "ok" : "fail"}`} />
+                <div className="pb-settings-list-info">
+                  <strong>{s.name}</strong>
+                  <code>{s.emulator_path}</code>
+                </div>
+                <span className="pb-settings-list-count">{s.games.length}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>Atalhos</h3>
+          <dl className="pb-shortcuts">
+            <dt>← →</dt><dd>Navegar jogo</dd>
+            <dt>↑ ↓</dt><dd>Navegar sistema</dd>
+            <dt>ENTER</dt><dd>Lancar jogo</dd>
+            <dt>F</dt><dd>Marcar favorito</dd>
+            <dt>/</dt><dd>Buscar jogo</dd>
+            <dt>S</dt><dd>Configuracoes</dd>
+            <dt>P</dt><dd>Trocar perfil</dd>
+            <dt>F11</dt><dd>Tela cheia</dd>
+            <dt>ESC</dt><dd>Voltar / Fechar painel</dd>
+          </dl>
+          <p className="pb-settings-hint" style={{ marginTop: 12 }}>
+            Controle: D-Pad/Stick = navegar · A = lançar · X = perfil · Y = config · Select+Start (no jogo) = sair pro launcher
+          </p>
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>Sistema</h3>
+          <button className="pb-settings-btn" onClick={() => { sfx.toggle(); onToggleFullscreen(); }}>
+            <FullscreenIcon />
+            {isFullscreen ? "Sair da Tela Cheia" : "Entrar em Tela Cheia"}
+          </button>
+          <button className="pb-settings-btn pb-settings-btn-danger" onClick={() => { sfx.back(); onQuit(); }}>
+            <PowerIcon /> Sair do Playbox
+          </button>
+        </div>
+
+        <footer className="pb-settings-footer">Playbox Launcher · v0.2</footer>
+      </aside>
+    </>
+  );
+}
+
+function GameDetailPanel({ system, game, playTimeSec, onClose, onLaunch, onPickCover, onResyncCover, onOpenLocation, onToggleFavorite, isFavorite, closing }) {
+  const [details, setDetails] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeShot, setActiveShot] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setDetails(null);
+    setActiveShot(0);
+    (async () => {
+      try {
+        const d = await invoke("fetch_game_details", { systemId: system.id, gameName: game.name });
+        if (!cancelled) setDetails(d);
+      } catch (e) {
+        console.error("fetch_game_details", e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [system.id, game.path, game.name]);
+
+  // Auto-rotate screenshots a cada 4s
+  useEffect(() => {
+    if (!details?.screenshot_paths?.length) return;
+    const id = setInterval(() => {
+      setActiveShot((i) => (i + 1) % details.screenshot_paths.length);
+    }, 4000);
+    return () => clearInterval(id);
+  }, [details]);
+
+  // Hotkeys: ESC fecha, Enter lança, F favorita
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); onClose(); }
+      else if (e.key === "Enter") { e.preventDefault(); onLaunch(); }
+      else if (e.key === "f" || e.key === "F") { e.preventDefault(); onToggleFavorite(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, onLaunch, onToggleFavorite]);
+
+  const heroSrc = details?.cover_path ? convertFileSrc(details.cover_path) : null;
+  const shotSrc = details?.screenshot_paths?.[activeShot] ? convertFileSrc(details.screenshot_paths[activeShot]) : null;
+
+  return (
+    <div className={`pb-detail ${closing ? "closing" : ""}`} aria-hidden={closing}>
+      {shotSrc && <img key={shotSrc} className="pb-detail-bg" src={shotSrc} alt="" aria-hidden />}
+      <div className="pb-detail-overlay" />
+
+      <button className="pb-detail-close" onClick={onClose} title="Fechar (Esc)"><CloseIcon /></button>
+
+      <div className="pb-detail-stage">
+        <div className="pb-detail-cover-wrap">
+          {heroSrc ? (
+            <img className="pb-detail-cover" src={heroSrc} alt={game.name} />
+          ) : (
+            <div className="pb-detail-cover pb-detail-cover-fallback" style={{ background: system.color }}>
+              <div className="pb-detail-cover-icon"><SystemIcon id={system.id} /></div>
+            </div>
+          )}
+          {isFavorite && <span className="pb-detail-fav"><StarIcon filled /></span>}
+        </div>
+
+        <div className="pb-detail-info">
+          <div className="pb-detail-tag">
+            <span className="pb-detail-tag-icon" style={{ color: system.color }}><SystemIcon id={system.id} /></span>
+            <span className="pb-detail-tag-name">{system.name}</span>
+          </div>
+
+          <h1 className="pb-detail-title">{details?.name || game.name}</h1>
+
+          <div className="pb-detail-meta">
+            {details?.first_release_year && <span>{details.first_release_year}</span>}
+            {details?.developer && <span>· {details.developer}</span>}
+            {details?.publisher && details.publisher !== details.developer && <span>· {details.publisher}</span>}
+            {typeof details?.rating === "number" && <span className="pb-detail-rating">{Math.round(details.rating)}<small>/100</small></span>}
+          </div>
+
+          {details?.genres?.length > 0 && (
+            <div className="pb-detail-genres">
+              {details.genres.slice(0, 5).map((g) => <span key={g} className="pb-detail-genre">{g}</span>)}
+            </div>
+          )}
+
+          <div className="pb-detail-stats">
+            <div className="pb-detail-stat">
+              <strong>{formatPlayTime(playTimeSec || 0)}</strong>
+              <span>tempo jogado</span>
+            </div>
+            <div className="pb-detail-stat">
+              <strong>{game.size_mb ? `${game.size_mb} MB` : "—"}</strong>
+              <span>tamanho</span>
+            </div>
+            <div className="pb-detail-stat">
+              <strong>{game.extension?.toUpperCase() || "—"}</strong>
+              <span>formato</span>
+            </div>
+          </div>
+
+          {loading && !details && (
+            <p className="pb-detail-loading">Buscando informações no IGDB...</p>
+          )}
+
+          {details?.summary && (
+            <p className="pb-detail-summary">{details.summary}</p>
+          )}
+
+          {details?.screenshot_paths?.length > 0 && (
+            <div className="pb-detail-shots">
+              {details.screenshot_paths.map((p, i) => (
+                <button
+                  key={p}
+                  className={`pb-detail-shot ${i === activeShot ? "active" : ""}`}
+                  onClick={() => setActiveShot(i)}
+                >
+                  <img src={convertFileSrc(p)} alt="" />
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="pb-detail-actions">
+            <button className="pb-btn pb-btn-primary pb-btn-large" onClick={onLaunch}>
+              <PlayIcon /> Jogar
+            </button>
+            <button className="pb-btn pb-btn-ghost" onClick={onToggleFavorite}>
+              <StarIcon filled={isFavorite} />
+              {isFavorite ? "Favorito" : "Favoritar"}
+            </button>
+            <button className="pb-btn pb-btn-ghost" onClick={onPickCover}>
+              <ImageIcon /> Trocar capa
+            </button>
+            <button className="pb-btn pb-btn-ghost" onClick={onResyncCover}>
+              <RotateIcon /> Re-sync IGDB
+            </button>
+            <button className="pb-btn pb-btn-ghost" onClick={onOpenLocation}>
+              <FolderIcon /> Abrir local
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GameContextMenu({ x, y, system, game, isFavorite, onClose, onLaunch, onResyncCover, onPickCover, onOpenLocation, onDelete, onToggleFavorite, onShowDetails }) {
+  const ref = useRef(null);
+  const [pos, setPos] = useState({ left: x, top: y });
+
+  useEffect(() => {
+    // Ajusta pra nao sair da tela
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    let left = x;
+    let top = y;
+    if (left + rect.width > window.innerWidth - 8) left = window.innerWidth - rect.width - 8;
+    if (top + rect.height > window.innerHeight - 8) top = window.innerHeight - rect.height - 8;
+    setPos({ left, top });
+  }, [x, y]);
+
+  useEffect(() => {
+    const onAny = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    const onEsc = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("mousedown", onAny);
+    window.addEventListener("keydown", onEsc);
+    return () => {
+      window.removeEventListener("mousedown", onAny);
+      window.removeEventListener("keydown", onEsc);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className="pb-ctx-menu"
+      style={{ left: pos.left, top: pos.top }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <div className="pb-ctx-header">
+        <span className="pb-ctx-header-icon" style={{ color: system.color }}>
+          <SystemIcon id={system.id} />
+        </span>
+        <span className="pb-ctx-header-name">{game.name}</span>
+      </div>
+      <div className="pb-ctx-divider" />
+      <button className="pb-ctx-item pb-ctx-primary" onClick={onLaunch}>
+        <PlayIcon /> <span>Jogar</span>
+      </button>
+      <button className="pb-ctx-item" onClick={onShowDetails}>
+        <InfoIcon /> <span>Ver detalhes</span>
+      </button>
+      <button className="pb-ctx-item" onClick={onToggleFavorite}>
+        <StarIcon filled={isFavorite} />
+        <span>{isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}</span>
+      </button>
+      <div className="pb-ctx-divider" />
+      <button className="pb-ctx-item" onClick={onPickCover}>
+        <ImageIcon /> <span>Escolher capa do PC...</span>
+      </button>
+      <button className="pb-ctx-item" onClick={onResyncCover}>
+        <RotateIcon /> <span>Re-sincronizar capa (IGDB)</span>
+      </button>
+      <button className="pb-ctx-item" onClick={onOpenLocation}>
+        <FolderIcon /> <span>Abrir local do arquivo</span>
+      </button>
+      <div className="pb-ctx-divider" />
+      <button className="pb-ctx-item pb-ctx-danger" onClick={onDelete}>
+        <TrashIcon /> <span>Excluir do PC (Lixeira)</span>
+      </button>
+    </div>
+  );
+}
+
+function DeleteConfirmModal({ game, system, onCancel, onConfirm }) {
+  return (
+    <div className="pb-modal-backdrop" onClick={onCancel}>
+      <div className="pb-modal pb-confirm-modal" onClick={(e) => e.stopPropagation()}>
+        <header className="pb-modal-header">
+          <h2>Excluir do PC</h2>
+          <button className="pb-icon-btn" onClick={onCancel}><CloseIcon /></button>
+        </header>
+        <div className="pb-confirm-body">
+          <p className="pb-confirm-question">
+            Tem certeza que quer enviar este jogo pra Lixeira do Windows?
+          </p>
+          <div className="pb-confirm-game">
+            <span className="pb-confirm-game-sys" style={{ background: system.color }}>
+              <SystemIcon id={system.id} />
+            </span>
+            <div className="pb-confirm-game-info">
+              <strong>{game.name}</strong>
+              <code>{game.path}</code>
+            </div>
+          </div>
+          <p className="pb-confirm-hint">
+            O arquivo (ou pasta-jogo, se for PS3/PS4/Wii U) vai pra Lixeira. Você pode restaurar de lá se mudar de ideia.
+          </p>
+          <div className="pb-modal-actions">
+            <button className="pb-btn pb-btn-ghost" onClick={onCancel}>Cancelar</button>
+            <button className="pb-btn pb-btn-danger" onClick={onConfirm}>Excluir</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function PlayboxLauncher() {
+  const [systems, setSystems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [scanError, setScanError] = useState(null);
+  const [selectedSystemIdx, setSelectedSystemIdx] = useState(0);
+  const [selectedGameIdx, setSelectedGameIdx] = useState(0);
+  const [launchMsg, setLaunchMsg] = useState(null);
+  const [covers, setCovers] = useState({});
+  const [splashDone, setSplashDone] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsClosing, setSettingsClosing] = useState(false);
+  const [profilesOpen, setProfilesOpen] = useState(false);
+  const [profilesClosing, setProfilesClosing] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(true);
+  const [launching, setLaunching] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchClosing, setSearchClosing] = useState(false);
+  const [welcomeBack, setWelcomeBack] = useState(false);
+  const [systemEnter, setSystemEnter] = useState({ id: null, key: 0 });
+  const [quitting, setQuitting] = useState(false);
+  const [romsRoot, setRomsRoot] = useState("");
+  const [emulatorsRoot, setEmulatorsRoot] = useState("");
+  // Menu de contexto: { x, y, system, game } | null
+  const [ctxMenu, setCtxMenu] = useState(null);
+  // Confirmacao de delete: { system, game } | null
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  // Ficha do jogo: { system, game } | null
+  const [detailPanel, setDetailPanel] = useState(null);
+  const [detailClosing, setDetailClosing] = useState(false);
+  // Ordenacao do grid de jogos: "default" | "az" | "playtime" | "recent" | "fav"
+  const [sortMode, setSortMode] = useState("default");
+  const [rescanBusy, setRescanBusy] = useState(false);
+  const [achievementToast, setAchievementToast] = useState(null);
+  const [screenshots, setScreenshots] = useState({});
+  const [gamepadConnected, setGamepadConnected] = useState(false);
+
+  // Wrappers que disparam animação de saída antes de desmontar
+  const closeSettings = useCallback(() => {
+    setSettingsClosing(true);
+    setTimeout(() => { setSettingsOpen(false); setSettingsClosing(false); }, MODAL_EXIT_MS);
+  }, []);
+  const closeProfiles = useCallback(() => {
+    setProfilesClosing(true);
+    setTimeout(() => { setProfilesOpen(false); setProfilesClosing(false); }, MODAL_EXIT_MS);
+  }, []);
+  const closeSearch = useCallback(() => {
+    setSearchClosing(true);
+    setTimeout(() => { setSearchOpen(false); setSearchClosing(false); }, MODAL_EXIT_MS);
+  }, []);
+  const [config, setConfig] = useState({
+    profiles: [],
+    active_profile_id: null,
+    theme_id: "switch-dark",
+    wallpaper_path: null,
+    last_system_id: null,
+  });
+  const [syncStatus, setSyncStatus] = useState({ busy: false, text: "" });
+  const [switchKeysStatus, setSwitchKeysStatus] = useState({ busy: false, message: null, kind: null });
+  const [savesStatus, setSavesStatus] = useState({ busy: false, enabled: false, message: null, kind: null });
+  const time = useClock();
+  const activeCardRef = useRef(null);
+  const fetchedSystems = useRef(new Set());
+  const fetchedShots = useRef(new Set());
+  const launchStartRef = useRef(null);
+
+  const favoriteSet = useMemo(
+    () => new Set((config.profiles.find((p) => p.id === config.active_profile_id)?.favorites) || []),
+    [config.profiles, config.active_profile_id]
+  );
+
+  const favoritesSystem = useMemo(() => {
+    if (favoriteSet.size === 0) return null;
+    const favs = [];
+    for (const sys of systems) {
+      for (const g of sys.games) {
+        if (favoriteSet.has(g.path)) {
+          favs.push({ ...g, _origin_system_id: sys.id });
+        }
+      }
+    }
+    if (favs.length === 0) return null;
+    return {
+      id: "_favorites",
+      name: "FAVORITOS",
+      color: "#fcd34d",
+      folder_name: "_favorites",
+      emulator_path: "",
+      emulator_exists: true,
+      folder_exists: true,
+      games: favs,
+    };
+  }, [favoriteSet, systems]);
+
+  const displayedSystems = useMemo(
+    () => (favoritesSystem ? [favoritesSystem, ...systems] : systems),
+    [favoritesSystem, systems]
+  );
+
+  const selected = displayedSystems[selectedSystemIdx];
+
+  const visibleGames = useMemo(() => {
+    if (!selected) return [];
+    const playTime = (config.profiles.find((p) => p.id === config.active_profile_id)?.play_time) || {};
+    let games = [...selected.games];
+    switch (sortMode) {
+      case "az":
+        games.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+        break;
+      case "playtime":
+        games.sort((a, b) => (playTime[b.path] || 0) - (playTime[a.path] || 0));
+        break;
+      case "fav":
+        games = games.filter((g) => favoriteSet.has(g.path));
+        break;
+      default: break;
+    }
+    return games;
+  }, [selected, sortMode, config.profiles, config.active_profile_id, favoriteSet]);
+
+  const selectedGame = visibleGames[selectedGameIdx];
+  const launchSystemId = selectedGame?._origin_system_id || selected?.id;
+  const accentColor = selected?.color || "#666";
+  const selectedCoverSrc = selectedGame ? covers[selectedGame.path] : null;
+  const selectedShotSrc = selectedGame ? screenshots[selectedGame.path] : null;
+  const selectedBgSrc = selectedShotSrc || selectedCoverSrc;
+  const activeProfile = useMemo(
+    () => config.profiles.find((p) => p.id === config.active_profile_id),
+    [config]
+  );
+
+  // splash boot + intro music
+  useEffect(() => {
+    sfx.intro();
+    const t = setTimeout(() => setSplashDone(true), 2200);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Unlock audio context na primeira interação (autoplay policy)
+  useEffect(() => {
+    const unlock = () => unlockAudio();
+    window.addEventListener("pointerdown", unlock, { once: false });
+    window.addEventListener("keydown", unlock, { once: false });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
+  // load config no startup
+  useEffect(() => {
+    (async () => {
+      try {
+        const c = await invoke("load_config");
+        if (c) setConfig(c);
+        if ((c?.profiles || []).length === 0) setProfilesOpen(true);
+      } catch (e) {
+        console.error("load_config", e);
+      }
+      // Resolve paths default (autodetect: bundled emulators ao lado do .exe ou Documents)
+      try {
+        const [r, e] = await Promise.all([
+          invoke("get_default_roms_root"),
+          invoke("get_default_emulators_root"),
+        ]);
+        setRomsRoot(r || "");
+        setEmulatorsRoot(e || "");
+      } catch (err) {
+        console.error("paths defaults", err);
+      }
+    })();
+  }, []);
+
+  // persist config quando muda
+  const isFirstRun = useRef(true);
+  useEffect(() => {
+    if (isFirstRun.current) {
+      isFirstRun.current = false;
+      return;
+    }
+    invoke("save_config", { config }).catch((e) => console.error("save_config", e));
+  }, [config]);
+
+  // aplicar tema
+  useEffect(() => {
+    const theme = THEMES.find((t) => t.id === config.theme_id) || THEMES[0];
+    const root = document.documentElement;
+    Object.entries(theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  }, [config.theme_id]);
+
+  // fullscreen state inicial
+  useEffect(() => {
+    (async () => {
+      try {
+        const w = getCurrentWindow();
+        const fs = await w.isFullscreen();
+        setIsFullscreen(fs);
+      } catch {}
+    })();
+  }, []);
+
+  // scan ROMs
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await invoke("scan_roms", {});
+        if (!cancelled) {
+          setSystems(data);
+          const firstWithGames = data.findIndex((s) => s.games.length > 0);
+          if (firstWithGames >= 0) setSelectedSystemIdx(firstWithGames);
+          setLoading(false);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setScanError(String(e));
+          setLoading(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => { setSelectedGameIdx(0); }, [selectedSystemIdx, sortMode]);
+
+  useEffect(() => {
+    if (activeCardRef.current) {
+      activeCardRef.current.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
+  }, [selectedGameIdx, selectedSystemIdx]);
+
+  // fetch covers do sistema atual
+  useEffect(() => {
+    if (!selected || selected.games.length === 0) return;
+    if (selected.id === "_favorites") return; // virtual: usa cache dos sistemas originais
+    if (fetchedSystems.current.has(selected.id)) return;
+    fetchedSystems.current.add(selected.id);
+
+    let cancelled = false;
+    const queue = [...selected.games];
+    async function worker() {
+      while (queue.length > 0 && !cancelled) {
+        const game = queue.shift();
+        if (!game) break;
+        try {
+          const localPath = await invoke("fetch_cover", { systemId: selected.id, gameName: game.name });
+          if (cancelled) return;
+          setCovers((prev) => ({ ...prev, [game.path]: localPath ? convertFileSrc(localPath) : null }));
+        } catch {
+          setCovers((prev) => ({ ...prev, [game.path]: null }));
+        }
+      }
+    }
+    Promise.all(Array.from({ length: 4 }, worker)).catch(() => {});
+    return () => { cancelled = true; };
+  }, [selected]);
+
+  const updateActiveProfile = useCallback((updater) => {
+    setConfig((prev) => {
+      const idx = prev.profiles.findIndex((p) => p.id === prev.active_profile_id);
+      if (idx < 0) return prev;
+      const newProfiles = [...prev.profiles];
+      newProfiles[idx] = updater(newProfiles[idx]);
+      return { ...prev, profiles: newProfiles };
+    });
+  }, []);
+
+  const checkAchievements = useCallback((profile) => {
+    const current = new Set(profile.achievements || []);
+    const newly = [];
+    for (const a of ACHIEVEMENTS) {
+      if (!current.has(a.id) && a.check(profile)) {
+        current.add(a.id);
+        newly.push(a);
+      }
+    }
+    return { achievements: Array.from(current), newly };
+  }, []);
+
+  const handleLaunch = useCallback(async () => {
+    if (!selected || !selectedGame) return;
+    sfx.confirm();
+    setLaunching(true);
+    setLaunchMsg({ kind: "launching", text: `Iniciando ${selectedGame.name}...` });
+    try {
+      await invoke("launch_game", { systemId: launchSystemId, romPath: selectedGame.path });
+      setLaunchMsg({ kind: "ok", text: `${selectedGame.name} iniciado` });
+      launchStartRef.current = { rom_path: selectedGame.path, started_at: Date.now() };
+      // Discord Rich Presence (silent no-op se nao configurado)
+      const sysName = selected?.name || launchSystemId;
+      invoke("discord_set_activity", { gameName: selectedGame.name, systemName: sysName }).catch(() => {});
+      // registra stats no perfil ativo
+      if (activeProfile) {
+        updateActiveProfile((p) => {
+          const updated = {
+            ...p,
+            total_launches: (p.total_launches || 0) + 1,
+            play_time: { ...(p.play_time || {}), [selectedGame.path]: p.play_time?.[selectedGame.path] || 0 },
+            last_played: {
+              system_id: launchSystemId,
+              rom_path: selectedGame.path,
+              rom_name: selectedGame.name,
+              at: Math.floor(Date.now() / 1000),
+            },
+          };
+          const { achievements, newly } = checkAchievements(updated);
+          if (newly.length > 0) {
+            setAchievementToast(newly[0]);
+            sfx.achievement();
+          }
+          return { ...updated, achievements };
+        });
+      }
+      setTimeout(() => setLaunchMsg(null), 3000);
+      setTimeout(() => setLaunching(false), 1200);
+    } catch (e) {
+      setLaunchMsg({ kind: "error", text: String(e) });
+      setTimeout(() => setLaunchMsg(null), 8000);
+      setLaunching(false);
+    }
+  }, [selected, selectedGame, launchSystemId, activeProfile, updateActiveProfile, checkAchievements]);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      const w = getCurrentWindow();
+      const fs = await w.isFullscreen();
+      await w.setFullscreen(!fs);
+      setIsFullscreen(!fs);
+    } catch (e) { console.error(e); }
+  }, []);
+
+  const handleQuit = useCallback(async () => {
+    if (quitting) return;
+    setQuitting(true);
+    sfx.shutdown();
+    invoke("discord_clear_activity").catch(() => {});
+    setTimeout(async () => {
+      try {
+        await invoke("quit_app");
+      } catch (e) {
+        console.error("quit_app", e);
+        try { await getCurrentWindow().close(); } catch {}
+      }
+    }, 850);
+  }, [quitting]);
+
+  // Dispara animação + jingle ao trocar de plataforma (apenas após splash)
+  useEffect(() => {
+    if (!splashDone) return;
+    if (!selected?.id) return;
+    setSystemEnter({ id: selected.id, key: Date.now() });
+    playPlatformJingle(selected.id);
+  }, [selected?.id, splashDone]);
+
+  // -------- Profiles --------
+  const createProfile = useCallback(async ({ name, photoSourcePath }) => {
+    const id = genId();
+    let photo_path = null;
+    if (photoSourcePath) {
+      try {
+        photo_path = await invoke("save_profile_photo_from_path", {
+          profileId: id,
+          sourcePath: photoSourcePath,
+        });
+      } catch (e) { console.error("photo save", e); }
+    }
+    setConfig((prev) => ({
+      ...prev,
+      profiles: [...prev.profiles, { id, name, photo_path, created_at: Math.floor(Date.now() / 1000) }],
+      active_profile_id: prev.active_profile_id || id,
+    }));
+    closeProfiles();
+  }, [closeProfiles]);
+
+  const selectProfile = useCallback((id) => {
+    setConfig((prev) => ({ ...prev, active_profile_id: id }));
+    closeProfiles();
+  }, [closeProfiles]);
+
+  const toggleFavorite = useCallback(() => {
+    if (!selected || !selectedGame || !activeProfile) return;
+    const path = selectedGame.path;
+    const list = activeProfile.favorites || [];
+    const has = list.includes(path);
+    sfx.fav();
+    updateActiveProfile((p) => {
+      const newList = has ? list.filter((x) => x !== path) : [...list, path];
+      const updated = { ...p, favorites: newList };
+      const { achievements, newly } = checkAchievements(updated);
+      if (newly.length > 0) {
+        setAchievementToast(newly[0]);
+        sfx.achievement();
+      }
+      return { ...updated, achievements };
+    });
+  }, [selected, selectedGame, activeProfile, updateActiveProfile, checkAchievements]);
+
+  const deleteProfile = useCallback((id) => {
+    setConfig((prev) => {
+      const newProfiles = prev.profiles.filter((p) => p.id !== id);
+      return {
+        ...prev,
+        profiles: newProfiles,
+        active_profile_id: prev.active_profile_id === id
+          ? (newProfiles[0]?.id || null)
+          : prev.active_profile_id,
+      };
+    });
+    invoke("delete_profile_photo", { profileId: id }).catch(() => {});
+  }, []);
+
+  const updateProfile = useCallback(async ({ id, name, photoSourcePath, clearPhoto }) => {
+    let nextPhotoPath = undefined; // undefined = nao mexer
+    if (clearPhoto) {
+      try { await invoke("delete_profile_photo", { profileId: id }); } catch (e) { console.error(e); }
+      nextPhotoPath = null;
+    } else if (photoSourcePath) {
+      try {
+        nextPhotoPath = await invoke("save_profile_photo_from_path", {
+          profileId: id,
+          sourcePath: photoSourcePath,
+        });
+      } catch (e) { console.error("photo save", e); }
+    }
+    setConfig((prev) => ({
+      ...prev,
+      profiles: prev.profiles.map((p) =>
+        p.id === id
+          ? { ...p, name, ...(nextPhotoPath !== undefined ? { photo_path: nextPhotoPath } : {}) }
+          : p
+      ),
+    }));
+  }, []);
+
+  // -------- Theme / Wallpaper --------
+  const setTheme = useCallback((themeId) => {
+    setConfig((prev) => ({ ...prev, theme_id: themeId }));
+  }, []);
+
+  const pickWallpaper = useCallback(async () => {
+    const sourcePath = await pickImageFile();
+    if (!sourcePath) return;
+    try {
+      const path = await invoke("save_wallpaper_from_path", {
+        imageId: genId(),
+        sourcePath,
+      });
+      setConfig((prev) => ({ ...prev, wallpaper_path: path }));
+    } catch (e) { console.error("wallpaper save", e); }
+  }, []);
+
+  const clearWallpaper = useCallback(() => {
+    setConfig((prev) => ({ ...prev, wallpaper_path: null }));
+  }, []);
+
+  // -------- Track play time quando app volta foco --------
+  useEffect(() => {
+    function onFocus() {
+      const start = launchStartRef.current;
+      if (!start || !activeProfile) return;
+      const elapsed = Math.floor((Date.now() - start.started_at) / 1000);
+      if (elapsed < 30) return; // ignora "tab swap" rápido
+      const cap = Math.min(elapsed, 24 * 3600); // cap 24h por sessão
+      launchStartRef.current = null;
+      updateActiveProfile((p) => {
+        const prev = p.play_time?.[start.rom_path] || 0;
+        return { ...p, play_time: { ...(p.play_time || {}), [start.rom_path]: prev + cap } };
+      });
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [activeProfile, updateActiveProfile]);
+
+  // -------- Re-escanear ROMs --------
+  const rescanRoms = useCallback(async () => {
+    setRescanBusy(true);
+    try {
+      const data = await invoke("scan_roms", {});
+      setSystems(data);
+      // limpa cache de fetched pra re-tentar capas/screens dos novos
+      fetchedSystems.current.clear();
+      fetchedShots.current.clear();
+    } catch (e) { console.error("rescan", e); }
+    setRescanBusy(false);
+  }, []);
+
+  // -------- Setup keys do Switch --------
+  const setupSwitchKeys = useCallback(async () => {
+    setSwitchKeysStatus({ busy: true, message: null, kind: null });
+    try {
+      const res = await invoke("setup_switch_keys", { romsRoot });
+      const msg = `OK · keys: ${res.keys_copied ? "copiadas" : "nao encontradas"} · firmware: ${res.firmware_files} arquivos\n${res.yuzu_dir}`;
+      setSwitchKeysStatus({ busy: false, message: msg, kind: "ok" });
+    } catch (e) {
+      setSwitchKeysStatus({ busy: false, message: String(e), kind: "error" });
+    }
+  }, []);
+
+  // -------- Saves separados por perfil --------
+  const refreshSavesStatus = useCallback(async () => {
+    try {
+      const slots = await invoke("list_save_slots");
+      const enabled = (slots || []).some((s) => s.is_junction);
+      setSavesStatus((prev) => ({ ...prev, enabled }));
+    } catch {}
+  }, []);
+  useEffect(() => { refreshSavesStatus(); }, [refreshSavesStatus]);
+
+  const toggleSavesIsolation = useCallback(async () => {
+    if (!activeProfile) return;
+    setSavesStatus({ busy: true, enabled: savesStatus.enabled, message: null, kind: null });
+    try {
+      let log;
+      if (savesStatus.enabled) {
+        log = await invoke("unlink_profile_saves");
+        setSavesStatus({ busy: false, enabled: false, message: log.join("\n"), kind: "ok" });
+      } else {
+        log = await invoke("swap_profile_saves", { profileId: activeProfile.id, previousProfileId: null });
+        setSavesStatus({ busy: false, enabled: true, message: log.join("\n"), kind: "ok" });
+      }
+    } catch (e) {
+      setSavesStatus({ busy: false, enabled: savesStatus.enabled, message: String(e), kind: "error" });
+    }
+  }, [activeProfile, savesStatus.enabled]);
+
+  // Auto-swap ao trocar de perfil ativo (se ja estava em modo isolado)
+  const previousProfileIdRef = useRef(null);
+  useEffect(() => {
+    const prev = previousProfileIdRef.current;
+    previousProfileIdRef.current = config.active_profile_id;
+    if (!prev || prev === config.active_profile_id) return;
+    if (!savesStatus.enabled) return;
+    if (!config.active_profile_id) return;
+    (async () => {
+      try {
+        await invoke("swap_profile_saves", {
+          profileId: config.active_profile_id,
+          previousProfileId: prev,
+        });
+      } catch (e) { console.error("auto swap saves", e); }
+    })();
+  }, [config.active_profile_id, savesStatus.enabled]);
+
+  // -------- Helper pra selecionar jogo (usado pelo banner Continuar) --------
+  const selectGameByPath = useCallback((systemId, romPath) => {
+    const sysIdx = displayedSystems.findIndex((s) => s.id === systemId);
+    if (sysIdx < 0) return;
+    const gameIdx = displayedSystems[sysIdx].games.findIndex((g) => g.path === romPath);
+    if (gameIdx < 0) return;
+    setSelectedSystemIdx(sysIdx);
+    setSelectedGameIdx(gameIdx);
+    sfx.confirm();
+  }, [displayedSystems]);
+
+  // -------- Sync covers --------
+  const openDetailPanel = useCallback((system, game) => {
+    sfx.open();
+    setDetailPanel({ system, game });
+    setDetailClosing(false);
+  }, []);
+
+  const closeDetailPanel = useCallback(() => {
+    if (!detailPanel) return;
+    setDetailClosing(true);
+    setTimeout(() => {
+      setDetailPanel(null);
+      setDetailClosing(false);
+    }, MODAL_EXIT_MS);
+  }, [detailPanel]);
+
+  const openGameLocation = useCallback(async (game) => {
+    try {
+      sfx.confirm();
+      await invoke("open_in_explorer", { path: game.path });
+    } catch (e) {
+      console.error("open_in_explorer", e);
+      setLaunchMsg({ kind: "error", text: `Falha ao abrir local: ${e}` });
+      setTimeout(() => setLaunchMsg(null), 2200);
+    }
+  }, []);
+
+  const pickCustomCover = useCallback(async (systemId, game) => {
+    try {
+      const sourcePath = await pickImageFile();
+      if (!sourcePath) return;
+      sfx.confirm();
+      const localPath = await invoke("set_custom_cover", {
+        systemId,
+        gameName: game.name,
+        sourcePath,
+      });
+      setCovers((prev) => ({ ...prev, [game.path]: localPath ? convertFileSrc(localPath) : null }));
+      setScreenshots((prev) => {
+        const next = { ...prev };
+        delete next[game.path];
+        return next;
+      });
+      setLaunchMsg({ kind: "ok", text: `Capa atualizada: ${game.name}` });
+      setTimeout(() => setLaunchMsg(null), 2200);
+    } catch (e) {
+      console.error("set_custom_cover", e);
+      setLaunchMsg({ kind: "error", text: `Falha ao trocar capa: ${e}` });
+      setTimeout(() => setLaunchMsg(null), 2200);
+    }
+  }, []);
+
+  const confirmDeleteGame = useCallback((system, game) => {
+    sfx.click();
+    setDeleteConfirm({ system, game });
+  }, []);
+
+  const performDeleteGame = useCallback(async () => {
+    if (!deleteConfirm) return;
+    const { system, game } = deleteConfirm;
+    setDeleteConfirm(null);
+    try {
+      sfx.back();
+      await invoke("delete_game_to_trash", {
+        systemId: system.id,
+        gameName: game.name,
+        gamePath: game.path,
+      });
+      setLaunchMsg({ kind: "ok", text: `${game.name} enviado pra Lixeira` });
+      setTimeout(() => setLaunchMsg(null), 2200);
+      // Re-escaneia pra refletir
+      try {
+        const data = await invoke("scan_roms", { romsRoot: null });
+        setSystems(data);
+      } catch {}
+    } catch (e) {
+      console.error("delete_game_to_trash", e);
+      setLaunchMsg({ kind: "error", text: `Falha ao excluir: ${e}` });
+      setTimeout(() => setLaunchMsg(null), 2800);
+    }
+  }, [deleteConfirm]);
+
+  const resyncSingleCover = useCallback(async (systemId, game) => {
+    try {
+      sfx.confirm();
+      await invoke("clear_single_cover", { systemId, gameName: game.name });
+      setCovers((prev) => {
+        const next = { ...prev };
+        delete next[game.path];
+        return next;
+      });
+      setScreenshots((prev) => {
+        const next = { ...prev };
+        delete next[game.path];
+        return next;
+      });
+      const localPath = await invoke("fetch_cover", { systemId, gameName: game.name });
+      setCovers((prev) => ({ ...prev, [game.path]: localPath ? convertFileSrc(localPath) : null }));
+      setLaunchMsg({
+        kind: localPath ? "ok" : "error",
+        text: localPath ? `Capa atualizada: ${game.name}` : `Sem capa encontrada pra ${game.name}`,
+      });
+      setTimeout(() => setLaunchMsg(null), 2200);
+    } catch (e) {
+      console.error("resyncSingleCover", e);
+    }
+  }, []);
+
+  const syncCovers = useCallback(async () => {
+    setSyncStatus({ busy: true, text: "limpando cache" });
+    try {
+      await invoke("clear_covers_cache", { systemId: null });
+      fetchedSystems.current.clear();
+      setCovers({});
+      // re-disparar pro sistema atual
+      if (selected) fetchedSystems.current.delete(selected.id);
+      setSyncStatus({ busy: false, text: "" });
+      // força reseleção pra triggerar fetch effect
+      setSelectedSystemIdx((i) => i);
+    } catch (e) {
+      console.error(e);
+      setSyncStatus({ busy: false, text: "" });
+    }
+  }, [selected]);
+
+  // -------- Screenshot do jogo selecionado em background --------
+  useEffect(() => {
+    if (!selected || !selectedGame) return;
+    const sysForFetch = launchSystemId;
+    const key = `${sysForFetch}::${selectedGame.path}`;
+    if (fetchedShots.current.has(key)) return;
+    if (screenshots[selectedGame.path] !== undefined) return;
+    fetchedShots.current.add(key);
+    let cancelled = false;
+    (async () => {
+      try {
+        const path = await invoke("fetch_screenshot", {
+          systemId: sysForFetch,
+          gameName: selectedGame.name,
+        });
+        if (cancelled) return;
+        setScreenshots((prev) => ({ ...prev, [selectedGame.path]: path ? convertFileSrc(path) : null }));
+      } catch {
+        setScreenshots((prev) => ({ ...prev, [selectedGame.path]: null }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selected, selectedGame, launchSystemId, screenshots]);
+
+  // -------- Listener: emulador foi morto pelo combo Select+Start --------
+  useEffect(() => {
+    let unlisten;
+    listen("game-killed", () => {
+      setLaunching(false);
+      setWelcomeBack(true);
+      sfx.open();
+      setTimeout(() => setWelcomeBack(false), 700);
+      setLaunchMsg({ kind: "ok", text: "Jogo encerrado pelo controle (Select+Start)" });
+      setTimeout(() => setLaunchMsg(null), 2200);
+      invoke("discord_clear_activity").catch(() => {});
+    }).then((u) => { unlisten = u; });
+    return () => { try { unlisten && unlisten(); } catch {} };
+  }, []);
+
+  // -------- Gamepad polling --------
+  useEffect(() => {
+    if (!splashDone) return;
+    let raf;
+    const last = { dir: 0, btn: 0, fav: 0, search: 0 };
+    const COOLDOWN_DIR = 180;
+    const COOLDOWN_BTN = 320;
+
+    function navGame(delta) {
+      if (!selected || visibleGames.length === 0) return;
+      sfx.nav();
+      setSelectedGameIdx((g) => Math.max(0, Math.min(visibleGames.length - 1, g + delta)));
+    }
+    function navSys(delta) {
+      setSelectedSystemIdx((i) => Math.max(0, Math.min(displayedSystems.length - 1, i + delta)));
+    }
+
+    function poll() {
+      try {
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      let pad = null;
+      for (const p of pads) { if (p) { pad = p; break; } }
+      setGamepadConnected(!!pad);
+      if (!pad || settingsOpen || profilesOpen || searchOpen) {
+        raf = requestAnimationFrame(poll);
+        return;
+      }
+      const now = performance.now();
+      const ax = pad.axes[0] || 0;
+      const ay = pad.axes[1] || 0;
+      const dRight = (pad.buttons[15]?.pressed ? 1 : 0) || (ax > 0.5 ? 1 : 0);
+      const dLeft  = (pad.buttons[14]?.pressed ? 1 : 0) || (ax < -0.5 ? 1 : 0);
+      const dDown  = (pad.buttons[13]?.pressed ? 1 : 0) || (ay > 0.5 ? 1 : 0);
+      const dUp    = (pad.buttons[12]?.pressed ? 1 : 0) || (ay < -0.5 ? 1 : 0);
+      if ((dRight || dLeft || dDown || dUp) && now - last.dir > COOLDOWN_DIR) {
+        last.dir = now;
+        if (dRight) navGame(1);
+        else if (dLeft) navGame(-1);
+        else if (dDown) navSys(1);
+        else if (dUp) navSys(-1);
+      }
+      // A (0) = launch
+      if (pad.buttons[0]?.pressed && now - last.btn > COOLDOWN_BTN) {
+        last.btn = now;
+        if (selectedGame) handleLaunch();
+      }
+      // Y (3) = settings
+      if (pad.buttons[3]?.pressed && now - last.btn > COOLDOWN_BTN) {
+        last.btn = now;
+        sfx.confirm();
+        setSettingsOpen(true);
+      }
+      // X (2) = profiles
+      if (pad.buttons[2]?.pressed && now - last.btn > COOLDOWN_BTN) {
+        last.btn = now;
+        sfx.confirm();
+        setProfilesOpen(true);
+      }
+      // B (1) = nada por agora
+      // Start (9) = search
+      if (pad.buttons[9]?.pressed && now - last.search > COOLDOWN_BTN) {
+        last.search = now;
+        sfx.confirm();
+        setSearchOpen(true);
+      }
+      // RB (5) = favorito
+      if (pad.buttons[5]?.pressed && now - last.fav > COOLDOWN_BTN) {
+        last.fav = now;
+        toggleFavorite();
+      }
+      } catch (err) {
+        console.error("gamepad poll error", err);
+      }
+      raf = requestAnimationFrame(poll);
+    }
+    raf = requestAnimationFrame(poll);
+    return () => cancelAnimationFrame(raf);
+  }, [splashDone, settingsOpen, profilesOpen, searchOpen, systems, selected, selectedGame, handleLaunch, toggleFavorite]);
+
+  // keyboard
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!splashDone) return;
+      if (e.key === "F11") { e.preventDefault(); toggleFullscreen(); return; }
+
+      if (searchOpen) {
+        // search lida com Escape internamente
+        return;
+      }
+      if (profilesOpen) {
+        if (e.key === "Escape") { e.preventDefault(); closeProfiles(); sfx.back(); }
+        return;
+      }
+      if (settingsOpen) {
+        if (e.key === "Escape") { e.preventDefault(); closeSettings(); sfx.back(); }
+        return;
+      }
+
+      if (e.key === "/" ) { e.preventDefault(); sfx.confirm(); setSearchOpen(true); return; }
+      if (e.key === "s" || e.key === "S") { e.preventDefault(); sfx.confirm(); setSettingsOpen(true); return; }
+      if (e.key === "p" || e.key === "P") { e.preventDefault(); sfx.confirm(); setProfilesOpen(true); return; }
+      if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleFavorite(); return; }
+      if ((e.key === "d" || e.key === "D") && selected && selectedGame) { e.preventDefault(); openDetailPanel(selected, selectedGame); return; }
+      if (e.key === "Escape") { e.preventDefault(); sfx.confirm(); setSettingsOpen(true); return; }
+
+      if (loading || displayedSystems.length === 0) return;
+      if (e.key === "ArrowRight" && visibleGames.length > 0) {
+        e.preventDefault(); sfx.nav();
+        setSelectedGameIdx((g) => Math.min(visibleGames.length - 1, g + 1));
+      } else if (e.key === "ArrowLeft" && visibleGames.length > 0) {
+        e.preventDefault(); sfx.nav();
+        setSelectedGameIdx((g) => Math.max(0, g - 1));
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedSystemIdx((i) => Math.min(displayedSystems.length - 1, i + 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedSystemIdx((i) => Math.max(0, i - 1));
+      } else if (e.key === "Enter" && selectedGame) {
+        e.preventDefault();
+        handleLaunch();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [splashDone, settingsOpen, profilesOpen, searchOpen, loading, displayedSystems, selected, selectedGame, handleLaunch, toggleFullscreen, toggleFavorite]);
+
+  return (
+    <div className={`pb ${quitting ? "quitting" : ""}`} style={{ "--accent": accentColor }}>
+      {/* wallpaper customizado */}
+      {config.wallpaper_path && (
+        <img className="pb-wallpaper" src={convertFileSrc(config.wallpaper_path)} alt="" aria-hidden />
+      )}
+
+      {/* fundo: screenshot (preferido) ou capa em blur */}
+      {selectedBgSrc && (
+        <img key={selectedBgSrc} className="pb-bg-cover" src={selectedBgSrc} alt="" aria-hidden />
+      )}
+
+      {/* fundo: tinta sutil de cor do sistema (suprime se tem wallpaper) */}
+      {!config.wallpaper_path && (
+        <div className="pb-bg" aria-hidden>
+          <div className="pb-bg-blob pb-bg-blob-1" />
+        </div>
+      )}
+
+      {!splashDone && <SplashScreen profileName={activeProfile?.name} />}
+
+      <header className="pb-top">
+        <div className="pb-top-left">
+          {activeProfile ? (
+            <button className="pb-top-avatar" onClick={() => { sfx.open(); setProfilesOpen(true); }} title="Trocar perfil (P)">
+              <div className="pb-profile-avatar pb-profile-avatar-sm">
+                {activeProfile.photo_path
+                  ? <img src={convertFileSrc(activeProfile.photo_path)} alt="" />
+                  : <UserIcon />}
+              </div>
+            </button>
+          ) : (
+            <button className="pb-top-avatar" onClick={() => { sfx.open(); setProfilesOpen(true); }} title="Criar perfil (P)">
+              <div className="pb-profile-avatar pb-profile-avatar-sm"><UserIcon /></div>
+            </button>
+          )}
+          {selected && (
+            <div className="pb-top-system" key={`top-sys-${selected.id}`}>
+              <span className="pb-top-system-icon" style={{ color: selected.color }}>
+                <SystemIcon id={selected.id} />
+              </span>
+              <span className="pb-top-system-name">{selected.name}</span>
+            </div>
+          )}
+        </div>
+        <div className="pb-top-right">
+          <button
+            className="pb-search-pill"
+            onClick={() => { sfx.confirm(); setSearchOpen(true); }}
+            title="Buscar jogo (/)"
+          >
+            <SearchIcon />
+            <span className="pb-search-pill-label">Buscar jogo</span>
+            <kbd className="pb-search-pill-kbd">/</kbd>
+          </button>
+          <button className="pb-icon-btn" onClick={() => { sfx.confirm(); setSettingsOpen(true); }} title="Configuracoes (S)"><GearIcon /></button>
+          {gamepadConnected && <span className="pb-gamepad-indicator" title="Controle conectado"><GamepadIcon /></span>}
+          <span className="pb-clock">{time}</span>
+        </div>
+      </header>
+
+      <main className="pb-stage">
+        {loading && <div className="pb-stage-msg">Carregando...</div>}
+        {scanError && (
+          <div className="pb-stage-msg pb-stage-error">
+            <strong>Falha no scan</strong>
+            <span>{scanError}</span>
+          </div>
+        )}
+
+        {!loading && !scanError && activeProfile?.last_played && (() => {
+          const lp = activeProfile.last_played;
+          const cover = covers[lp.rom_path];
+          const lpSystem = systems.find((s) => s.id === lp.system_id);
+          if (!lpSystem) return null;
+          if (!lpSystem.games.find((g) => g.path === lp.rom_path)) return null;
+          return (
+            <ContinueBanner
+              lastPlayed={lp}
+              system={lpSystem}
+              coverSrc={cover}
+              onResume={() => selectGameByPath(lp.system_id, lp.rom_path)}
+            />
+          );
+        })()}
+
+        {!loading && !scanError && selected && (
+          <>
+            <div className="pb-stage-header" key={`hdr-${selected.id}-${selectedGameIdx}`}>
+              <div className="pb-game-tag">
+                <span className="pb-game-tag-icon" style={{ color: selected.color }}>
+                  <SystemIcon id={selected.id} />
+                </span>
+                {visibleGames.length > 0 ? (
+                  <span className="pb-game-tag-name">{selectedGame?.name}</span>
+                ) : selected.games.length > 0 ? (
+                  <span className="pb-game-tag-name pb-game-tag-name-muted">
+                    {selected.name} · nenhum jogo no filtro "{sortMode}"
+                  </span>
+                ) : (
+                  <span className="pb-game-tag-name pb-game-tag-name-muted">
+                    {selected.folder_exists ? `${selected.name} · pasta vazia` : `${selected.name} · pasta /${selected.folder_name} nao existe`}
+                  </span>
+                )}
+              </div>
+              {selected.games.length > 0 && (
+                <div className="pb-sort-pills">
+                  {[
+                    { id: "default", label: "Padrão" },
+                    { id: "az",       label: "A-Z" },
+                    { id: "playtime", label: "Mais jogados" },
+                    { id: "fav",      label: "★ Favoritos" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      className={`pb-sort-pill ${sortMode === opt.id ? "active" : ""}`}
+                      onClick={() => { sfx.click(); setSortMode(opt.id); }}
+                    >{opt.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {visibleGames.length > 0 && (
+              <div className="pb-grid-wrap" key={`grid-${selected.id}-${sortMode}`}>
+                <div className="pb-grid">
+                  {visibleGames.map((g, i) => {
+                    const cover = covers[g.path];
+                    const hasCover = typeof cover === "string" && cover.length > 0;
+                    const isFav = favoriteSet.has(g.path);
+                    return (
+                      <div key={g.path} className="pb-card-wrap">
+                        <button
+                          ref={i === selectedGameIdx ? activeCardRef : null}
+                          className={`pb-card ${i === selectedGameIdx ? "active" : ""} ${hasCover ? "has-cover" : ""}`}
+                          style={{ "--card-color": selected.color, animationDelay: `${i * 40}ms` }}
+                          onClick={() => { sfx.click(); setSelectedGameIdx(i); }}
+                          onDoubleClick={handleLaunch}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            sfx.click();
+                            setSelectedGameIdx(i);
+                            setCtxMenu({ x: e.clientX, y: e.clientY, system: selected, game: g });
+                          }}
+                        >
+                          {hasCover ? (
+                            <img className="pb-card-cover" src={cover} alt={g.name} loading="lazy" />
+                          ) : (
+                            <>
+                              <div className="pb-card-bg" />
+                              <div className="pb-card-icon"><SystemIcon id={selected.id} /></div>
+                              <div className="pb-card-title">{g.name}</div>
+                            </>
+                          )}
+                          {isFav && <span className="pb-card-fav"><StarIcon filled /></span>}
+                        </button>
+                        <button
+                          className="pb-card-resync"
+                          onClick={(e) => { e.stopPropagation(); resyncSingleCover(selected.id, g); }}
+                          title="Re-sincronizar capa deste jogo"
+                        >
+                          <RotateIcon />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {selected.games.length === 0 && !selected.emulator_exists && (
+              <div className="pb-warn">Emulador nao encontrado em disco</div>
+            )}
+          </>
+        )}
+
+        {launchMsg && (
+          <div className={`pb-toast pb-toast-${launchMsg.kind}`}>{launchMsg.text}</div>
+        )}
+      </main>
+
+      <nav className="pb-systems">
+        <div className="pb-systems-list">
+          {displayedSystems.map((sys, i) => {
+            const isActive = i === selectedSystemIdx;
+            const isEmpty = sys.games.length === 0;
+            const isFav = sys.id === "_favorites";
+            return (
+              <button
+                key={sys.id}
+                className={`pb-sys ${isActive ? "active" : ""} ${isEmpty ? "empty" : ""} ${isFav ? "pb-sys-favorites" : ""}`}
+                style={{ "--sys-color": sys.color }}
+                onClick={() => setSelectedSystemIdx(i)}
+                title={`${sys.name}${sys.games.length ? ` · ${sys.games.length} jogos` : ""}`}
+              >
+                <span className="pb-sys-icon">
+                  {isFav ? <StarIcon filled /> : <SystemIcon id={sys.id} />}
+                </span>
+              </button>
+            );
+          })}
+          <div className="pb-sys-divider" />
+          <button className="pb-sys pb-sys-util" onClick={() => { sfx.open(); setSettingsOpen(true); }} title="Configuracoes (S)">
+            <span className="pb-sys-icon"><GearIcon /></span>
+          </button>
+          <button className="pb-sys pb-sys-util pb-sys-power" onClick={() => { sfx.back(); handleQuit(); }} title="Sair">
+            <span className="pb-sys-icon"><PowerIcon /></span>
+          </button>
+        </div>
+      </nav>
+
+      <div className="pb-hints">
+        <span className="pb-hint-key">+</span> Opcoes (S)
+        <span className="pb-hint-divider" />
+        <span className="pb-hint-key">A</span> Iniciar
+      </div>
+
+      {settingsOpen && (
+        <SettingsPanel
+          closing={settingsClosing}
+          onClose={closeSettings}
+          systems={systems}
+          romsRoot={romsRoot}
+          emulatorsRoot={emulatorsRoot}
+          onToggleFullscreen={toggleFullscreen}
+          onQuit={handleQuit}
+          isFullscreen={isFullscreen}
+          config={config}
+          onSetTheme={(id) => { sfx.confirm(); setTheme(id); }}
+          onPickWallpaper={pickWallpaper}
+          onClearWallpaper={clearWallpaper}
+          onSyncCovers={syncCovers}
+          syncStatus={syncStatus}
+          onRescan={rescanRoms}
+          rescanBusy={rescanBusy}
+          onOpenProfiles={() => { closeSettings(); setTimeout(() => setProfilesOpen(true), MODAL_EXIT_MS); }}
+          activeProfile={activeProfile}
+          onSetupSwitchKeys={setupSwitchKeys}
+          switchKeysStatus={switchKeysStatus}
+          onToggleSavesIsolation={toggleSavesIsolation}
+          savesStatus={savesStatus}
+        />
+      )}
+
+      {searchOpen && (
+        <SearchOverlay
+          closing={searchClosing}
+          systems={systems}
+          onClose={closeSearch}
+          onPick={({ system, game }) => {
+            selectGameByPath(system.id, game.path);
+            closeSearch();
+          }}
+        />
+      )}
+
+      {achievementToast && (
+        <AchievementToast achievement={achievementToast} onDone={() => setAchievementToast(null)} />
+      )}
+
+      {profilesOpen && (
+        <ProfileSelector
+          closing={profilesClosing}
+          profiles={config.profiles}
+          activeId={config.active_profile_id}
+          onSelect={selectProfile}
+          onCreate={createProfile}
+          onUpdate={updateProfile}
+          onDelete={deleteProfile}
+          onClose={closeProfiles}
+        />
+      )}
+
+      {welcomeBack && (
+        <div className="pb-welcome-back" aria-hidden>
+          <div className="pb-welcome-back-flash" />
+        </div>
+      )}
+
+      {systemEnter.id && (() => {
+        const sysObj = systems.find((s) => s.id === systemEnter.id);
+        if (!sysObj) return null;
+        return (
+          <div
+            key={systemEnter.key}
+            className={`pb-system-enter pb-system-enter-${systemEnter.id}`}
+            style={{ "--sys-color": sysObj.color }}
+            aria-hidden
+          >
+            <div className="pb-system-enter-flash" />
+            <div className="pb-system-enter-sweep" />
+            <div className="pb-system-enter-stage">
+              <div className="pb-system-enter-icon" style={{ color: sysObj.color }}>
+                <SystemIcon id={systemEnter.id} />
+              </div>
+              <div className="pb-system-enter-name">{sysObj.name}</div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {quitting && (
+        <div className="pb-shutdown" aria-hidden>
+          <div className="pb-shutdown-vignette" />
+          <div className="pb-shutdown-line" />
+          <div className="pb-shutdown-dot" />
+        </div>
+      )}
+
+      {ctxMenu && (
+        <GameContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          system={ctxMenu.system}
+          game={ctxMenu.game}
+          onClose={() => setCtxMenu(null)}
+          onLaunch={() => { setCtxMenu(null); handleLaunch(); }}
+          onShowDetails={() => { const c = ctxMenu; setCtxMenu(null); openDetailPanel(c.system, c.game); }}
+          onResyncCover={() => { setCtxMenu(null); resyncSingleCover(ctxMenu.system.id, ctxMenu.game); }}
+          onPickCover={() => { setCtxMenu(null); pickCustomCover(ctxMenu.system.id, ctxMenu.game); }}
+          onOpenLocation={() => { setCtxMenu(null); openGameLocation(ctxMenu.game); }}
+          onDelete={() => { const c = ctxMenu; setCtxMenu(null); confirmDeleteGame(c.system, c.game); }}
+          onToggleFavorite={() => { setCtxMenu(null); toggleFavorite(); }}
+          isFavorite={favoriteSet.has(ctxMenu.game.path)}
+        />
+      )}
+
+      {detailPanel && (
+        <GameDetailPanel
+          closing={detailClosing}
+          system={detailPanel.system}
+          game={detailPanel.game}
+          playTimeSec={(activeProfile?.play_time?.[detailPanel.game.path]) || 0}
+          isFavorite={favoriteSet.has(detailPanel.game.path)}
+          onClose={closeDetailPanel}
+          onLaunch={() => { closeDetailPanel(); setTimeout(() => handleLaunch(), MODAL_EXIT_MS); }}
+          onPickCover={() => pickCustomCover(detailPanel.system.id, detailPanel.game)}
+          onResyncCover={() => resyncSingleCover(detailPanel.system.id, detailPanel.game)}
+          onOpenLocation={() => openGameLocation(detailPanel.game)}
+          onToggleFavorite={() => toggleFavorite()}
+        />
+      )}
+
+      {deleteConfirm && (
+        <DeleteConfirmModal
+          game={deleteConfirm.game}
+          system={deleteConfirm.system}
+          onCancel={() => { sfx.back(); setDeleteConfirm(null); }}
+          onConfirm={performDeleteGame}
+        />
+      )}
+
+      {launching && selectedBgSrc && (
+        <div className="pb-launching">
+          <img className="pb-launching-bg" src={selectedBgSrc} alt="" aria-hidden />
+          <div className="pb-launching-content">
+            <div className="pb-launching-label">INICIANDO</div>
+            <div className="pb-launching-title">{selectedGame?.name}</div>
+            <div className="pb-launching-system">{selected?.name}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
