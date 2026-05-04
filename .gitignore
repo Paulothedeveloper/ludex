@@ -38,3 +38,7 @@ yarn-error.log*
 src-tauri/playbox.key
 playbox.key
 *.tauri-key
+
+# Tauri updater signing — chave privada (NUNCA commitar)
+src-tauri/playbox-update.key
+!src-tauri/playbox-update.key.pub

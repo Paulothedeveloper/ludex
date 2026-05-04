@@ -51,6 +51,15 @@
         "displayLanguageSelector": false,
         "languages": ["PortugueseBR", "English"]
       }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/EllaeMyApp/playbox-launcher/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ0M0FENjYwMUI3NDMxMDAKUldRQU1YUWJZTlk2MUlIUFJjdG9iaUJtejhhUS90SHVSS3R1L3dza1lKSFc1ZkluZzY0K21kOEMK"
     }
   }
 }

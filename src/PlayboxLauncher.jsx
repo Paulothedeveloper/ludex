@@ -3,6 +3,8 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { check as checkUpdate } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import "./PlayboxLauncher.css";
 
 async function pickImageFile() {
@@ -557,7 +559,40 @@ function SettingsPanel({
 }) {
   const [discordId, setDiscordId] = useState(config.discord_app_id || "");
   const [discordStatus, setDiscordStatus] = useState(null);
+  const [updateStatus, setUpdateStatus] = useState(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
   useEffect(() => { setDiscordId(config.discord_app_id || ""); }, [config.discord_app_id]);
+
+  async function doCheckUpdate() {
+    if (updateBusy) return;
+    setUpdateBusy(true);
+    setUpdateStatus({ kind: "info", text: "Procurando atualização..." });
+    try {
+      const update = await checkUpdate();
+      if (!update) {
+        setUpdateStatus({ kind: "ok", text: "Você já está na versão mais recente!" });
+        return;
+      }
+      setUpdateStatus({ kind: "info", text: `Versão ${update.version} disponível. Baixando...` });
+      let downloaded = 0;
+      let total = 0;
+      await update.downloadAndInstall((event) => {
+        if (event.event === "Started") total = event.data.contentLength || 0;
+        if (event.event === "Progress") {
+          downloaded += event.data.chunkLength || 0;
+          const pct = total ? Math.round((downloaded / total) * 100) : 0;
+          setUpdateStatus({ kind: "info", text: `Baixando v${update.version}: ${pct}%` });
+        }
+        if (event.event === "Finished") setUpdateStatus({ kind: "ok", text: "Download OK. Reiniciando..." });
+      });
+      await relaunch();
+    } catch (e) {
+      console.error("update check", e);
+      setUpdateStatus({ kind: "error", text: `Erro: ${e}` });
+    } finally {
+      setUpdateBusy(false);
+    }
+  }
   async function saveDiscord() {
     try {
       const ok = await invoke("discord_set_app_id", { appId: discordId.trim() || null });
@@ -727,6 +762,21 @@ function SettingsPanel({
             </ul>
           </div>
         )}
+
+        <div className="pb-settings-section">
+          <h3>Atualizações</h3>
+          <button className="pb-settings-btn" onClick={() => { sfx.click(); doCheckUpdate(); }} disabled={updateBusy}>
+            <RefreshIcon /> {updateBusy ? "Verificando..." : "Verificar atualização"}
+          </button>
+          {updateStatus && (
+            <p className="pb-settings-hint" style={{ color: updateStatus.kind === "error" ? "#fca5a5" : updateStatus.kind === "ok" ? "#86efac" : "#fcd34d" }}>
+              {updateStatus.text}
+            </p>
+          )}
+          <p className="pb-settings-hint" style={{ marginTop: 6 }}>
+            Verifica novas versões em <code>github.com/EllaeMyApp/playbox-launcher</code>. Baixa e reinicia automaticamente.
+          </p>
+        </div>
 
         <div className="pb-settings-section">
           <h3>Discord Rich Presence</h3>
