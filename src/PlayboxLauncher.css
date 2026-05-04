@@ -1274,6 +1274,198 @@
 .pb-ctx-danger { color: #fca5a5; }
 .pb-ctx-danger:hover { background: #2a1212; color: #fecaca; }
 
+/* ---------- Custom theme editor ---------- */
+.pb-custom-theme {
+  margin-top: 14px;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+  border: 1px solid var(--theme-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pb-custom-theme-row {
+  display: grid;
+  grid-template-columns: 130px 40px 1fr;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.pb-custom-theme-label { color: var(--theme-text); }
+.pb-custom-theme-input {
+  width: 40px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--theme-border);
+  cursor: pointer;
+  background: transparent;
+  padding: 2px;
+}
+.pb-custom-theme-code {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 11px;
+  color: var(--theme-muted);
+}
+
+/* ---------- Sessions graph ---------- */
+.pb-sessions-graph {
+  margin-top: 16px;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+  border: 1px solid var(--theme-border);
+}
+.pb-sessions-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+.pb-sessions-summary strong {
+  font-size: 18px;
+  color: var(--theme-text);
+  font-weight: 700;
+}
+.pb-sessions-summary span {
+  font-size: 10px;
+  color: var(--theme-muted);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.pb-sessions-bars {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  height: 100px;
+  align-items: flex-end;
+}
+.pb-sessions-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  cursor: default;
+}
+.pb-sessions-bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  position: relative;
+}
+.pb-sessions-bar {
+  width: 100%;
+  background: var(--theme-card);
+  border-radius: 4px;
+  min-height: 2px;
+  transition: height 0.4s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.pb-sessions-bar.filled {
+  background: linear-gradient(180deg, var(--accent, #4ade80), color-mix(in srgb, var(--accent, #4ade80) 50%, transparent));
+}
+.pb-sessions-bar-label {
+  position: absolute;
+  top: -16px;
+  font-size: 9px;
+  color: var(--theme-text);
+  white-space: nowrap;
+  font-weight: 600;
+}
+.pb-sessions-day {
+  font-size: 10px;
+  color: var(--theme-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ---------- Logs viewer modal ---------- */
+.pb-logs-modal {
+  max-width: 900px;
+  height: 75vh;
+}
+.pb-logs-content {
+  margin: 0;
+  padding: 16px 20px;
+  background: #0a0a0a;
+  color: #ddd;
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ---------- Multi-disc badge no card ---------- */
+.pb-card-discs {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 3px 8px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  z-index: 2;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- Disc picker modal ---------- */
+.pb-disc-modal { max-width: 480px; }
+.pb-disc-body {
+  padding: 22px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.pb-disc-game {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  background: #232323;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #fff;
+}
+.pb-disc-sys { display: inline-flex; width: 22px; height: 22px; }
+.pb-disc-sys svg { width: 100%; height: 100%; }
+.pb-disc-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.pb-disc-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 12px;
+  background: #2a2a2a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s, transform 0.12s;
+}
+.pb-disc-card:hover {
+  background: #3a3a3a;
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+.pb-disc-icon { font-size: 32px; line-height: 1; }
+.pb-disc-label { font-size: 13px; font-weight: 600; letter-spacing: 0.06em; }
+
 /* ---------- Confirm delete modal ---------- */
 .pb-confirm-modal { max-width: 520px; }
 .pb-confirm-body {

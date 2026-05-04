@@ -27,7 +27,7 @@ $tauri | ConvertTo-Json -Depth 32 | Set-Content "$root\src-tauri\tauri.conf.json
 
 # 2. Build com signing
 Write-Host "[2/5] Build assinado (pode demorar 5-10min)"
-$env:TAURI_SIGNING_PRIVATE_KEY_PATH = "$root\src-tauri\playbox-update.key"
+$env:TAURI_SIGNING_PRIVATE_KEY = "$root\src-tauri\playbox-update.key"
 $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
 Push-Location $root
 try {

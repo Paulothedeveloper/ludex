@@ -1,0 +1,81 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <!-- Fundo: gradiente radial escuro -->
+    <radialGradient id="bg" cx="50%" cy="38%" r="80%">
+      <stop offset="0%" stop-color="#2a2a2a"/>
+      <stop offset="60%" stop-color="#141414"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </radialGradient>
+
+    <!-- Brilho do triangulo -->
+    <radialGradient id="play-grad" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e6e6e6"/>
+    </radialGradient>
+
+    <!-- Glow externo do triangulo -->
+    <filter id="play-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14" result="blurred"/>
+      <feComposite in="SourceGraphic" in2="blurred" operator="over"/>
+    </filter>
+
+    <!-- Sombra interna no fundo -->
+    <filter id="inner-shadow">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+
+    <!-- Reflexo top -->
+    <linearGradient id="highlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.02"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 1) Base: rounded square escuro -->
+  <rect x="0" y="0" width="1024" height="1024" rx="220" ry="220" fill="url(#bg)"/>
+
+  <!-- 2) Reflexo sutil no topo -->
+  <rect x="0" y="0" width="1024" height="500" rx="220" ry="220" fill="url(#highlight)"/>
+
+  <!-- 3) Borda fina interna -->
+  <rect x="6" y="6" width="1012" height="1012" rx="216" ry="216"
+        fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>
+
+  <!-- 4) Joy-Con accent dots (canto superior, vermelho + azul) -->
+  <circle cx="190" cy="190" r="36" fill="#e60012"/>
+  <circle cx="190" cy="190" r="36" fill="#e60012" opacity="0.5" filter="url(#inner-shadow)"/>
+  <circle cx="834" cy="190" r="36" fill="#1d4ed8"/>
+  <circle cx="834" cy="190" r="36" fill="#1d4ed8" opacity="0.5" filter="url(#inner-shadow)"/>
+
+  <!-- 5) Glow atras do play triangle -->
+  <ellipse cx="512" cy="500" rx="320" ry="240" fill="#ffffff" opacity="0.06" filter="url(#play-glow)"/>
+
+  <!-- 6) Play triangle centralizado -->
+  <polygon points="370,310 740,500 370,690"
+           fill="url(#play-grad)"
+           stroke="#ffffff" stroke-width="2"
+           stroke-linejoin="round"/>
+
+  <!-- 7) Reflexo no triangulo -->
+  <polygon points="370,310 555,406 370,500" fill="#ffffff" opacity="0.18"/>
+
+  <!-- 8) Texto PLAYBOX inferior -->
+  <text x="512" y="850"
+        font-family="Arial Black, Helvetica, sans-serif"
+        font-weight="900"
+        font-size="84"
+        letter-spacing="12"
+        fill="#ffffff"
+        text-anchor="middle">PLAYBOX</text>
+
+  <!-- 9) Linha de acento abaixo do texto (gradiente joy-con) -->
+  <defs>
+    <linearGradient id="accent-line" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#e60012"/>
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <rect x="340" y="888" width="344" height="6" rx="3" fill="url(#accent-line)"/>
+</svg>

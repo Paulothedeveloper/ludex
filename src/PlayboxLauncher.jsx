@@ -56,6 +56,18 @@ const THEMES = [
   },
 ];
 
+const DEFAULT_CUSTOM_THEME = {
+  bg: "#1a0a2a", surface: "#2a1a3a", card: "#3a2a4a",
+  text: "#ffffff", muted: "#a89bb8", border: "#3a2a4a",
+};
+
+function customThemeVars(t) {
+  return {
+    "--theme-bg": t.bg, "--theme-surface": t.surface, "--theme-card": t.card,
+    "--theme-text": t.text, "--theme-muted": t.muted, "--theme-border": t.border,
+  };
+}
+
 function useClock() {
   const [time, setTime] = useState(() => new Date());
   useEffect(() => {
@@ -204,6 +216,101 @@ function playPlatformJingle(systemId) {
   if (fn) fn();
   else sfx.switchSys();
 }
+
+// ---------- Música ambiente procedural (pad ambient evolutivo) ----------
+const ambientMusic = {
+  nodes: null,
+  start(volume = 0.3) {
+    this.stop();
+    const ctx = audioCtx();
+    if (!ctx) return;
+    try {
+      // Master gain
+      const master = ctx.createGain();
+      master.gain.value = volume;
+      master.connect(ctx.destination);
+
+      // Reverb-like via 2 delays sutis
+      const delay = ctx.createDelay(0.5);
+      delay.delayTime.value = 0.32;
+      const delayGain = ctx.createGain();
+      delayGain.gain.value = 0.25;
+      delay.connect(delayGain).connect(master);
+      delayGain.connect(delay); // feedback leve
+
+      // Lowpass filter (warm pad)
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 1200;
+      filter.Q.value = 0.7;
+      filter.connect(master);
+      filter.connect(delay);
+
+      // 4 oscillators formando acorde Cmaj9 (C, E, G, D5)
+      const freqs = [130.81, 164.81, 196.00, 293.66]; // C3 E3 G3 D4
+      const oscs = [];
+      const gains = [];
+      const lfos = [];
+      const lfoGains = [];
+
+      freqs.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+
+        const gain = ctx.createGain();
+        gain.gain.value = 0;
+        osc.connect(gain).connect(filter);
+
+        // LFO independente em cada nota (evolução lenta de volume)
+        const lfo = ctx.createOscillator();
+        lfo.type = "sine";
+        lfo.frequency.value = 0.05 + i * 0.013; // 0.05Hz, 0.063Hz, etc — todas diferentes pra evitar phase lock
+        const lfoGain = ctx.createGain();
+        lfoGain.gain.value = 0.06; // amplitude da modulacao
+        lfo.connect(lfoGain).connect(gain.gain);
+
+        // Bias inicial (offset DC pra LFO oscilar em torno disso)
+        gain.gain.setValueAtTime(0.07, ctx.currentTime);
+
+        osc.start();
+        lfo.start();
+
+        oscs.push(osc);
+        gains.push(gain);
+        lfos.push(lfo);
+        lfoGains.push(lfoGain);
+      });
+
+      this.nodes = { master, filter, delay, delayGain, oscs, gains, lfos, lfoGains };
+    } catch (e) {
+      console.error("ambient start", e);
+    }
+  },
+  stop() {
+    if (!this.nodes) return;
+    const { oscs, lfos, master } = this.nodes;
+    try {
+      const ctx = audioCtx();
+      if (ctx) {
+        master.gain.cancelScheduledValues(ctx.currentTime);
+        master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
+        master.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
+      }
+      setTimeout(() => {
+        oscs.forEach((o) => { try { o.stop(); o.disconnect(); } catch {} });
+        lfos.forEach((o) => { try { o.stop(); o.disconnect(); } catch {} });
+      }, 600);
+    } catch {}
+    this.nodes = null;
+  },
+  setVolume(volume) {
+    if (!this.nodes) return;
+    try {
+      this.nodes.master.gain.value = volume;
+    } catch {}
+  },
+};
 
 // ---------- Achievements ----------
 const ACHIEVEMENTS = [
@@ -551,11 +658,13 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
 function SettingsPanel({
   closing, onClose, systems, romsRoot, emulatorsRoot,
   onToggleFullscreen, onQuit, isFullscreen,
-  config, onSetTheme, onPickWallpaper, onClearWallpaper,
+  config, onSetTheme, onSetCustomTheme, onPickWallpaper, onClearWallpaper,
   onSyncCovers, syncStatus, onRescan, rescanBusy,
   onOpenProfiles, activeProfile,
   onSetupSwitchKeys, switchKeysStatus,
   onToggleSavesIsolation, savesStatus,
+  onToggleMusic, onSetMusicVolume,
+  onShowLogs,
 }) {
   const [discordId, setDiscordId] = useState(config.discord_app_id || "");
   const [discordStatus, setDiscordStatus] = useState(null);
@@ -654,7 +763,52 @@ function SettingsPanel({
                 <span>{t.name}</span>
               </button>
             ))}
+            <button
+              className={`pb-theme-card ${config.theme_id === "custom" ? "active" : ""}`}
+              onClick={() => onSetTheme("custom")}
+              title="Tema customizado"
+            >
+              <div className="pb-theme-swatch">
+                {(config.custom_theme ? [config.custom_theme.bg, config.custom_theme.card, config.custom_theme.text] : [DEFAULT_CUSTOM_THEME.bg, DEFAULT_CUSTOM_THEME.card, DEFAULT_CUSTOM_THEME.text]).map((c, i) => <span key={i} style={{ background: c }} />)}
+              </div>
+              <span>Custom</span>
+            </button>
           </div>
+          {config.theme_id === "custom" && (
+            <CustomThemeEditor
+              theme={config.custom_theme || DEFAULT_CUSTOM_THEME}
+              onChange={onSetCustomTheme}
+            />
+          )}
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>Música ambiente</h3>
+          <button
+            className={`pb-settings-btn ${config.music_enabled ? "pb-settings-btn-danger" : ""}`}
+            onClick={() => { sfx.toggle(); onToggleMusic(); }}
+          >
+            <PowerIcon />
+            {config.music_enabled ? "Desativar música" : "Ativar música"}
+          </button>
+          {config.music_enabled && (
+            <div style={{ marginTop: 12 }}>
+              <label className="pb-settings-hint" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ minWidth: 60 }}>Volume</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={config.music_volume ?? 0.3}
+                  onChange={(e) => onSetMusicVolume(parseFloat(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ minWidth: 30, textAlign: "right" }}>{Math.round((config.music_volume ?? 0.3) * 100)}%</span>
+              </label>
+            </div>
+          )}
+          <p className="pb-settings-hint">Pad ambient procedural — pausa enquanto jogo está aberto.</p>
         </div>
 
         <div className="pb-settings-section">
@@ -740,6 +894,7 @@ function SettingsPanel({
               <div className="pb-stat"><strong>{formatPlayTime(totalPlayTime)}</strong><span>tempo total</span></div>
               <div className="pb-stat"><strong>{Object.keys(activeProfile.play_time || {}).length}</strong><span>jogos abertos</span></div>
             </div>
+            <SessionsGraph sessions={activeProfile.sessions} />
           </div>
         )}
 
@@ -857,9 +1012,155 @@ function SettingsPanel({
           </button>
         </div>
 
+        <div className="pb-settings-section">
+          <h3>Diagnóstico</h3>
+          <button className="pb-settings-btn" onClick={() => { sfx.click(); onShowLogs(); }}>
+            <InfoIcon /> Ver logs do app
+          </button>
+          <p className="pb-settings-hint">Útil quando algum jogo não abre — mostra as últimas 200 linhas do log.</p>
+        </div>
+
         <footer className="pb-settings-footer">Playbox Launcher · v0.2</footer>
       </aside>
     </>
+  );
+}
+
+function LogsViewerModal({ onClose }) {
+  const [text, setText] = useState("Carregando...");
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    setBusy(true);
+    try {
+      const t = await invoke("read_app_logs", { maxLines: 200 });
+      setText(t || "(vazio)");
+    } catch (e) {
+      setText(`Erro ao ler log: ${e}`);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  return (
+    <div className="pb-modal-backdrop" onClick={onClose}>
+      <div className="pb-modal pb-logs-modal" onClick={(e) => e.stopPropagation()}>
+        <header className="pb-modal-header">
+          <h2>Logs do Playbox (últimas 200 linhas)</h2>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="pb-icon-btn" onClick={load} title="Recarregar" disabled={busy}><RefreshIcon /></button>
+            <button className="pb-icon-btn" onClick={onClose}><CloseIcon /></button>
+          </div>
+        </header>
+        <pre className="pb-logs-content">{text}</pre>
+      </div>
+    </div>
+  );
+}
+
+function SessionsGraph({ sessions }) {
+  // Agrupa sessoes por dia (ultimos 7 dias)
+  const days = useMemo(() => {
+    const out = [];
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 86400000);
+      const label = d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
+      out.push({ date: d, label, total: 0 });
+    }
+    for (const s of sessions || []) {
+      const sDate = new Date(s.started_at * 1000);
+      sDate.setHours(0, 0, 0, 0);
+      const day = out.find((d) => d.date.getTime() === sDate.getTime());
+      if (day) day.total += s.duration_sec;
+    }
+    return out;
+  }, [sessions]);
+
+  const maxTotal = Math.max(...days.map((d) => d.total), 600); // pelo menos 10min de escala
+  const totalWeek = days.reduce((acc, d) => acc + d.total, 0);
+
+  return (
+    <div className="pb-sessions-graph">
+      <div className="pb-sessions-summary">
+        <strong>{formatPlayTime(totalWeek)}</strong>
+        <span>nos últimos 7 dias</span>
+      </div>
+      <div className="pb-sessions-bars">
+        {days.map((d, i) => {
+          const pct = (d.total / maxTotal) * 100;
+          return (
+            <div key={i} className="pb-sessions-bar-col" title={`${d.label}: ${formatPlayTime(d.total)}`}>
+              <div className="pb-sessions-bar-wrap">
+                <div
+                  className={`pb-sessions-bar ${d.total > 0 ? "filled" : ""}`}
+                  style={{ height: `${pct}%` }}
+                />
+                {d.total > 0 && (
+                  <div className="pb-sessions-bar-label">{formatPlayTime(d.total)}</div>
+                )}
+              </div>
+              <span className="pb-sessions-day">{d.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CustomThemeEditor({ theme, onChange }) {
+  const fields = [
+    { key: "bg",      label: "Fundo" },
+    { key: "surface", label: "Superfície" },
+    { key: "card",    label: "Card" },
+    { key: "text",    label: "Texto" },
+    { key: "muted",   label: "Texto Secundário" },
+    { key: "border",  label: "Borda" },
+  ];
+  return (
+    <div className="pb-custom-theme">
+      {fields.map((f) => (
+        <label key={f.key} className="pb-custom-theme-row">
+          <span className="pb-custom-theme-label">{f.label}</span>
+          <input
+            type="color"
+            value={theme[f.key] || "#000000"}
+            onChange={(e) => onChange({ ...theme, [f.key]: e.target.value })}
+            className="pb-custom-theme-input"
+          />
+          <code className="pb-custom-theme-code">{theme[f.key]}</code>
+        </label>
+      ))}
+      <p className="pb-settings-hint">Aplica em tempo real. Salvo automaticamente.</p>
+    </div>
+  );
+}
+
+function DiscPickerModal({ system, game, onCancel, onPick }) {
+  return (
+    <div className="pb-modal-backdrop" onClick={onCancel}>
+      <div className="pb-modal pb-disc-modal" onClick={(e) => e.stopPropagation()}>
+        <header className="pb-modal-header">
+          <h2>Escolher disco</h2>
+          <button className="pb-icon-btn" onClick={onCancel}><CloseIcon /></button>
+        </header>
+        <div className="pb-disc-body">
+          <p className="pb-disc-game">
+            <span className="pb-disc-sys" style={{ color: system.color }}><SystemIcon id={system.id} /></span>
+            <strong>{game.name}</strong>
+          </p>
+          <div className="pb-disc-grid">
+            {(game.discs || []).map((d) => (
+              <button key={d.path} className="pb-disc-card" onClick={() => onPick(d.path)}>
+                <span className="pb-disc-icon">💿</span>
+                <span className="pb-disc-label">{d.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1143,6 +1444,10 @@ export default function PlayboxLauncher() {
   // Ficha do jogo: { system, game } | null
   const [detailPanel, setDetailPanel] = useState(null);
   const [detailClosing, setDetailClosing] = useState(false);
+  // Selector de disco: { system, game } | null
+  const [discPicker, setDiscPicker] = useState(null);
+  // Logs viewer modal
+  const [logsOpen, setLogsOpen] = useState(false);
   // Ordenacao do grid de jogos: "default" | "az" | "playtime" | "recent" | "fav"
   const [sortMode, setSortMode] = useState("default");
   const [rescanBusy, setRescanBusy] = useState(false);
@@ -1251,6 +1556,20 @@ export default function PlayboxLauncher() {
     return () => clearTimeout(t);
   }, []);
 
+  // Música ambiente liga/desliga + volume + pausa quando jogo ativo
+  useEffect(() => {
+    if (config.music_enabled && splashDone && !launching && !quitting) {
+      if (!ambientMusic.nodes) {
+        ambientMusic.start(config.music_volume ?? 0.3);
+      } else {
+        ambientMusic.setVolume(config.music_volume ?? 0.3);
+      }
+    } else {
+      ambientMusic.stop();
+    }
+    return () => {};
+  }, [config.music_enabled, config.music_volume, splashDone, launching, quitting]);
+
   // Unlock audio context na primeira interação (autoplay policy)
   useEffect(() => {
     const unlock = () => unlockAudio();
@@ -1298,10 +1617,16 @@ export default function PlayboxLauncher() {
 
   // aplicar tema
   useEffect(() => {
-    const theme = THEMES.find((t) => t.id === config.theme_id) || THEMES[0];
     const root = document.documentElement;
-    Object.entries(theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
-  }, [config.theme_id]);
+    let vars;
+    if (config.theme_id === "custom" && config.custom_theme) {
+      vars = customThemeVars(config.custom_theme);
+    } else {
+      const theme = THEMES.find((t) => t.id === config.theme_id) || THEMES[0];
+      vars = theme.vars;
+    }
+    Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  }, [config.theme_id, config.custom_theme]);
 
   // fullscreen state inicial
   useEffect(() => {
@@ -1392,15 +1717,20 @@ export default function PlayboxLauncher() {
     return { achievements: Array.from(current), newly };
   }, []);
 
-  const handleLaunch = useCallback(async () => {
+  const launchGameWithPath = useCallback(async (romPath) => {
     if (!selected || !selectedGame) return;
     sfx.confirm();
     setLaunching(true);
     setLaunchMsg({ kind: "launching", text: `Iniciando ${selectedGame.name}...` });
     try {
-      await invoke("launch_game", { systemId: launchSystemId, romPath: selectedGame.path });
+      await invoke("launch_game", { systemId: launchSystemId, romPath });
       setLaunchMsg({ kind: "ok", text: `${selectedGame.name} iniciado` });
-      launchStartRef.current = { rom_path: selectedGame.path, started_at: Date.now() };
+      launchStartRef.current = {
+        rom_path: selectedGame.path,
+        rom_name: selectedGame.name,
+        system_id: launchSystemId,
+        started_at: Date.now(),
+      };
       // Discord Rich Presence (silent no-op se nao configurado)
       const sysName = selected?.name || launchSystemId;
       invoke("discord_set_activity", { gameName: selectedGame.name, systemName: sysName }).catch(() => {});
@@ -1434,6 +1764,16 @@ export default function PlayboxLauncher() {
       setLaunching(false);
     }
   }, [selected, selectedGame, launchSystemId, activeProfile, updateActiveProfile, checkAchievements]);
+
+  const handleLaunch = useCallback(() => {
+    if (!selectedGame) return;
+    if (selectedGame.discs && selectedGame.discs.length > 1) {
+      sfx.open();
+      setDiscPicker({ system: selected, game: selectedGame });
+    } else {
+      launchGameWithPath(selectedGame.path);
+    }
+  }, [selected, selectedGame, launchGameWithPath]);
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -1549,7 +1889,24 @@ export default function PlayboxLauncher() {
 
   // -------- Theme / Wallpaper --------
   const setTheme = useCallback((themeId) => {
-    setConfig((prev) => ({ ...prev, theme_id: themeId }));
+    setConfig((prev) => ({
+      ...prev,
+      theme_id: themeId,
+      // Inicializa custom_theme com default se ainda nao existe
+      custom_theme: themeId === "custom" && !prev.custom_theme ? DEFAULT_CUSTOM_THEME : prev.custom_theme,
+    }));
+  }, []);
+
+  const setCustomTheme = useCallback((customTheme) => {
+    setConfig((prev) => ({ ...prev, custom_theme: customTheme }));
+  }, []);
+
+  const toggleMusic = useCallback(() => {
+    setConfig((prev) => ({ ...prev, music_enabled: !prev.music_enabled }));
+  }, []);
+
+  const setMusicVolume = useCallback((vol) => {
+    setConfig((prev) => ({ ...prev, music_volume: vol }));
   }, []);
 
   const pickWallpaper = useCallback(async () => {
@@ -1579,7 +1936,20 @@ export default function PlayboxLauncher() {
       launchStartRef.current = null;
       updateActiveProfile((p) => {
         const prev = p.play_time?.[start.rom_path] || 0;
-        return { ...p, play_time: { ...(p.play_time || {}), [start.rom_path]: prev + cap } };
+        const newSession = {
+          started_at: Math.floor(start.started_at / 1000),
+          duration_sec: cap,
+          rom_path: start.rom_path,
+          rom_name: start.rom_name || "",
+          system_id: start.system_id || "",
+        };
+        // Mantem so as ultimas 200 sessoes
+        const sessions = [...(p.sessions || []), newSession].slice(-200);
+        return {
+          ...p,
+          play_time: { ...(p.play_time || {}), [start.rom_path]: prev + cap },
+          sessions,
+        };
       });
     }
     window.addEventListener("focus", onFocus);
@@ -2113,6 +2483,9 @@ export default function PlayboxLauncher() {
                             </>
                           )}
                           {isFav && <span className="pb-card-fav"><StarIcon filled /></span>}
+                          {g.discs && g.discs.length > 1 && (
+                            <span className="pb-card-discs" title={`${g.discs.length} discos`}>💿×{g.discs.length}</span>
+                          )}
                         </button>
                         <button
                           className="pb-card-resync"
@@ -2187,6 +2560,7 @@ export default function PlayboxLauncher() {
           isFullscreen={isFullscreen}
           config={config}
           onSetTheme={(id) => { sfx.confirm(); setTheme(id); }}
+          onSetCustomTheme={setCustomTheme}
           onPickWallpaper={pickWallpaper}
           onClearWallpaper={clearWallpaper}
           onSyncCovers={syncCovers}
@@ -2199,6 +2573,9 @@ export default function PlayboxLauncher() {
           switchKeysStatus={switchKeysStatus}
           onToggleSavesIsolation={toggleSavesIsolation}
           savesStatus={savesStatus}
+          onToggleMusic={toggleMusic}
+          onSetMusicVolume={setMusicVolume}
+          onShowLogs={() => { closeSettings(); setTimeout(() => setLogsOpen(true), MODAL_EXIT_MS); }}
         />
       )}
 
@@ -2308,6 +2685,19 @@ export default function PlayboxLauncher() {
           onCancel={() => { sfx.back(); setDeleteConfirm(null); }}
           onConfirm={performDeleteGame}
         />
+      )}
+
+      {discPicker && (
+        <DiscPickerModal
+          system={discPicker.system}
+          game={discPicker.game}
+          onCancel={() => { sfx.back(); setDiscPicker(null); }}
+          onPick={(path) => { setDiscPicker(null); launchGameWithPath(path); }}
+        />
+      )}
+
+      {logsOpen && (
+        <LogsViewerModal onClose={() => { sfx.back(); setLogsOpen(false); }} />
       )}
 
       {launching && selectedBgSrc && (

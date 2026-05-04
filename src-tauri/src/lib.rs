@@ -308,11 +308,21 @@ fn current_roms_root() -> PathBuf {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct Disc {
+    label: String,  // "Disc 1", "Disc 2"...
+    path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct Game {
     name: String,
     path: String,
     extension: String,
     size_mb: u64,
+    /// Se for jogo multi-disc, lista de discos. None = single-disc.
+    /// path principal aponta pro disco 1 por convencao.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    discs: Option<Vec<Disc>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -457,6 +467,7 @@ fn scan_extracted_ps3(folder: &Path, games: &mut Vec<Game>) {
             path: eboot.to_string_lossy().to_string(),
             extension: "bin".to_string(),
             size_mb,
+            discs: None,
         });
     }
 }
@@ -500,6 +511,7 @@ fn scan_extracted_ps4(folder: &Path, games: &mut Vec<Game>) {
             path: eboot.to_string_lossy().to_string(),
             extension: "bin".to_string(),
             size_mb,
+            discs: None,
         });
     }
 }
@@ -542,8 +554,94 @@ fn scan_extracted_wiiu(folder: &Path, games: &mut Vec<Game>) {
             path: rpx.to_string_lossy().to_string(),
             extension: "rpx".to_string(),
             size_mb,
+            discs: None,
         });
     }
+}
+
+/// Detecta se o nome tem indicador de disco. Retorna (base_name, label_disco).
+/// Reconhece: "Disc 1", "Disc N", "CD 1", "Disco 1", "(Disc N)" etc.
+fn parse_disc_marker(name: &str) -> Option<(String, String)> {
+    let lower = name.to_lowercase();
+    // Padroes comuns: "disc 1", "disc1", "cd 1", "disco 1", "side a/b" (raro)
+    let markers = [" disc ", " disc", " cd ", " cd", " disco ", " disk "];
+    for marker in markers.iter() {
+        if let Some(idx) = lower.rfind(marker) {
+            let after = &name[idx + marker.len()..];
+            // Pega o numero (1-9 ou letra A-Z)
+            let mut digits = String::new();
+            for ch in after.chars() {
+                if ch.is_ascii_digit() || ch.is_ascii_alphabetic() {
+                    digits.push(ch);
+                    if digits.len() >= 2 { break; }
+                } else {
+                    break;
+                }
+            }
+            if digits.is_empty() { continue; }
+            // Confirma que ate aqui parece "Disc N" e nao "discrete" ou similar
+            let cap_marker = marker.trim();
+            let label = format!("{} {}", capitalize(cap_marker), digits.trim_start_matches('0'));
+            // base_name = trecho ate o marker, sem o disc, com trim
+            let base = name[..idx].trim_end().to_string();
+            if base.is_empty() { continue; }
+            return Some((base, label));
+        }
+    }
+    None
+}
+
+fn capitalize(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+    }
+}
+
+/// Agrupa jogos com mesmo base_name em multi-disc.
+/// Mantem ordem original (jogos sem disc) e cria entries unicos pra grupos.
+fn group_multidisc_games(games: Vec<Game>) -> Vec<Game> {
+    use std::collections::BTreeMap;
+    let mut groups: BTreeMap<String, Vec<(String, Game)>> = BTreeMap::new();
+    let mut singles: Vec<Game> = Vec::new();
+
+    for g in games {
+        match parse_disc_marker(&g.name) {
+            Some((base, label)) => {
+                groups.entry(base).or_default().push((label, g));
+            }
+            None => singles.push(g),
+        }
+    }
+
+    let mut result = singles;
+    for (base, mut entries) in groups {
+        if entries.len() == 1 {
+            // So 1 disco encontrado — trata como single mesmo
+            result.push(entries.remove(0).1);
+            continue;
+        }
+        // Ordena por label (Disc 1 antes de Disc 2)
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        let total_size: u64 = entries.iter().map(|(_, g)| g.size_mb).sum();
+        let first_path = entries[0].1.path.clone();
+        let extension = entries[0].1.extension.clone();
+        let discs: Vec<Disc> = entries.into_iter().map(|(label, g)| Disc {
+            label,
+            path: g.path,
+        }).collect();
+        result.push(Game {
+            name: base,
+            path: first_path,
+            extension,
+            size_mb: total_size,
+            discs: Some(discs),
+        });
+    }
+
+    result.sort_by(|a, b| a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()));
+    result
 }
 
 fn scan_system(roms_root: &Path, emulators_root: &Path, cfg: &EmulatorConfig) -> SystemInfo {
@@ -584,6 +682,7 @@ fn scan_system(roms_root: &Path, emulators_root: &Path, cfg: &EmulatorConfig) ->
                 path: path.to_string_lossy().to_string(),
                 extension: ext,
                 size_mb,
+                discs: None,
             });
         }
         // Casos especiais: pastas extracted
@@ -596,7 +695,12 @@ fn scan_system(roms_root: &Path, emulators_root: &Path, cfg: &EmulatorConfig) ->
         if cfg.id == "ps4" {
             scan_extracted_ps4(&folder, &mut games);
         }
-        games.sort_by(|a, b| a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()));
+        // Multi-disc grouping pra sistemas de disco optico
+        if matches!(cfg.id, "ps1" | "ps2" | "gc") {
+            games = group_multidisc_games(games);
+        } else {
+            games.sort_by(|a, b| a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()));
+        }
     }
 
     SystemInfo {
@@ -917,6 +1021,16 @@ impl Default for LastPlayed {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+struct PlaySession {
+    started_at: u64,
+    duration_sec: u64,
+    rom_path: String,
+    rom_name: String,
+    system_id: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 struct Profile {
@@ -929,6 +1043,7 @@ struct Profile {
     total_launches: u32,
     achievements: Vec<String>,
     last_played: Option<LastPlayed>,
+    sessions: Vec<PlaySession>,
 }
 
 impl Default for Profile {
@@ -943,6 +1058,7 @@ impl Default for Profile {
             total_launches: 0,
             achievements: Vec::new(),
             last_played: None,
+            sessions: Vec::new(),
         }
     }
 }
@@ -961,6 +1077,22 @@ struct AppConfig {
     roms_root: Option<String>,
     /// Discord Application ID (registrar em https://discord.com/developers/applications)
     discord_app_id: Option<String>,
+    /// Tema customizado (paleta de cores escolhida pelo user)
+    custom_theme: Option<CustomTheme>,
+    /// Musica ambiente no menu
+    music_enabled: bool,
+    music_volume: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+struct CustomTheme {
+    bg: String,
+    surface: String,
+    card: String,
+    text: String,
+    muted: String,
+    border: String,
 }
 
 impl Default for AppConfig {
@@ -974,6 +1106,9 @@ impl Default for AppConfig {
             emulators_root: None,
             roms_root: None,
             discord_app_id: None,
+            custom_theme: None,
+            music_enabled: false,
+            music_volume: 0.4,
         }
     }
 }
@@ -1483,6 +1618,35 @@ async fn fetch_cover(system_id: String, game_name: String) -> Option<String> {
 }
 
 #[tauri::command]
+fn read_app_logs(max_lines: Option<usize>) -> Result<String, String> {
+    let limit = max_lines.unwrap_or(200);
+    // tauri-plugin-log salva em <log_dir>/<bundle_id>.log
+    let base = dirs::data_local_dir().or_else(dirs::data_dir).ok_or("data dir indisponivel")?;
+    let log_dir = base.join("com.paulobatista.playbox").join("logs");
+    let mut log_files: Vec<PathBuf> = Vec::new();
+    if log_dir.is_dir() {
+        if let Ok(entries) = std::fs::read_dir(&log_dir) {
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.extension().and_then(|x| x.to_str()) == Some("log") {
+                    log_files.push(p);
+                }
+            }
+        }
+    }
+    if log_files.is_empty() {
+        return Ok(format!("(nenhum log encontrado em {})", log_dir.display()));
+    }
+    // Pega o mais recente
+    log_files.sort_by_key(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
+    let latest = log_files.last().unwrap();
+    let content = std::fs::read_to_string(latest).map_err(|e| format!("ler log: {}", e))?;
+    let lines: Vec<&str> = content.lines().collect();
+    let start = if lines.len() > limit { lines.len() - limit } else { 0 };
+    Ok(lines[start..].join("\n"))
+}
+
+#[tauri::command]
 fn open_in_explorer(path: String) -> Result<(), String> {
     let p = PathBuf::from(&path);
     if !p.exists() {
@@ -1852,6 +2016,7 @@ pub fn run() {
             set_custom_cover,
             open_in_explorer,
             delete_game_to_trash,
+            read_app_logs,
             load_config,
             save_config,
             reset_config,
