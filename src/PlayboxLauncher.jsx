@@ -217,99 +217,120 @@ function playPlatformJingle(systemId) {
   else sfx.switchSys();
 }
 
-// ---------- Música ambiente procedural (pad ambient evolutivo) ----------
+// ---------- Música ambiente: playlist MP3 com shuffle + crossfade ----------
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 const ambientMusic = {
-  nodes: null,
-  start(volume = 0.3) {
-    this.stop();
-    const ctx = audioCtx();
-    if (!ctx) return;
+  audio: null,         // HTMLAudioElement
+  playlist: [],        // array de file paths
+  queue: [],           // ordem shufflada atual
+  current: 0,
+  targetVolume: 0.3,
+  fadeInterval: null,
+
+  async load() {
     try {
-      // Master gain
-      const master = ctx.createGain();
-      master.gain.value = volume;
-      master.connect(ctx.destination);
-
-      // Reverb-like via 2 delays sutis
-      const delay = ctx.createDelay(0.5);
-      delay.delayTime.value = 0.32;
-      const delayGain = ctx.createGain();
-      delayGain.gain.value = 0.25;
-      delay.connect(delayGain).connect(master);
-      delayGain.connect(delay); // feedback leve
-
-      // Lowpass filter (warm pad)
-      const filter = ctx.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.value = 1200;
-      filter.Q.value = 0.7;
-      filter.connect(master);
-      filter.connect(delay);
-
-      // 4 oscillators formando acorde Cmaj9 (C, E, G, D5)
-      const freqs = [130.81, 164.81, 196.00, 293.66]; // C3 E3 G3 D4
-      const oscs = [];
-      const gains = [];
-      const lfos = [];
-      const lfoGains = [];
-
-      freqs.forEach((freq, i) => {
-        const osc = ctx.createOscillator();
-        osc.type = "sine";
-        osc.frequency.value = freq;
-
-        const gain = ctx.createGain();
-        gain.gain.value = 0;
-        osc.connect(gain).connect(filter);
-
-        // LFO independente em cada nota (evolução lenta de volume)
-        const lfo = ctx.createOscillator();
-        lfo.type = "sine";
-        lfo.frequency.value = 0.05 + i * 0.013; // 0.05Hz, 0.063Hz, etc — todas diferentes pra evitar phase lock
-        const lfoGain = ctx.createGain();
-        lfoGain.gain.value = 0.06; // amplitude da modulacao
-        lfo.connect(lfoGain).connect(gain.gain);
-
-        // Bias inicial (offset DC pra LFO oscilar em torno disso)
-        gain.gain.setValueAtTime(0.07, ctx.currentTime);
-
-        osc.start();
-        lfo.start();
-
-        oscs.push(osc);
-        gains.push(gain);
-        lfos.push(lfo);
-        lfoGains.push(lfoGain);
-      });
-
-      this.nodes = { master, filter, delay, delayGain, oscs, gains, lfos, lfoGains };
+      const tracks = await invoke("list_music_tracks");
+      this.playlist = Array.isArray(tracks) ? tracks : [];
+      this.queue = shuffle(this.playlist);
+      this.current = 0;
+      return this.playlist.length;
     } catch (e) {
-      console.error("ambient start", e);
+      console.error("list_music_tracks", e);
+      return 0;
     }
   },
-  stop() {
-    if (!this.nodes) return;
-    const { oscs, lfos, master } = this.nodes;
-    try {
-      const ctx = audioCtx();
-      if (ctx) {
-        master.gain.cancelScheduledValues(ctx.currentTime);
-        master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
-        master.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
-      }
-      setTimeout(() => {
-        oscs.forEach((o) => { try { o.stop(); o.disconnect(); } catch {} });
-        lfos.forEach((o) => { try { o.stop(); o.disconnect(); } catch {} });
-      }, 600);
-    } catch {}
-    this.nodes = null;
+
+  start(volume = 0.3) {
+    this.stop();
+    if (!this.playlist.length) return;
+    this.targetVolume = Math.max(0, Math.min(1, volume));
+    this._playCurrent();
   },
+
+  _playCurrent() {
+    if (!this.queue.length) this.queue = shuffle(this.playlist);
+    const path = this.queue[this.current % this.queue.length];
+    if (!path) return;
+    try {
+      const url = convertFileSrc(path);
+      const audio = new Audio(url);
+      audio.volume = 0; // fade-in
+      audio.preload = "auto";
+      audio.addEventListener("ended", () => this._next());
+      audio.addEventListener("error", (e) => {
+        console.error("audio error", e);
+        this._next();
+      });
+      audio.play().catch((e) => console.error("audio play", e));
+      this.audio = audio;
+      this._fadeTo(this.targetVolume, 1500);
+    } catch (e) {
+      console.error("play track", e);
+    }
+  },
+
+  _next() {
+    this.current = (this.current + 1) % (this.queue.length || 1);
+    // Re-shuffle se voltou pro inicio
+    if (this.current === 0) this.queue = shuffle(this.playlist);
+    this._playCurrent();
+  },
+
+  _fadeTo(target, durationMs) {
+    if (!this.audio) return;
+    if (this.fadeInterval) clearInterval(this.fadeInterval);
+    const start = this.audio.volume;
+    const startTime = performance.now();
+    this.fadeInterval = setInterval(() => {
+      if (!this.audio) { clearInterval(this.fadeInterval); return; }
+      const elapsed = performance.now() - startTime;
+      const t = Math.min(1, elapsed / durationMs);
+      this.audio.volume = start + (target - start) * t;
+      if (t >= 1) { clearInterval(this.fadeInterval); this.fadeInterval = null; }
+    }, 50);
+  },
+
   setVolume(volume) {
-    if (!this.nodes) return;
-    try {
-      this.nodes.master.gain.value = volume;
-    } catch {}
+    this.targetVolume = Math.max(0, Math.min(1, volume));
+    if (this.audio) this._fadeTo(this.targetVolume, 300);
   },
+
+  stop() {
+    if (this.fadeInterval) { clearInterval(this.fadeInterval); this.fadeInterval = null; }
+    if (this.audio) {
+      const a = this.audio;
+      this.audio = null;
+      try {
+        // Fade-out + pause
+        const start = a.volume;
+        const startTime = performance.now();
+        const dur = 500;
+        const interval = setInterval(() => {
+          const elapsed = performance.now() - startTime;
+          const t = Math.min(1, elapsed / dur);
+          a.volume = start * (1 - t);
+          if (t >= 1) {
+            clearInterval(interval);
+            try { a.pause(); a.src = ""; } catch {}
+          }
+        }, 50);
+      } catch {}
+    }
+  },
+
+  skip() {
+    this._next();
+  },
+
+  get isPlaying() { return !!this.audio; },
 };
 
 // ---------- Achievements ----------
@@ -792,7 +813,7 @@ function SettingsPanel({
             {config.music_enabled ? "Desativar música" : "Ativar música"}
           </button>
           {config.music_enabled && (
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
               <label className="pb-settings-hint" style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <span style={{ minWidth: 60 }}>Volume</span>
                 <input
@@ -806,9 +827,12 @@ function SettingsPanel({
                 />
                 <span style={{ minWidth: 30, textAlign: "right" }}>{Math.round((config.music_volume ?? 0.3) * 100)}%</span>
               </label>
+              <button className="pb-settings-btn" onClick={() => { sfx.click(); ambientMusic.skip(); }}>
+                <RotateIcon /> Próxima música
+              </button>
             </div>
           )}
-          <p className="pb-settings-hint">Pad ambient procedural — pausa enquanto jogo está aberto.</p>
+          <p className="pb-settings-hint">Playlist embaralhada da pasta <code>music/</code>. Pausa enquanto jogo está aberto.</p>
         </div>
 
         <div className="pb-settings-section">
@@ -1556,10 +1580,14 @@ export default function PlayboxLauncher() {
     return () => clearTimeout(t);
   }, []);
 
-  // Música ambiente liga/desliga + volume + pausa quando jogo ativo
+  // Música ambiente: carrega playlist no startup, liga/desliga conforme config
+  useEffect(() => {
+    ambientMusic.load();
+  }, []);
+
   useEffect(() => {
     if (config.music_enabled && splashDone && !launching && !quitting) {
-      if (!ambientMusic.nodes) {
+      if (!ambientMusic.isPlaying) {
         ambientMusic.start(config.music_volume ?? 0.3);
       } else {
         ambientMusic.setVolume(config.music_volume ?? 0.3);

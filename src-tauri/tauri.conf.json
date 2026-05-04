@@ -42,7 +42,8 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../../EMULADORES/ROMS EMULADORES": "emulators"
+      "../../EMULADORES/ROMS EMULADORES": "emulators",
+      "../music": "music"
     },
     "windows": {
       "nsis": {

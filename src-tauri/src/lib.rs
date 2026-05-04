@@ -1617,6 +1617,39 @@ async fn fetch_cover(system_id: String, game_name: String) -> Option<String> {
     None
 }
 
+/// Resolve a pasta de musica seguindo a mesma logica dos emuladores:
+/// 1. <install_dir>/music/  (bundlado pelo instalador)
+/// 2. <project_root>/music/  (dev: ao lado do exe em target/release)
+fn resolve_music_dir() -> Option<PathBuf> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let bundled = parent.join("music");
+            if bundled.is_dir() { return Some(bundled); }
+            // dev: src-tauri/target/release/playbox.exe -> ../../../music
+            let dev = parent.join("..").join("..").join("..").join("music");
+            if dev.is_dir() { return Some(dev); }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn list_music_tracks() -> Vec<String> {
+    let Some(dir) = resolve_music_dir() else { return Vec::new(); };
+    let mut tracks = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for e in entries.flatten() {
+            let p = e.path();
+            let ext = p.extension().and_then(|x| x.to_str()).map(|s| s.to_lowercase()).unwrap_or_default();
+            if matches!(ext.as_str(), "mp3" | "ogg" | "wav" | "m4a" | "flac") {
+                tracks.push(p.to_string_lossy().to_string());
+            }
+        }
+    }
+    tracks.sort();
+    tracks
+}
+
 #[tauri::command]
 fn read_app_logs(max_lines: Option<usize>) -> Result<String, String> {
     let limit = max_lines.unwrap_or(200);
@@ -2017,6 +2050,7 @@ pub fn run() {
             open_in_explorer,
             delete_game_to_trash,
             read_app_logs,
+            list_music_tracks,
             load_config,
             save_config,
             reset_config,
