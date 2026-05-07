@@ -43,7 +43,8 @@
     ],
     "resources": {
       "../../EMULADORES/ROMS EMULADORES": "emulators",
-      "../music": "music"
+      "../music": "music",
+      "../cores": "cores"
     },
     "windows": {
       "nsis": {

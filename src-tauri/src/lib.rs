@@ -1,3 +1,6 @@
+mod libretro;
+use libretro::LibretroCore;
+
 use discord_rich_presence::{
     activity::{Activity, Assets, Timestamps},
     DiscordIpc, DiscordIpcClient,
@@ -142,6 +145,22 @@ struct EmulatorConfig {
     igdb_platform: u32,
 }
 
+/// Mapeia sistema -> nome do .dll do core libretro embarcado.
+/// Sistemas que retornam string vazia rodam via emulador externo (caminho original).
+fn libretro_core_for(system_id: &str) -> &'static str {
+    match system_id {
+        "snes" => "snes9x_libretro.dll",
+        "gba"  => "mgba_libretro.dll",
+        "nes"  => "nestopia_libretro.dll",
+        "gb"   => "gambatte_libretro.dll",
+        "gbc"  => "gambatte_libretro.dll",
+        "md"   => "genesis_plus_gx_libretro.dll",
+        "n64"  => "mupen64plus_next_libretro.dll",
+        "ps1"  => "swanstation_libretro.dll",
+        _ => "",
+    }
+}
+
 const EMULATORS: &[EmulatorConfig] = &[
     EmulatorConfig {
         id: "switch",
@@ -162,6 +181,16 @@ const EMULATORS: &[EmulatorConfig] = &[
         extensions: &["wud", "wux", "rpx", "wua"],
         launch_args: &["-f", "-g"],
         igdb_platform: 41,
+    },
+    EmulatorConfig {
+        id: "3ds",
+        name: "NINTENDO 3DS",
+        color: "#d4145a",
+        folder_name: "3DS",
+        emulator_rel: "CITRA\\citra-qt.exe",
+        extensions: &["3ds", "cci", "cxi", "3dsx", "app", "elf", "axf"],
+        launch_args: &[],
+        igdb_platform: 37,
     },
     EmulatorConfig {
         id: "wii",
@@ -254,6 +283,56 @@ const EMULATORS: &[EmulatorConfig] = &[
         igdb_platform: 11,
     },
     EmulatorConfig {
+        id: "snes",
+        name: "SUPER NINTENDO",
+        color: "#7d2d8a",
+        folder_name: "SNES",
+        emulator_rel: "",  // libretro embarcado
+        extensions: &["sfc", "smc", "fig", "swc"],
+        launch_args: &[],
+        igdb_platform: 19,
+    },
+    EmulatorConfig {
+        id: "nes",
+        name: "NINTENDO",
+        color: "#dc2626",
+        folder_name: "NES",
+        emulator_rel: "",  // libretro embarcado (nestopia)
+        extensions: &["nes", "fds", "unf"],
+        launch_args: &[],
+        igdb_platform: 18,
+    },
+    EmulatorConfig {
+        id: "gb",
+        name: "GAME BOY",
+        color: "#84cc16",
+        folder_name: "GB",
+        emulator_rel: "",  // libretro embarcado (gambatte)
+        extensions: &["gb"],
+        launch_args: &[],
+        igdb_platform: 33,
+    },
+    EmulatorConfig {
+        id: "gbc",
+        name: "GAME BOY COLOR",
+        color: "#facc15",
+        folder_name: "GBC",
+        emulator_rel: "",  // libretro embarcado (gambatte)
+        extensions: &["gbc", "gb"],
+        launch_args: &[],
+        igdb_platform: 22,
+    },
+    EmulatorConfig {
+        id: "md",
+        name: "MEGA DRIVE",
+        color: "#0ea5e9",
+        folder_name: "MEGADRIVE",
+        emulator_rel: "",  // libretro embarcado (genesis_plus_gx)
+        extensions: &["md", "gen", "smd", "bin", "sg"],
+        launch_args: &[],
+        igdb_platform: 29,
+    },
+    EmulatorConfig {
         id: "retro",
         name: "RETRO",
         color: "#f59e0b",
@@ -268,7 +347,8 @@ const EMULATORS: &[EmulatorConfig] = &[
 /// Caminhos sao resolvidos em ordem de prioridade:
 /// 1. Config customizada (user selecionou outra pasta)
 /// 2. Pasta "emulators" ao lado do .exe (caso instalador tenha bundlado)
-/// 3. <Documents>\EMULADORES\ROMS EMULADORES (legacy / dev)
+/// 3. D:\Playbox\emulators (organizacao recomendada)
+/// 4. <Documents>\EMULADORES\ROMS EMULADORES (legacy / dev)
 fn resolve_emulators_root(custom: Option<&str>) -> PathBuf {
     if let Some(c) = custom {
         let p = PathBuf::from(c);
@@ -280,6 +360,8 @@ fn resolve_emulators_root(custom: Option<&str>) -> PathBuf {
             if bundled.is_dir() { return bundled; }
         }
     }
+    let d_playbox = PathBuf::from("D:\\Playbox\\emulators");
+    if d_playbox.is_dir() { return d_playbox; }
     if let Some(docs) = dirs::document_dir() {
         return docs.join("EMULADORES").join("ROMS EMULADORES");
     }
@@ -291,6 +373,8 @@ fn resolve_roms_root(custom: Option<&str>) -> PathBuf {
         let p = PathBuf::from(c);
         if p.is_dir() { return p; }
     }
+    let d_playbox = PathBuf::from("D:\\Playbox\\roms");
+    if d_playbox.is_dir() { return d_playbox; }
     if let Some(docs) = dirs::document_dir() {
         return docs.join("EMULADORES").join("ROMS GAMES");
     }
@@ -326,6 +410,7 @@ struct Game {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
 struct SystemInfo {
     id: String,
     name: String,
@@ -335,6 +420,8 @@ struct SystemInfo {
     emulator_exists: bool,
     folder_exists: bool,
     games: Vec<Game>,
+    /// Nome do .dll do core libretro (vazio = roda via emulador externo)
+    libretro_core: String,
 }
 
 fn clean_game_name(filename: &str) -> String {
@@ -647,7 +734,21 @@ fn group_multidisc_games(games: Vec<Game>) -> Vec<Game> {
 fn scan_system(roms_root: &Path, emulators_root: &Path, cfg: &EmulatorConfig) -> SystemInfo {
     let folder = roms_root.join(cfg.folder_name);
     let folder_exists = folder.is_dir();
-    let emulator_full = emulators_root.join(cfg.emulator_rel);
+    let mut libretro_core = libretro_core_for(cfg.id).to_string();
+    let core_dll_exists = if libretro_core.is_empty() {
+        false
+    } else {
+        resolve_cores_dir().map(|d| d.join(&libretro_core).is_file()).unwrap_or(false)
+    };
+    // Se mapeou pra libretro mas o DLL nao esta presente, cai pro emulador externo
+    if !libretro_core.is_empty() && !core_dll_exists {
+        libretro_core.clear();
+    }
+    let emulator_full = if libretro_core.is_empty() {
+        emulators_root.join(cfg.emulator_rel)
+    } else {
+        resolve_cores_dir().map(|d| d.join(&libretro_core)).unwrap_or_default()
+    };
     let emulator_exists = emulator_full.is_file();
 
     let mut games: Vec<Game> = Vec::new();
@@ -712,6 +813,7 @@ fn scan_system(roms_root: &Path, emulators_root: &Path, cfg: &EmulatorConfig) ->
         emulator_exists,
         folder_exists,
         games,
+        libretro_core,
     }
 }
 
@@ -1633,6 +1735,291 @@ fn resolve_music_dir() -> Option<PathBuf> {
     None
 }
 
+// ----- Libretro embedded -----
+
+static LIBRETRO_CORE: OnceLock<Arc<StdMutex<Option<LibretroCore>>>> = OnceLock::new();
+
+fn libretro_slot() -> Arc<StdMutex<Option<LibretroCore>>> {
+    LIBRETRO_CORE.get_or_init(|| Arc::new(StdMutex::new(None))).clone()
+}
+
+/// Resolve a pasta de cores libretro:
+/// 1. <install_dir>/cores/  (bundlado)
+/// 2. <project_root>/cores/ (dev)
+fn resolve_cores_dir() -> Option<PathBuf> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let bundled = parent.join("cores");
+            if bundled.is_dir() { return Some(bundled); }
+            let dev = parent.join("..").join("..").join("..").join("cores");
+            if dev.is_dir() { return Some(dev); }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn libretro_list_cores() -> Vec<String> {
+    let Some(dir) = resolve_cores_dir() else { return Vec::new(); };
+    let mut out = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.extension().and_then(|x| x.to_str()).map(|s| s.eq_ignore_ascii_case("dll")).unwrap_or(false) {
+                out.push(p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string());
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+#[derive(Serialize)]
+struct LibretroLoadResult {
+    library_name: String,
+    library_version: String,
+    base_width: u32,
+    base_height: u32,
+    fps: f64,
+    sample_rate: f64,
+}
+
+#[tauri::command]
+fn libretro_load_game(core_filename: String, rom_path: String) -> Result<LibretroLoadResult, String> {
+    let cores_dir = resolve_cores_dir().ok_or("pasta cores nao encontrada")?;
+    let core_path = cores_dir.join(&core_filename);
+    if !core_path.is_file() {
+        return Err(format!("core nao encontrado: {}", core_path.display()));
+    }
+    let rom = PathBuf::from(&rom_path);
+    if !rom.is_file() {
+        return Err(format!("ROM nao encontrada: {}", rom_path));
+    }
+
+    // Descarrega anterior se existe
+    {
+        let slot = libretro_slot();
+        let mut g = slot.lock().unwrap();
+        if let Some(prev) = g.take() {
+            unsafe {
+                prev.unload_game();
+                prev.deinit();
+            }
+        }
+    }
+
+    let core = unsafe { LibretroCore::load(&core_path)? };
+    unsafe {
+        core.set_callbacks()?;
+        core.init()?;
+    }
+    let (lib_name, lib_ver) = unsafe { core.system_info()? };
+    let av_info = unsafe { core.load_game(&rom)? };
+
+    // Guarda av_info no state pra render saber dimensoes
+    {
+        let s = libretro::state();
+        let mut g = s.lock().unwrap();
+        g.av_info = Some(libretro::RetroSystemAvInfo {
+            geometry: libretro::RetroGameGeometry {
+                base_width:   av_info.geometry.base_width,
+                base_height:  av_info.geometry.base_height,
+                max_width:    av_info.geometry.max_width,
+                max_height:   av_info.geometry.max_height,
+                aspect_ratio: av_info.geometry.aspect_ratio,
+            },
+            timing: libretro::RetroSystemTiming {
+                fps:         av_info.timing.fps,
+                sample_rate: av_info.timing.sample_rate,
+            },
+        });
+    }
+
+    let result = LibretroLoadResult {
+        library_name: lib_name,
+        library_version: lib_ver,
+        base_width:  av_info.geometry.base_width,
+        base_height: av_info.geometry.base_height,
+        fps:         av_info.timing.fps,
+        sample_rate: av_info.timing.sample_rate,
+    };
+
+    let slot = libretro_slot();
+    let mut g = slot.lock().unwrap();
+    *g = Some(core);
+    Ok(result)
+}
+
+/// Roda 1 frame. Retorna Response binario: [u32 width LE][u32 height LE][rgba bytes].
+/// Vazio se nao tem frame novo. Binary evita overhead de serializacao JSON do Vec<u8>.
+#[tauri::command]
+fn libretro_run_frame() -> tauri::ipc::Response {
+    {
+        let slot = libretro_slot();
+        let g = slot.lock().unwrap();
+        if let Some(core) = g.as_ref() {
+            unsafe { let _ = core.run(); }
+        } else {
+            return tauri::ipc::Response::new(Vec::new());
+        }
+    }
+    let s = libretro::state();
+    let mut g = s.lock().unwrap();
+    if let Some(f) = g.frame.take() {
+        let mut buf = Vec::with_capacity(8 + f.rgba.len());
+        buf.extend_from_slice(&f.width.to_le_bytes());
+        buf.extend_from_slice(&f.height.to_le_bytes());
+        buf.extend_from_slice(&f.rgba);
+        tauri::ipc::Response::new(buf)
+    } else {
+        tauri::ipc::Response::new(Vec::new())
+    }
+}
+
+/// Dreno do buffer de audio. Retorna bytes raw (i16 LE interleaved L,R,L,R...).
+#[tauri::command]
+fn libretro_take_audio() -> tauri::ipc::Response {
+    let s = libretro::state();
+    let mut g = s.lock().unwrap();
+    if g.audio_buf.is_empty() {
+        return tauri::ipc::Response::new(Vec::new());
+    }
+    // Drena tudo
+    let n = g.audio_buf.len();
+    let mut buf = Vec::with_capacity(n * 2);
+    for sample in g.audio_buf.drain(..) {
+        buf.extend_from_slice(&sample.to_le_bytes());
+    }
+    tauri::ipc::Response::new(buf)
+}
+
+#[tauri::command]
+fn libretro_set_input(button_id: u32, pressed: bool) {
+    if button_id >= 16 { return; }
+    let s = libretro::state();
+    let mut g = s.lock().unwrap();
+    g.input_state[button_id as usize] = pressed;
+}
+
+fn save_state_path(rom_path: &str, slot: u32) -> Option<PathBuf> {
+    let base = dirs::data_dir()?;
+    let dir = base.join("Playbox").join("saves-libretro");
+    std::fs::create_dir_all(&dir).ok()?;
+    let stem = Path::new(rom_path).file_stem()?.to_string_lossy().to_string();
+    let safe = sanitize_filename(&stem);
+    Some(dir.join(format!("{}.slot{}.state", safe, slot)))
+}
+
+fn save_thumb_path(rom_path: &str, slot: u32) -> Option<PathBuf> {
+    let base = dirs::data_dir()?;
+    let dir = base.join("Playbox").join("saves-libretro");
+    std::fs::create_dir_all(&dir).ok()?;
+    let stem = Path::new(rom_path).file_stem()?.to_string_lossy().to_string();
+    let safe = sanitize_filename(&stem);
+    Some(dir.join(format!("{}.slot{}.png", safe, slot)))
+}
+
+#[tauri::command]
+fn libretro_save_state(rom_path: String, slot: u32, thumbnail_png: Option<Vec<u8>>) -> Result<String, String> {
+    let path = save_state_path(&rom_path, slot).ok_or("path indisponivel")?;
+    let slot_lock = libretro_slot();
+    let g = slot_lock.lock().unwrap();
+    let core = g.as_ref().ok_or("nenhum core ativo")?;
+    let bytes = unsafe { core.serialize()? };
+    std::fs::write(&path, &bytes).map_err(|e| {
+        log::error!("save_state: {}", e);
+        format!("escrever state: {}", e)
+    })?;
+    if let Some(png) = thumbnail_png {
+        if let Some(thumb) = save_thumb_path(&rom_path, slot) {
+            let _ = std::fs::write(&thumb, &png);
+        }
+    }
+    log::info!("save_state slot={} rom={}", slot, rom_path);
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn libretro_load_state(rom_path: String, slot: u32) -> Result<(), String> {
+    let path = save_state_path(&rom_path, slot).ok_or("path indisponivel")?;
+    if !path.is_file() {
+        return Err(format!("nenhum save no slot {}", slot));
+    }
+    let bytes = std::fs::read(&path).map_err(|e| format!("ler state: {}", e))?;
+    let slot_lock = libretro_slot();
+    let g = slot_lock.lock().unwrap();
+    let core = g.as_ref().ok_or("nenhum core ativo")?;
+    let res = unsafe { core.unserialize(&bytes) };
+    if let Err(ref e) = res {
+        log::error!("load_state slot={}: {}", slot, e);
+    } else {
+        log::info!("load_state slot={} rom={}", slot, rom_path);
+    }
+    res
+}
+
+#[tauri::command]
+fn libretro_state_exists(rom_path: String, slot: u32) -> bool {
+    save_state_path(&rom_path, slot).map(|p| p.is_file()).unwrap_or(false)
+}
+
+#[derive(Serialize)]
+struct SaveSlotInfo {
+    slot: u32,
+    modified_at: u64,
+    thumbnail_path: Option<String>,
+}
+
+#[tauri::command]
+fn libretro_list_states(rom_path: String) -> Vec<SaveSlotInfo> {
+    let mut out = Vec::new();
+    for slot in 0..10 {
+        let Some(p) = save_state_path(&rom_path, slot) else { continue };
+        if !p.is_file() { continue }
+        let modified_at = std::fs::metadata(&p)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let thumb = save_thumb_path(&rom_path, slot)
+            .filter(|p| p.is_file())
+            .map(|p| p.to_string_lossy().to_string());
+        out.push(SaveSlotInfo { slot, modified_at, thumbnail_path: thumb });
+    }
+    out
+}
+
+#[tauri::command]
+fn libretro_delete_state(rom_path: String, slot: u32) -> Result<(), String> {
+    if let Some(p) = save_state_path(&rom_path, slot) {
+        if p.is_file() { let _ = std::fs::remove_file(&p); }
+    }
+    if let Some(t) = save_thumb_path(&rom_path, slot) {
+        if t.is_file() { let _ = std::fs::remove_file(&t); }
+    }
+    log::info!("delete_state slot={} rom={}", slot, rom_path);
+    Ok(())
+}
+
+#[tauri::command]
+fn libretro_unload() {
+    let slot = libretro_slot();
+    let mut g = slot.lock().unwrap();
+    if let Some(core) = g.take() {
+        unsafe {
+            core.unload_game();
+            core.deinit();
+        }
+    }
+    // Limpa frame/audio/input
+    let s = libretro::state();
+    let mut sg = s.lock().unwrap();
+    sg.frame = None;
+    sg.input_state = [false; 16];
+    sg.audio_buf.clear();
+}
+
 #[tauri::command]
 fn list_music_tracks() -> Vec<String> {
     let Some(dir) = resolve_music_dir() else { return Vec::new(); };
@@ -1648,6 +2035,45 @@ fn list_music_tracks() -> Vec<String> {
     }
     tracks.sort();
     tracks
+}
+
+fn app_log_dir() -> Option<PathBuf> {
+    let base = dirs::data_local_dir().or_else(dirs::data_dir)?;
+    Some(base.join("com.paulobatista.playbox").join("logs"))
+}
+
+#[tauri::command]
+fn frontend_log(level: String, message: String) {
+    match level.as_str() {
+        "error" => log::error!(target: "frontend", "{}", message),
+        "warn"  => log::warn!(target: "frontend", "{}", message),
+        "info"  => log::info!(target: "frontend", "{}", message),
+        _       => log::debug!(target: "frontend", "{}", message),
+    }
+}
+
+#[tauri::command]
+fn get_app_log_dir() -> Result<String, String> {
+    app_log_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or("data dir indisponivel".into())
+}
+
+#[tauri::command]
+fn clear_app_logs() -> Result<u32, String> {
+    let dir = app_log_dir().ok_or("data dir indisponivel")?;
+    if !dir.is_dir() { return Ok(0); }
+    let mut n = 0u32;
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.extension().and_then(|x| x.to_str()) == Some("log") {
+                if std::fs::remove_file(&p).is_ok() { n += 1; }
+            }
+        }
+    }
+    log::info!("clear_app_logs: {} arquivos removidos", n);
+    Ok(n)
 }
 
 #[tauri::command]
@@ -1974,10 +2400,13 @@ fn spawn_gamepad_hotkey_listener() {
                 return;
             }
         };
-        // Pads que estao com Select e Start pressionados respectivamente
+        // Combos aceitos pra matar emulador externo: Select+Start (RetroArch padrao)
+        // OU Select+R1 (combo recomendado, dificil de apertar acidentalmente).
         let mut select_held: std::collections::HashSet<gilrs::GamepadId> =
             std::collections::HashSet::new();
         let mut start_held: std::collections::HashSet<gilrs::GamepadId> =
+            std::collections::HashSet::new();
+        let mut r1_held: std::collections::HashSet<gilrs::GamepadId> =
             std::collections::HashSet::new();
         let mut last_kill = std::time::Instant::now() - std::time::Duration::from_secs(5);
 
@@ -1990,21 +2419,27 @@ fn spawn_gamepad_hotkey_listener() {
                     ButtonReleased(Button::Select, _) => { select_held.remove(&id); }
                     ButtonPressed(Button::Start, _) => { start_held.insert(id); }
                     ButtonReleased(Button::Start, _) => { start_held.remove(&id); }
+                    ButtonPressed(Button::RightTrigger, _) => { r1_held.insert(id); }
+                    ButtonReleased(Button::RightTrigger, _) => { r1_held.remove(&id); }
                     Disconnected => {
                         select_held.remove(&id);
                         start_held.remove(&id);
+                        r1_held.remove(&id);
                     }
                     _ => {}
                 }
-                // Combo no MESMO controle
-                if select_held.contains(&id) && start_held.contains(&id) {
+                // Combo no MESMO controle: Select+Start OU Select+R1
+                let combo = select_held.contains(&id)
+                    && (start_held.contains(&id) || r1_held.contains(&id));
+                if combo {
                     let now = std::time::Instant::now();
-                    if now.duration_since(last_kill) < std::time::Duration::from_millis(800) {
+                    if now.duration_since(last_kill) < std::time::Duration::from_millis(1500) {
                         continue;
                     }
                     last_kill = now;
                     select_held.remove(&id);
                     start_held.remove(&id);
+                    r1_held.remove(&id);
                     if kill_running_game_inner() {
                         restore_launcher_window();
                     }
@@ -2022,13 +2457,17 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            // Plugin de log sempre ativo (release tambem) — antes so debug, sem arquivo de log em prod
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Info)
+                    .targets([
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir { file_name: None }),
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    ])
+                    .max_file_size(2_000_000) // 2MB rotation
+                    .build(),
+            )?;
             let _ = APP_HANDLE.set(app.handle().clone());
             spawn_gamepad_hotkey_listener();
             // Tenta conectar Discord no startup (sem-op se nao tem app_id ou Discord nao esta rodando)
@@ -2051,6 +2490,20 @@ pub fn run() {
             delete_game_to_trash,
             read_app_logs,
             list_music_tracks,
+            libretro_list_cores,
+            libretro_load_game,
+            libretro_run_frame,
+            libretro_take_audio,
+            libretro_set_input,
+            libretro_save_state,
+            libretro_load_state,
+            libretro_state_exists,
+            libretro_list_states,
+            libretro_delete_state,
+            libretro_unload,
+            frontend_log,
+            get_app_log_dir,
+            clear_app_logs,
             load_config,
             save_config,
             reset_config,

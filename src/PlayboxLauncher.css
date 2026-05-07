@@ -1274,6 +1274,137 @@
 .pb-ctx-danger { color: #fca5a5; }
 .pb-ctx-danger:hover { background: #2a1212; color: #fecaca; }
 
+/* ---------- Emulator embarcado (libretro view) ---------- */
+.pb-emulator-view {
+  position: fixed;
+  inset: 0;
+  z-index: 8000;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  animation: pb-fade-in 0.2s ease both;
+}
+.pb-emulator-canvas {
+  width: 100vw;
+  height: 100vh;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: #000;
+}
+.pb-emulator-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity 0.2s, background 0.2s;
+}
+.pb-emulator-view:hover .pb-emulator-close { opacity: 1; }
+.pb-emulator-close svg { width: 18px; height: 18px; }
+.pb-emulator-info {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+.pb-emulator-view:hover .pb-emulator-info { opacity: 1; }
+.pb-emulator-icon { display: inline-flex; width: 16px; height: 16px; }
+.pb-emulator-icon svg { width: 100%; height: 100%; }
+.pb-emulator-game { font-weight: 600; }
+.pb-emulator-meta { color: #aaa; font-size: 11px; }
+.pb-emulator-error {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+  padding: 32px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 12px;
+  max-width: 600px;
+  text-align: center;
+  color: #fff;
+}
+.pb-emulator-error code {
+  background: #0a0a0a;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #fca5a5;
+  word-break: break-all;
+  max-width: 100%;
+}
+.pb-emulator-hints {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 6px 14px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  color: #aaa;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+.pb-emulator-view:hover .pb-emulator-hints { opacity: 1; }
+.pb-emulator-hints kbd {
+  display: inline-block;
+  padding: 2px 7px;
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: #fff;
+  margin: 0 2px;
+}
+.pb-emulator-state-msg {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 10px 22px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  animation: pb-fade-in 0.15s ease;
+}
+.pb-emulator-state-ok    { border-color: #4ade80; color: #86efac; }
+.pb-emulator-state-error { border-color: #f87171; color: #fca5a5; }
+
 /* ---------- Custom theme editor ---------- */
 .pb-custom-theme {
   margin-top: 14px;
@@ -2782,15 +2913,21 @@
 }
 .pb-sys-power:hover { background: #8a2828; }
 
-/* ---------- Hints canto inferior direito ---------- */
+/* ---------- Hints — pill flutuante acima da barra de sistemas ---------- */
+/* Posicionado acima pra nao colar na barra de sistemas (que cresce com 16+ sistemas) */
 .pb-hints {
   position: absolute;
-  bottom: 30px;
-  right: 30px;
+  bottom: 96px;
+  right: 24px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 12px;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 999px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--theme-muted);
   letter-spacing: 0.04em;
@@ -2843,3 +2980,468 @@
 .pb-toast-launching { background: #2a2a2a; color: #fff; border: 1px solid #3a3a3a; }
 .pb-toast-ok        { background: #14532d; color: #d1fae5; border: 1px solid #166534; }
 .pb-toast-error     { background: #7f1d1d; color: #fecaca; border: 1px solid #991b1b; }
+
+/* ---------- Save State Overlay (in-game) ---------- */
+.pb-savestate-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  animation: pb-fade-in 0.18s ease;
+}
+.pb-savestate-panel {
+  width: min(960px, 92vw);
+  max-height: 90vh;
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+}
+.pb-savestate-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid #262626;
+}
+.pb-savestate-header h2 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: 0.02em;
+}
+.pb-savestate-hint {
+  margin: 0;
+  padding: 10px 18px;
+  font-size: 12px;
+  color: #9ca3af;
+  border-bottom: 1px solid #232323;
+}
+.pb-savestate-hint kbd {
+  background: #232323;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  margin: 0 2px;
+}
+.pb-savestate-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  padding: 18px;
+  overflow-y: auto;
+}
+.pb-savestate-card {
+  background: #1c1c1c;
+  border: 1px solid #2a2a2a;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.pb-savestate-card.empty { opacity: 0.7; }
+.pb-savestate-card:hover { border-color: #3a3a3a; transform: translateY(-1px); }
+.pb-savestate-thumb {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: #0d0d0d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.pb-savestate-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+.pb-savestate-empty-label {
+  font-size: 12px;
+  color: #4b5563;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pb-savestate-slot-num {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.04em;
+}
+.pb-savestate-meta {
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: center;
+  border-top: 1px solid #222;
+}
+.pb-savestate-actions {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  border-top: 1px solid #222;
+}
+.pb-savestate-btn {
+  flex: 1;
+  background: #232323;
+  border: 1px solid #2f2f2f;
+  color: #e5e7eb;
+  font-size: 12px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s ease;
+}
+.pb-savestate-btn:hover { background: #2f2f2f; }
+.pb-savestate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pb-savestate-btn-primary { background: #2563eb; border-color: #1d4ed8; color: #fff; }
+.pb-savestate-btn-primary:hover { background: #1d4ed8; }
+.pb-savestate-btn-danger {
+  flex: 0 0 32px;
+  background: transparent;
+  border-color: #3a1414;
+  color: #f87171;
+  font-weight: 700;
+}
+.pb-savestate-btn-danger:hover { background: #3a1414; color: #fecaca; }
+
+/* ---------- Resume Prompt Modal ---------- */
+.pb-resume-modal {
+  width: min(420px, 90vw);
+}
+.pb-resume-body {
+  padding: 18px;
+  text-align: center;
+}
+.pb-resume-body p { margin: 0 0 6px; font-size: 14px; }
+.pb-resume-meta { color: #9ca3af; font-size: 12px; margin-bottom: 14px !important; }
+.pb-resume-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 14px;
+}
+
+/* ---------- Card stats overlay (playtime / last played) ---------- */
+.pb-card-stats {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  pointer-events: none;
+  z-index: 3;
+}
+.pb-card-stats .pb-card-stat-time,
+.pb-card-stats .pb-card-stat-when {
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  padding: 3px 6px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.pb-card-stats .pb-card-stat-when {
+  color: #d1d5db;
+  font-weight: 500;
+}
+.pb-card:not(.has-cover) .pb-card-stats { bottom: 6px; }
+
+/* ---------- Logs viewer toolbar ---------- */
+.pb-logs-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  border-bottom: 1px solid #262626;
+  background: #131313;
+}
+.pb-logs-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pb-logs-filter {
+  background: #1c1c1c;
+  border: 1px solid #2a2a2a;
+  color: #d1d5db;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pb-logs-filter:hover { border-color: #3a3a3a; }
+.pb-logs-filter.active {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+.pb-logs-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pb-logs-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #9ca3af;
+  cursor: pointer;
+}
+.pb-btn-small {
+  padding: 5px 10px;
+  font-size: 11px;
+}
+
+/* ---------- Gamepad debug overlay ---------- */
+.pb-gamepad-debug {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 360px;
+  max-height: 88vh;
+  background: rgba(15, 15, 15, 0.95);
+  border: 1px solid #2f2f2f;
+  border-radius: 10px;
+  z-index: 9999;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pb-gamepad-debug-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid #2a2a2a;
+  background: #1a1a1a;
+}
+.pb-gamepad-debug-body {
+  padding: 12px 14px;
+  overflow-y: auto;
+}
+.pb-gamepad-debug-empty {
+  color: #9ca3af;
+  text-align: center;
+  padding: 20px 0;
+}
+.pb-gamepad-debug-pad {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #2a2a2a;
+}
+.pb-gamepad-debug-pad:last-child { border-bottom: none; margin-bottom: 0; }
+.pb-gamepad-debug-id {
+  word-break: break-all;
+  margin-bottom: 4px;
+}
+.pb-gamepad-debug-meta {
+  color: #9ca3af;
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+.pb-gamepad-debug-meta code {
+  background: #232323;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.pb-gamepad-debug-section { margin-bottom: 8px; }
+.pb-gamepad-debug-label {
+  color: #d1d5db;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.pb-gamepad-debug-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pb-gamepad-debug-btn-on {
+  background: #16a34a;
+  color: #fff;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.pb-gamepad-debug-axes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+}
+.pb-gamepad-debug-axis {
+  display: flex;
+  justify-content: space-between;
+  background: #1a1a1a;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: #9ca3af;
+}
+.pb-gamepad-debug-axis.active {
+  background: #1e3a8a;
+  color: #fff;
+}
+.pb-gamepad-debug-help {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #d1d5db;
+  margin-top: 8px;
+}
+.pb-gamepad-debug-help kbd {
+  background: #232323;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+}
+
+/* ---------- Focus zones (gamepad-friendly nav) ---------- */
+/* Quando a zona ativa e games, o card selecionado pulsa mais forte */
+.pb-card.active.focused {
+  box-shadow: 0 0 0 4px var(--card-color, #fff), 0 16px 40px rgba(0, 0, 0, 0.6);
+  transform: translateY(-6px) scale(1.04);
+}
+/* Quando a zona ativa e systems, o sistema selecionado tem outline branco mais grosso e a barra pulsa */
+.pb-sys.active.focused {
+  outline: 4px solid #fff;
+  outline-offset: 3px;
+  transform: translateY(-4px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.7);
+}
+.pb-systems.focused .pb-systems-list {
+  background: rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25), 0 0 24px rgba(255, 255, 255, 0.08);
+}
+
+/* ---------- Botao cancelar tela "Iniciando..." ---------- */
+.pb-launching-cancel {
+  margin-top: 26px;
+  padding: 10px 24px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background 0.15s, transform 0.15s;
+}
+.pb-launching-cancel:hover {
+  background: rgba(239, 68, 68, 0.5);
+  border-color: rgba(239, 68, 68, 0.7);
+  transform: scale(1.04);
+}
+
+/* ---------- Modais navegaveis por controle ---------- */
+/* Estado focused generico (gamepad nav em SettingsPanel) */
+.pb-gp-focus {
+  outline: 3px solid #fff !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Profile selector — card focado */
+.pb-profile-card.focused {
+  outline: 3px solid #fff;
+  outline-offset: 4px;
+  transform: translateY(-3px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+
+/* Search overlay — teclado virtual */
+.pb-vk {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 12px;
+  margin: 12px 16px;
+  transition: box-shadow 0.2s;
+}
+.pb-vk.focused {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+}
+.pb-vk-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+.pb-vk-key {
+  flex: 1 1 0;
+  min-width: 36px;
+  max-width: 56px;
+  height: 42px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.1s, transform 0.1s, outline 0.1s;
+}
+.pb-vk-key:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+.pb-vk-key.focused {
+  outline: 3px solid #fff;
+  outline-offset: 1px;
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.06);
+}
+.pb-vk-actions .pb-vk-key {
+  max-width: none;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+.pb-search-results.focused {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+.pb-search-item.focused {
+  background: rgba(255, 255, 255, 0.15);
+  outline: 2px solid #fff;
+  outline-offset: -1px;
+}

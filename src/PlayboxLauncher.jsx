@@ -7,6 +7,37 @@ import { check as checkUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import "./PlayboxLauncher.css";
 
+// === Captura global de erros JS -> log do Rust ===
+// Garante que crashes do frontend chegam ao arquivo de log lido pelo LogsViewerModal.
+let __frontendLogInstalled = false;
+function installFrontendLogCapture() {
+  if (__frontendLogInstalled) return;
+  __frontendLogInstalled = true;
+  const send = (level, message) => {
+    try { invoke("frontend_log", { level, message: String(message).slice(0, 4000) }); } catch {}
+  };
+  window.addEventListener("error", (e) => {
+    const msg = e?.error?.stack || e?.message || String(e);
+    send("error", `[window.error] ${msg}`);
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    const r = e?.reason;
+    const msg = (r && (r.stack || r.message)) || String(r);
+    send("error", `[unhandledrejection] ${msg}`);
+  });
+  const origErr = console.error.bind(console);
+  console.error = (...args) => {
+    try { send("error", args.map((a) => (a && a.stack) ? a.stack : (typeof a === "string" ? a : JSON.stringify(a))).join(" ")); } catch {}
+    origErr(...args);
+  };
+  const origWarn = console.warn.bind(console);
+  console.warn = (...args) => {
+    try { send("warn", args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ")); } catch {}
+    origWarn(...args);
+  };
+}
+installFrontendLogCapture();
+
 async function pickImageFile() {
   try {
     const selected = await openDialog({
@@ -197,6 +228,7 @@ const sfx = {
 // Jingles por plataforma — 2-3 notas curtas (~250-400ms cada)
 const PLATFORM_JINGLES = {
   switch:     () => { playNote(659.25, 0.12, 0.06); playNote(987.77, 0.22, 0.06, 0.10); }, // E-B (Switch click)
+  snes:       () => { playNote(523.25, 0.10, 0.05); playNote(659.25, 0.10, 0.05, 0.08); playNote(783.99, 0.10, 0.05, 0.16); playNote(1046.50, 0.20, 0.06, 0.24); }, // arpejo C-E-G-C (Mario chime)
   wiiu:       () => { playNote(440.00, 0.10, 0.05); playNote(554.37, 0.10, 0.05, 0.08); playNote(659.25, 0.20, 0.06, 0.16); }, // A-C#-E
   wii:        () => { playNote(880.00, 0.10, 0.05); playNote(587.33, 0.20, 0.06, 0.10); }, // A-D (Wii Remote chime)
   gc:         () => { playNote(523.25, 0.08, 0.05); playNote(659.25, 0.08, 0.05, 0.08); playNote(783.99, 0.18, 0.06, 0.16); }, // C-E-G
@@ -207,6 +239,10 @@ const PLATFORM_JINGLES = {
   ps1:        () => { playNote(174.61, 0.28, 0.07); playNote(220.00, 0.28, 0.05, 0.04); playNote(261.63, 0.28, 0.05, 0.08); }, // F-A-C (PS1 chord)
   ps4:        () => { playNote(246.94, 0.10, 0.05); playNote(329.63, 0.10, 0.05, 0.08); playNote(493.88, 0.22, 0.06, 0.16); }, // B-E-B
   xbox:       () => { playTone(329.63, 0.20, "sine", 0.06, 0.00); playTone(246.94, 0.28, "sine", 0.05, 0.12); }, // E-B (Xbox sphere)
+  nes:        () => { playTone(659.25, 0.06, "square", 0.05, 0.00); playTone(523.25, 0.06, "square", 0.05, 0.06); playTone(659.25, 0.16, "square", 0.05, 0.12); }, // E-C-E (Mario lite)
+  gb:         () => { playTone(587.33, 0.10, "square", 0.04, 0.00); playTone(880.00, 0.18, "square", 0.04, 0.10); }, // D-A (boot beep)
+  gbc:        () => { playTone(587.33, 0.08, "square", 0.04, 0.00); playTone(880.00, 0.10, "square", 0.04, 0.08); playTone(1108.73, 0.18, "square", 0.04, 0.18); }, // D-A-C# (boot color)
+  md:         () => { playTone(440.00, 0.12, "sawtooth", 0.05, 0.00); playTone(330.00, 0.20, "sawtooth", 0.05, 0.12); }, // A-E (Sega-ish)
   retro:      () => { playTone(880, 0.04, "square", 0.04, 0.00); playTone(1318, 0.06, "square", 0.04, 0.04); playTone(1760, 0.12, "square", 0.04, 0.10); }, // arpejo chiptune
   _favorites: () => { playNote(880.00, 0.08, 0.05); playNote(1108.73, 0.16, 0.06, 0.06); }, // A-C#
 };
@@ -303,11 +339,16 @@ const ambientMusic = {
     if (this.audio) this._fadeTo(this.targetVolume, 300);
   },
 
-  stop() {
+  stop(opts = {}) {
+    const immediate = !!opts.immediate;
     if (this.fadeInterval) { clearInterval(this.fadeInterval); this.fadeInterval = null; }
     if (this.audio) {
       const a = this.audio;
       this.audio = null;
+      if (immediate) {
+        try { a.pause(); a.volume = 0; a.src = ""; } catch {}
+        return;
+      }
       try {
         // Fade-out + pause
         const start = a.volume;
@@ -352,6 +393,17 @@ function formatPlayTime(seconds) {
   return `${h}h ${m % 60}min`;
 }
 
+function formatRelativeDays(unixSec) {
+  if (!unixSec) return "";
+  const diff = Date.now() / 1000 - unixSec;
+  if (diff < 3600) return "agora ha pouco";
+  if (diff < 86400) return `ha ${Math.floor(diff / 3600)}h`;
+  if (diff < 86400 * 7) return `ha ${Math.floor(diff / 86400)}d`;
+  if (diff < 86400 * 30) return `ha ${Math.floor(diff / (86400 * 7))}sem`;
+  if (diff < 86400 * 365) return `ha ${Math.floor(diff / (86400 * 30))}m`;
+  return `ha ${Math.floor(diff / (86400 * 365))}a`;
+}
+
 function GearIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -391,6 +443,8 @@ function SystemIcon({ id }) {
       return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="8" width="20" height="48" rx="9" fill={fill} /><rect x="38" y="8" width="20" height="48" rx="9" fill={fill} /><circle cx="16" cy="20" r="3" fill="#1c1c1c" /><circle cx="48" cy="44" r="3" fill="#1c1c1c" /><circle cx="16" cy="36" r="1.6" fill="#1c1c1c" /><circle cx="13" cy="40" r="1.2" fill="#1c1c1c" /><circle cx="19" cy="40" r="1.2" fill="#1c1c1c" /><circle cx="16" cy="44" r="1.2" fill="#1c1c1c" /><circle cx="48" cy="20" r="1.2" fill="#1c1c1c" /><circle cx="44" cy="24" r="1.2" fill="#1c1c1c" /><circle cx="52" cy="24" r="1.2" fill="#1c1c1c" /><circle cx="48" cy="28" r="1.2" fill="#1c1c1c" /></svg>);
     case "wiiu":
       return (<svg viewBox="0 0 64 64" aria-hidden><rect x="4" y="14" width="56" height="36" rx="8" fill={fill} /><rect x="14" y="22" width="36" height="20" rx="2" fill="#1c1c1c" /><circle cx="9" cy="32" r="2" fill="#1c1c1c" /><circle cx="55" cy="32" r="2" fill="#1c1c1c" /></svg>);
+    case "3ds":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="10" y="6" width="44" height="22" rx="3" fill={fill} /><rect x="14" y="10" width="36" height="14" rx="1" fill="#1c1c1c" /><rect x="10" y="32" width="44" height="26" rx="3" fill={fill} /><rect x="14" y="36" width="22" height="16" rx="1" fill="#1c1c1c" /><circle cx="44" cy="40" r="2" fill="#1c1c1c" /><circle cx="50" cy="40" r="2" fill="#1c1c1c" /><circle cx="44" cy="46" r="2" fill="#1c1c1c" /><circle cx="50" cy="46" r="2" fill="#1c1c1c" /><text x="32" y="55" textAnchor="middle" fill={fill} fontSize="6" fontWeight="700" fontFamily="system-ui">3DS</text></svg>);
     case "wii":
       return (<svg viewBox="0 0 64 64" aria-hidden><rect x="24" y="6" width="16" height="52" rx="4" fill={fill} /><circle cx="32" cy="14" r="3" fill="#1c1c1c" /><rect x="28" y="22" width="8" height="2" fill="#1c1c1c" /><rect x="31" y="19" width="2" height="8" fill="#1c1c1c" /><circle cx="32" cy="34" r="2.5" fill="#1c1c1c" /><circle cx="32" cy="42" r="1.5" fill="#1c1c1c" /><rect x="28" y="48" width="8" height="2" fill="#1c1c1c" /></svg>);
     case "gc":
@@ -399,6 +453,8 @@ function SystemIcon({ id }) {
       return (<svg viewBox="0 0 64 64" aria-hidden><path d="M32 8 L48 24 L32 24 Z" fill={fill} /><path d="M32 8 L16 24 L32 24 Z" fill={fill} opacity="0.7" /><path d="M32 56 L48 40 L32 40 Z" fill={fill} opacity="0.5" /><path d="M32 56 L16 40 L32 40 Z" fill={fill} opacity="0.85" /><rect x="14" y="22" width="36" height="20" rx="2" fill="none" stroke={fill} strokeWidth="3" /></svg>);
     case "ps3": case "ps2": case "ps1":
       return (<svg viewBox="0 0 64 64" aria-hidden><text x="32" y="48" textAnchor="middle" fill={fill} fontSize="44" fontWeight="900" fontStyle="italic" fontFamily="Impact, system-ui">PS</text></svg>);
+    case "snes":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="22" width="52" height="22" rx="6" fill={fill} /><circle cx="20" cy="33" r="3" fill="#1c1c1c" /><circle cx="44" cy="29" r="2.4" fill="#1c1c1c" /><circle cx="49" cy="33" r="2.4" fill="#1c1c1c" /><circle cx="44" cy="37" r="2.4" fill="#1c1c1c" /><circle cx="39" cy="33" r="2.4" fill="#1c1c1c" /><rect x="14" y="32" width="12" height="2" fill="#1c1c1c" /><rect x="19" y="27" width="2" height="12" fill="#1c1c1c" /><text x="32" y="56" textAnchor="middle" fill={fill} fontSize="9" fontWeight="700" fontFamily="system-ui">SNES</text></svg>);
     case "ps4":
       return (<svg viewBox="0 0 64 64" aria-hidden><text x="20" y="46" textAnchor="middle" fill={fill} fontSize="36" fontWeight="900" fontStyle="italic" fontFamily="Impact, system-ui">PS</text><text x="46" y="46" textAnchor="middle" fill={fill} fontSize="36" fontWeight="900" fontFamily="Impact, system-ui">4</text></svg>);
     case "gba":
@@ -412,6 +468,14 @@ function SystemIcon({ id }) {
           <path d="M16 50 Q32 32 48 50" stroke="#1c1c1c" strokeWidth="5" fill="none" strokeLinecap="round" />
         </svg>
       );
+    case "nes":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="14" width="52" height="36" rx="3" fill={fill} /><rect x="10" y="20" width="44" height="16" fill="#1c1c1c" /><rect x="14" y="40" width="14" height="6" rx="1" fill="#1c1c1c" /><rect x="36" y="40" width="14" height="6" rx="1" fill="#1c1c1c" /><text x="32" y="32" textAnchor="middle" fill={fill} fontSize="9" fontWeight="700" fontFamily="system-ui">NES</text></svg>);
+    case "gb":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="14" y="6" width="36" height="52" rx="6" fill={fill} /><rect x="20" y="12" width="24" height="20" rx="2" fill="#1c1c1c" /><circle cx="42" cy="40" r="3" fill="#1c1c1c" /><circle cx="48" cy="44" r="3" fill="#1c1c1c" /><rect x="18" y="42" width="8" height="2" fill="#1c1c1c" /><rect x="21" y="39" width="2" height="8" fill="#1c1c1c" /></svg>);
+    case "gbc":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="14" y="6" width="36" height="52" rx="6" fill={fill} /><rect x="20" y="12" width="24" height="20" rx="2" fill="#1c1c1c" /><circle cx="42" cy="40" r="3" fill="#1c1c1c" /><circle cx="48" cy="44" r="3" fill="#1c1c1c" /><rect x="18" y="42" width="8" height="2" fill="#1c1c1c" /><rect x="21" y="39" width="2" height="8" fill="#1c1c1c" /><text x="32" y="56" textAnchor="middle" fill="#1c1c1c" fontSize="6" fontWeight="700" fontFamily="system-ui">COLOR</text></svg>);
+    case "md":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="20" width="52" height="24" rx="4" fill={fill} /><rect x="10" y="24" width="44" height="6" fill="#1c1c1c" /><circle cx="14" cy="38" r="2" fill="#1c1c1c" /><circle cx="20" cy="38" r="2" fill="#1c1c1c" /><circle cx="50" cy="38" r="2" fill="#1c1c1c" /><text x="32" y="40" textAnchor="middle" fill="#1c1c1c" fontSize="7" fontWeight="700" fontFamily="system-ui">MD</text></svg>);
     case "retro":
       return (<svg viewBox="0 0 64 64" aria-hidden><rect x="28" y="10" width="8" height="22" rx="3" fill={fill} /><circle cx="32" cy="12" r="6" fill={fill} /><ellipse cx="32" cy="44" rx="20" ry="14" fill={fill} /><circle cx="22" cy="44" r="3" fill="#1c1c1c" /><circle cx="32" cy="44" r="3" fill="#1c1c1c" /><circle cx="42" cy="44" r="3" fill="#1c1c1c" /></svg>);
     default: return null;
@@ -439,8 +503,24 @@ function ContinueBanner({ lastPlayed, system, coverSrc, onResume }) {
   );
 }
 
-function SearchOverlay({ systems, onPick, onClose, closing }) {
+// Layout do teclado virtual (linhas de teclas). Linha 0..3 = chars, linha 4 = acoes.
+const VK_ROWS = [
+  ["1","2","3","4","5","6","7","8","9","0"],
+  ["Q","W","E","R","T","Y","U","I","O","P"],
+  ["A","S","D","F","G","H","J","K","L","-"],
+  ["Z","X","C","V","B","N","M",".","'"," "],
+];
+const VK_ACTIONS = ["⌫","CLEAR","BUSCAR"];
+
+function SearchOverlay({ systems, onPick, onClose, closing, modalGamepadRef }) {
   const [query, setQuery] = useState("");
+  // zone: "keyboard" (default) | "results"
+  const [zone, setZone] = useState("keyboard");
+  // teclado: row 0..4 (4 = actions), col 0..9 (ou 0..2 nas actions)
+  const [kbRow, setKbRow] = useState(1);
+  const [kbCol, setKbCol] = useState(0);
+  const [resIdx, setResIdx] = useState(0);
+
   const trimmed = query.trim().toLowerCase();
   const results = useMemo(() => {
     if (!trimmed) return [];
@@ -456,6 +536,95 @@ function SearchOverlay({ systems, onPick, onClose, closing }) {
     return out;
   }, [trimmed, systems]);
 
+  const appendChar = useCallback((c) => setQuery((q) => q + c), []);
+  const backspace = useCallback(() => setQuery((q) => q.slice(0, -1)), []);
+  const clearAll = useCallback(() => setQuery(""), []);
+
+  // Confirma a tecla atualmente focada
+  const confirmKey = useCallback(() => {
+    if (kbRow < 4) {
+      const c = VK_ROWS[kbRow][kbCol];
+      if (c) appendChar(c);
+    } else {
+      const action = VK_ACTIONS[kbCol] || VK_ACTIONS[0];
+      if (action === "⌫") backspace();
+      else if (action === "CLEAR") clearAll();
+      else if (action === "BUSCAR" && results[0]) onPick(results[0]);
+    }
+  }, [kbRow, kbCol, appendChar, backspace, clearAll, results, onPick]);
+
+  // Registra handler de gamepad
+  useEffect(() => {
+    if (!modalGamepadRef) return;
+    const handler = (action) => {
+      if (zone === "keyboard") {
+        if (action === "left") {
+          setKbCol((c) => {
+            const max = kbRow === 4 ? VK_ACTIONS.length - 1 : VK_ROWS[kbRow].length - 1;
+            return c > 0 ? c - 1 : max;
+          });
+          return true;
+        }
+        if (action === "right") {
+          setKbCol((c) => {
+            const max = kbRow === 4 ? VK_ACTIONS.length - 1 : VK_ROWS[kbRow].length - 1;
+            return c < max ? c + 1 : 0;
+          });
+          return true;
+        }
+        if (action === "up") {
+          setKbRow((r) => {
+            if (r === 0) {
+              // sobe pra results se houver
+              if (results.length > 0) { setZone("results"); return r; }
+              return r;
+            }
+            const newR = r - 1;
+            const newMax = newR === 4 ? VK_ACTIONS.length - 1 : VK_ROWS[newR].length - 1;
+            setKbCol((c) => Math.min(c, newMax));
+            return newR;
+          });
+          return true;
+        }
+        if (action === "down") {
+          setKbRow((r) => {
+            if (r >= 4) return r;
+            const newR = r + 1;
+            const newMax = newR === 4 ? VK_ACTIONS.length - 1 : VK_ROWS[newR].length - 1;
+            setKbCol((c) => Math.min(c, newMax));
+            return newR;
+          });
+          return true;
+        }
+        if (action === "a") { confirmKey(); return true; }
+        if (action === "y") { backspace(); return true; }
+        if (action === "x") { appendChar(" "); return true; }
+        if (action === "start") { if (results[0]) onPick(results[0]); return true; }
+        if (action === "b") { onClose(); return true; }
+      } else if (zone === "results") {
+        if (action === "down") {
+          setResIdx((i) => {
+            if (i + 1 >= results.length) { setZone("keyboard"); return i; }
+            return i + 1;
+          });
+          return true;
+        }
+        if (action === "up") {
+          setResIdx((i) => i > 0 ? i - 1 : 0);
+          return true;
+        }
+        if (action === "a" && results[resIdx]) { onPick(results[resIdx]); return true; }
+        if (action === "b") { setZone("keyboard"); return true; }
+      }
+      return false;
+    };
+    modalGamepadRef.current = handler;
+    return () => { if (modalGamepadRef.current === handler) modalGamepadRef.current = null; };
+  }, [modalGamepadRef, zone, kbRow, kbCol, resIdx, results, confirmKey, backspace, appendChar, onClose, onPick]);
+
+  // Reset resIdx ao mudar query
+  useEffect(() => { setResIdx(0); }, [trimmed]);
+
   return (
     <div className={`pb-search-backdrop ${closing ? "closing" : ""}`} onClick={onClose}>
       <div className={`pb-search-box ${closing ? "closing" : ""}`} onClick={(e) => e.stopPropagation()}>
@@ -465,7 +634,7 @@ function SearchOverlay({ systems, onPick, onClose, closing }) {
             autoFocus
             type="text"
             className="pb-search-input"
-            placeholder="Buscar jogo em todos os sistemas..."
+            placeholder="Use o controle: D-pad/Stick navega · A confirma · Y apaga · X espaco · Start busca · B sai"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -475,9 +644,42 @@ function SearchOverlay({ systems, onPick, onClose, closing }) {
           />
           <span className="pb-search-count">{trimmed ? `${results.length}` : ""}</span>
         </div>
-        <div className="pb-search-results">
-          {results.map(({ system, game }) => (
-            <button key={game.path} className="pb-search-item" onClick={() => onPick({ system, game })}>
+
+        <div className={`pb-vk ${zone === "keyboard" ? "focused" : ""}`}>
+          {VK_ROWS.map((row, r) => (
+            <div key={r} className="pb-vk-row">
+              {row.map((c, ci) => (
+                <button
+                  key={ci}
+                  className={`pb-vk-key ${zone === "keyboard" && kbRow === r && kbCol === ci ? "focused" : ""}`}
+                  onClick={() => { setZone("keyboard"); setKbRow(r); setKbCol(ci); appendChar(c); }}
+                >{c === " " ? "␣" : c}</button>
+              ))}
+            </div>
+          ))}
+          <div className="pb-vk-row pb-vk-actions">
+            {VK_ACTIONS.map((a, ai) => (
+              <button
+                key={ai}
+                className={`pb-vk-key pb-vk-action ${zone === "keyboard" && kbRow === 4 && kbCol === ai ? "focused" : ""}`}
+                onClick={() => {
+                  setZone("keyboard"); setKbRow(4); setKbCol(ai);
+                  if (a === "⌫") backspace();
+                  else if (a === "CLEAR") clearAll();
+                  else if (a === "BUSCAR" && results[0]) onPick(results[0]);
+                }}
+              >{a}</button>
+            ))}
+          </div>
+        </div>
+
+        <div className={`pb-search-results ${zone === "results" ? "focused" : ""}`}>
+          {results.map(({ system, game }, i) => (
+            <button
+              key={game.path}
+              className={`pb-search-item ${zone === "results" && i === resIdx ? "focused" : ""}`}
+              onClick={() => onPick({ system, game })}
+            >
               <span className="pb-search-item-sys" style={{ background: system.color }}>
                 <SystemIcon id={system.id} />
               </span>
@@ -524,13 +726,20 @@ function SplashScreen({ profileName }) {
   );
 }
 
-function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onUpdate, onClose, closing }) {
+function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onUpdate, onClose, closing, modalGamepadRef }) {
   // mode: "list" | "create" | { mode: "edit", id }
   const [mode, setMode] = useState("list");
   const [name, setName] = useState("");
   const [photoPath, setPhotoPath] = useState(null);
   const [clearPhoto, setClearPhoto] = useState(false);
   const [photoErr, setPhotoErr] = useState(null);
+  const [focusedIdx, setFocusedIdx] = useState(0);
+
+  // Total na lista = perfis + botao "Novo Perfil"
+  const totalCells = profiles.length + 1;
+  useEffect(() => {
+    if (focusedIdx >= totalCells) setFocusedIdx(0);
+  }, [totalCells, focusedIdx]);
 
   const editingProfile = mode?.mode === "edit"
     ? profiles.find((p) => p.id === mode.id)
@@ -594,6 +803,54 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
     ? convertFileSrc(editingProfile.photo_path)
     : null;
 
+  // Gamepad nav: so na lista. Form mode requer teclado pra digitar nome.
+  useEffect(() => {
+    if (!modalGamepadRef) return;
+    const handler = (action) => {
+      if (isFormMode) {
+        if (action === "b") { backToList(); return true; }
+        return false; // form precisa teclado, ignora resto
+      }
+      if (action === "left") {
+        setFocusedIdx((i) => i > 0 ? i - 1 : totalCells - 1);
+        return true;
+      }
+      if (action === "right") {
+        setFocusedIdx((i) => i < totalCells - 1 ? i + 1 : 0);
+        return true;
+      }
+      if (action === "down" || action === "up") {
+        // se houver mais de 1 linha visualmente, +/- 4 (mesmo padrao do CSS grid)
+        setFocusedIdx((i) => {
+          const cols = 4;
+          const next = action === "down" ? i + cols : i - cols;
+          return Math.max(0, Math.min(totalCells - 1, next));
+        });
+        return true;
+      }
+      if (action === "a") {
+        if (focusedIdx >= profiles.length) {
+          // botao "Novo Perfil"
+          startCreate();
+        } else {
+          const p = profiles[focusedIdx];
+          if (p) onSelect(p.id);
+        }
+        return true;
+      }
+      if (action === "y" && focusedIdx < profiles.length) {
+        // Y = editar perfil focado
+        const p = profiles[focusedIdx];
+        if (p) startEdit(p);
+        return true;
+      }
+      if (action === "b") { onClose(); return true; }
+      return false;
+    };
+    modalGamepadRef.current = handler;
+    return () => { if (modalGamepadRef.current === handler) modalGamepadRef.current = null; };
+  }, [modalGamepadRef, isFormMode, focusedIdx, profiles, totalCells, onSelect, onClose]);
+
   return (
     <div className={`pb-modal-backdrop ${closing ? "closing" : ""}`} onClick={onClose}>
       <div className={`pb-modal pb-profile-modal ${closing ? "closing" : ""}`} onClick={(e) => e.stopPropagation()}>
@@ -604,9 +861,9 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
 
         {!isFormMode ? (
           <div className="pb-profile-grid">
-            {profiles.map((p) => (
-              <div key={p.id} className={`pb-profile-card ${p.id === activeId ? "active" : ""}`}>
-                <button className="pb-profile-pick" onClick={() => { sfx.confirm(); onSelect(p.id); }}>
+            {profiles.map((p, i) => (
+              <div key={p.id} className={`pb-profile-card ${p.id === activeId ? "active" : ""} ${focusedIdx === i ? "focused" : ""}`}>
+                <button className="pb-profile-pick" onClick={() => { sfx.confirm(); setFocusedIdx(i); onSelect(p.id); }}>
                   <div className="pb-profile-avatar">
                     {p.photo_path
                       ? <img src={convertFileSrc(p.photo_path)} alt={p.name} />
@@ -628,7 +885,7 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
                 )}
               </div>
             ))}
-            <button className="pb-profile-card pb-profile-add" onClick={() => { sfx.click(); startCreate(); }}>
+            <button className={`pb-profile-card pb-profile-add ${focusedIdx === profiles.length ? "focused" : ""}`} onClick={() => { sfx.click(); startCreate(); }}>
               <div className="pb-profile-avatar pb-profile-avatar-add"><PlusIcon /></div>
               <div className="pb-profile-name">Novo Perfil</div>
             </button>
@@ -686,12 +943,91 @@ function SettingsPanel({
   onToggleSavesIsolation, savesStatus,
   onToggleMusic, onSetMusicVolume,
   onShowLogs,
+  modalGamepadRef,
 }) {
   const [discordId, setDiscordId] = useState(config.discord_app_id || "");
   const [discordStatus, setDiscordStatus] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
   const [updateBusy, setUpdateBusy] = useState(false);
+  const panelRef = useRef(null);
+  const [focusIdx, setFocusIdx] = useState(0);
   useEffect(() => { setDiscordId(config.discord_app_id || ""); }, [config.discord_app_id]);
+
+  // Coleta elementos focaveis dentro do painel pra navegar com gamepad
+  const getFocusables = useCallback(() => {
+    if (!panelRef.current) return [];
+    return Array.from(panelRef.current.querySelectorAll(
+      'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )).filter((el) => el.offsetParent !== null); // visiveis
+  }, []);
+
+  const focusByIdx = useCallback((idx) => {
+    const items = getFocusables();
+    if (items.length === 0) return;
+    const clamped = Math.max(0, Math.min(items.length - 1, idx));
+    setFocusIdx(clamped);
+    items.forEach((el, i) => {
+      if (i === clamped) {
+        el.classList.add("pb-gp-focus");
+        el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+      } else {
+        el.classList.remove("pb-gp-focus");
+      }
+    });
+  }, [getFocusables]);
+
+  // Foca primeiro item ao montar
+  useEffect(() => {
+    const t = setTimeout(() => focusByIdx(0), 50);
+    return () => clearTimeout(t);
+  }, [focusByIdx]);
+
+  // Handler de gamepad
+  useEffect(() => {
+    if (!modalGamepadRef) return;
+    const handler = (action) => {
+      if (action === "down") {
+        focusByIdx(focusIdx + 1);
+        return true;
+      }
+      if (action === "up") {
+        focusByIdx(focusIdx - 1);
+        return true;
+      }
+      if (action === "right" || action === "left") {
+        const items = getFocusables();
+        const cur = items[focusIdx];
+        if (cur) {
+          // Se o foco atual eh um botao em sequencia horizontal (theme card, etc), pula 1.
+          // Detecta pela proximidade do bounding rect (mesma linha)
+          const curRect = cur.getBoundingClientRect();
+          const dir = action === "right" ? 1 : -1;
+          let target = focusIdx + dir;
+          while (target >= 0 && target < items.length) {
+            const next = items[target];
+            const nextRect = next.getBoundingClientRect();
+            if (Math.abs(nextRect.top - curRect.top) < 8) {
+              focusByIdx(target);
+              return true;
+            }
+            target += dir;
+          }
+        }
+        focusByIdx(focusIdx + (action === "right" ? 1 : -1));
+        return true;
+      }
+      if (action === "a") {
+        const items = getFocusables();
+        const cur = items[focusIdx];
+        if (cur) cur.click();
+        return true;
+      }
+      if (action === "b") { onClose(); return true; }
+      return false;
+    };
+    modalGamepadRef.current = handler;
+    return () => { if (modalGamepadRef.current === handler) modalGamepadRef.current = null; };
+  }, [modalGamepadRef, focusIdx, focusByIdx, getFocusables, onClose]);
 
   async function doCheckUpdate() {
     if (updateBusy) return;
@@ -744,7 +1080,7 @@ function SettingsPanel({
   return (
     <>
       <div className={`pb-settings-backdrop ${closing ? "closing" : ""}`} onClick={() => { sfx.back(); onClose(); }} />
-      <aside className={`pb-settings ${closing ? "closing" : ""}`} onClick={(e) => e.stopPropagation()}>
+      <aside ref={panelRef} className={`pb-settings ${closing ? "closing" : ""}`} onClick={(e) => e.stopPropagation()}>
         <header className="pb-settings-header">
           <h2>Configuracoes</h2>
           <button className="pb-icon-btn" onClick={() => { sfx.back(); onClose(); }} title="Fechar (Esc)"><CloseIcon /></button>
@@ -1050,13 +1386,92 @@ function SettingsPanel({
   );
 }
 
+function GamepadDebugOverlay({ onClose }) {
+  const [snap, setSnap] = useState(null);
+  useEffect(() => {
+    let raf;
+    function tick() {
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const list = [];
+      for (let i = 0; i < pads.length; i++) {
+        const p = pads[i];
+        if (!p) continue;
+        list.push({
+          index: i,
+          id: p.id,
+          mapping: p.mapping || "(none)",
+          connected: p.connected,
+          buttons: p.buttons.map((b, bi) => ({ i: bi, p: b.pressed, v: b.value })),
+          axes: p.axes.map((a, ai) => ({ i: ai, v: a })),
+        });
+      }
+      setSnap({ pads: list, ts: Date.now() });
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <div className="pb-gamepad-debug" onClick={(e) => e.stopPropagation()}>
+      <header className="pb-gamepad-debug-header">
+        <strong>Diagnostico de Controle</strong>
+        <button className="pb-icon-btn" onClick={onClose} title="Fechar (F2)"><CloseIcon /></button>
+      </header>
+      <div className="pb-gamepad-debug-body">
+        {!snap || snap.pads.length === 0 ? (
+          <div className="pb-gamepad-debug-empty">
+            Nenhum controle detectado. Aperte qualquer botao do controle pra acordar.
+          </div>
+        ) : snap.pads.map((p) => (
+          <div key={p.index} className="pb-gamepad-debug-pad">
+            <div className="pb-gamepad-debug-id">
+              <strong>Slot {p.index}:</strong> {p.id}
+            </div>
+            <div className="pb-gamepad-debug-meta">
+              mapping: <code>{p.mapping}</code> {p.mapping !== "standard" && <span style={{color:"#f87171"}}>(NAO PADRAO — use modo XInput)</span>}
+              {" · "}botoes: {p.buttons.length} · eixos: {p.axes.length}
+            </div>
+            <div className="pb-gamepad-debug-section">
+              <div className="pb-gamepad-debug-label">Botoes pressionados:</div>
+              <div className="pb-gamepad-debug-buttons">
+                {p.buttons.filter((b) => b.p).length === 0 && <span style={{color:"#6b7280"}}>(nenhum)</span>}
+                {p.buttons.filter((b) => b.p).map((b) => (
+                  <span key={b.i} className="pb-gamepad-debug-btn-on">btn{b.i}</span>
+                ))}
+              </div>
+            </div>
+            <div className="pb-gamepad-debug-section">
+              <div className="pb-gamepad-debug-label">Eixos:</div>
+              <div className="pb-gamepad-debug-axes">
+                {p.axes.map((a) => (
+                  <div key={a.i} className={`pb-gamepad-debug-axis ${Math.abs(a.v) > 0.2 ? "active" : ""}`}>
+                    <span>ax{a.i}:</span>
+                    <span>{a.v.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+        <div className="pb-gamepad-debug-help">
+          <strong>GameSir T4n Lite:</strong> aperte <kbd>HOME + Y</kbd> por 3s pra entrar em modo XInput (Windows).<br />
+          Outros modos: HOME+A=Android · HOME+B=iOS · HOME+X=Switch · <strong>HOME+Y=Windows/XInput</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LogsViewerModal({ onClose }) {
   const [text, setText] = useState("Carregando...");
   const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState("all"); // all | error | warn | info
+  const [autoRefresh, setAutoRefresh] = useState(false);
   const load = useCallback(async () => {
     setBusy(true);
     try {
-      const t = await invoke("read_app_logs", { maxLines: 200 });
+      const t = await invoke("read_app_logs", { maxLines: 500 });
       setText(t || "(vazio)");
     } catch (e) {
       setText(`Erro ao ler log: ${e}`);
@@ -1065,17 +1480,82 @@ function LogsViewerModal({ onClose }) {
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = setInterval(load, 2000);
+    return () => clearInterval(id);
+  }, [autoRefresh, load]);
+
+  const filtered = useMemo(() => {
+    if (filter === "all") return text;
+    const want = filter.toUpperCase();
+    return text.split("\n").filter((l) => l.includes(`[${want}]`) || l.toUpperCase().includes(` ${want} `)).join("\n") || "(nada com este filtro)";
+  }, [text, filter]);
+
+  const counts = useMemo(() => {
+    const c = { error: 0, warn: 0, info: 0 };
+    for (const line of text.split("\n")) {
+      if (line.includes("[ERROR]")) c.error++;
+      else if (line.includes("[WARN]")) c.warn++;
+      else if (line.includes("[INFO]")) c.info++;
+    }
+    return c;
+  }, [text]);
+
+  const openLogDir = useCallback(async () => {
+    try {
+      const dir = await invoke("get_app_log_dir");
+      await invoke("open_in_explorer", { path: dir });
+    } catch (e) {
+      console.error("open log dir", e);
+    }
+  }, []);
+
+  const clearLogs = useCallback(async () => {
+    if (!confirm("Apagar todos os arquivos de log?")) return;
+    try {
+      await invoke("clear_app_logs");
+      load();
+    } catch (e) {
+      console.error("clear logs", e);
+    }
+  }, [load]);
+
   return (
     <div className="pb-modal-backdrop" onClick={onClose}>
       <div className="pb-modal pb-logs-modal" onClick={(e) => e.stopPropagation()}>
         <header className="pb-modal-header">
-          <h2>Logs do Playbox (últimas 200 linhas)</h2>
+          <h2>Logs do Playbox</h2>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="pb-icon-btn" onClick={load} title="Recarregar" disabled={busy}><RefreshIcon /></button>
             <button className="pb-icon-btn" onClick={onClose}><CloseIcon /></button>
           </div>
         </header>
-        <pre className="pb-logs-content">{text}</pre>
+        <div className="pb-logs-toolbar">
+          <div className="pb-logs-filters">
+            {[
+              { id: "all",   label: `Todos (${text.split("\n").length})` },
+              { id: "error", label: `Erros (${counts.error})` },
+              { id: "warn",  label: `Avisos (${counts.warn})` },
+              { id: "info",  label: `Info (${counts.info})` },
+            ].map((f) => (
+              <button
+                key={f.id}
+                className={`pb-logs-filter ${filter === f.id ? "active" : ""}`}
+                onClick={() => setFilter(f.id)}
+              >{f.label}</button>
+            ))}
+          </div>
+          <div className="pb-logs-actions">
+            <label className="pb-logs-toggle">
+              <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
+              Auto-refresh 2s
+            </label>
+            <button className="pb-btn pb-btn-small" onClick={openLogDir}>Abrir pasta</button>
+            <button className="pb-btn pb-btn-small pb-btn-danger" onClick={clearLogs}>Limpar</button>
+          </div>
+        </div>
+        <pre className="pb-logs-content">{filtered}</pre>
       </div>
     </div>
   );
@@ -1128,6 +1608,491 @@ function SessionsGraph({ sessions }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
+  const canvasRef = useRef(null);
+  const rafRef = useRef(null);
+  const [info, setInfo] = useState(null);
+  const [error, setError] = useState(null);
+  const [stateMsg, setStateMsg] = useState(null);
+  const [slotsOpen, setSlotsOpen] = useState(false);
+  const [slots, setSlots] = useState([]);
+  const [slotsBusy, setSlotsBusy] = useState(false);
+  const audioCtxRef = useRef(null);
+  const audioNextTimeRef = useRef(0);
+  const audioRateRef = useRef(32040);
+  const autoLoadDoneRef = useRef(false);
+
+  // Mapeamento teclado -> button id libretro (joypad)
+  const KEY_MAP = useMemo(() => ({
+    ArrowUp: 4, ArrowDown: 5, ArrowLeft: 6, ArrowRight: 7,
+    "z": 0, "Z": 0,    // B
+    "x": 8, "X": 8,    // A
+    "a": 1, "A": 1,    // Y
+    "s": 9, "S": 9,    // X
+    "Enter": 3,        // START
+    "Shift": 2,        // SELECT
+    "q": 10, "Q": 10,  // L
+    "w": 11, "W": 11,  // R
+  }), []);
+
+  // Carrega core + ROM
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const coreFile = system.libretro_core; // ex: "snes9x_libretro.dll"
+        if (!coreFile) {
+          setError(`Sistema "${system.name}" sem core libretro configurado`);
+          return;
+        }
+        const result = await invoke("libretro_load_game", { coreFilename: coreFile, romPath: game.path });
+        if (cancelled) return;
+        setInfo(result);
+        audioRateRef.current = result.sample_rate || 32040;
+        // Ajusta tamanho do canvas
+        if (canvasRef.current) {
+          canvasRef.current.width = result.base_width;
+          canvasRef.current.height = result.base_height;
+        }
+        // Inicializa AudioContext com a sample rate do core
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: result.sample_rate });
+          await ctx.resume();
+          audioCtxRef.current = ctx;
+          audioNextTimeRef.current = ctx.currentTime + 0.05; // 50ms buffer inicial
+        } catch (e) {
+          console.warn("AudioContext init", e);
+        }
+      } catch (e) {
+        console.error("libretro_load_game", e);
+        setError(String(e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+      invoke("libretro_unload").catch(() => {});
+      if (audioCtxRef.current) {
+        try { audioCtxRef.current.close(); } catch {}
+        audioCtxRef.current = null;
+      }
+    };
+  }, [system.id, game.path, system.libretro_core]);
+
+  // Loop de frames
+  useEffect(() => {
+    if (!info) return;
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+    let lastTime = performance.now();
+    const targetFrameMs = 1000 / (info.fps || 60);
+
+    async function tick() {
+      const now = performance.now();
+      if (now - lastTime >= targetFrameMs - 1) {
+        lastTime = now;
+        try {
+          // Response binario: 4 bytes width LE + 4 bytes height LE + rgba
+          const buf = await invoke("libretro_run_frame");
+          if (buf && buf.byteLength >= 8) {
+            const view = new DataView(buf.buffer ? buf.buffer : buf, buf.byteOffset || 0, buf.byteLength);
+            const w = view.getUint32(0, true);
+            const h = view.getUint32(4, true);
+            const rgba = new Uint8ClampedArray(
+              buf.buffer ? buf.buffer : buf,
+              (buf.byteOffset || 0) + 8,
+              w * h * 4
+            );
+            if (w !== ctx.canvas.width || h !== ctx.canvas.height) {
+              ctx.canvas.width = w;
+              ctx.canvas.height = h;
+            }
+            const imageData = new ImageData(rgba, w, h);
+            ctx.putImageData(imageData, 0, 0);
+          }
+          // Drena audio e agenda no AudioContext
+          const audioBuf = await invoke("libretro_take_audio");
+          const actx = audioCtxRef.current;
+          if (audioBuf && audioBuf.byteLength > 0 && actx) {
+            const i16 = new Int16Array(
+              audioBuf.buffer ? audioBuf.buffer : audioBuf,
+              audioBuf.byteOffset || 0,
+              audioBuf.byteLength / 2
+            );
+            const frames = i16.length / 2; // stereo
+            if (frames > 0) {
+              const sampleRate = audioRateRef.current;
+              const audioBufNode = actx.createBuffer(2, frames, sampleRate);
+              const left = audioBufNode.getChannelData(0);
+              const right = audioBufNode.getChannelData(1);
+              for (let i = 0; i < frames; i++) {
+                left[i]  = i16[i * 2]     / 32768;
+                right[i] = i16[i * 2 + 1] / 32768;
+              }
+              const source = actx.createBufferSource();
+              source.buffer = audioBufNode;
+              source.connect(actx.destination);
+              // Anti-glitch: se atrasou, ressincroniza
+              if (audioNextTimeRef.current < actx.currentTime + 0.02) {
+                audioNextTimeRef.current = actx.currentTime + 0.05;
+              }
+              source.start(audioNextTimeRef.current);
+              audioNextTimeRef.current += frames / sampleRate;
+            }
+          }
+        } catch (e) {
+          console.error("frame tick", e);
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    }
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [info]);
+
+  const showStateMsg = useCallback((kind, text) => {
+    setStateMsg({ kind, text });
+    setTimeout(() => setStateMsg(null), 1800);
+  }, []);
+
+  // Captura canvas atual como PNG (Uint8Array, ~tamanho do frame escalado)
+  const captureThumbnail = useCallback(async () => {
+    const c = canvasRef.current;
+    if (!c) return null;
+    try {
+      // Resampleia pra 320px largura mantendo proporcao
+      const targetW = 320;
+      const targetH = Math.max(1, Math.round((c.height / c.width) * targetW));
+      const off = document.createElement("canvas");
+      off.width = targetW;
+      off.height = targetH;
+      const offCtx = off.getContext("2d");
+      offCtx.imageSmoothingEnabled = true;
+      offCtx.drawImage(c, 0, 0, targetW, targetH);
+      const blob = await new Promise((res) => off.toBlob(res, "image/png"));
+      if (!blob) return null;
+      const arr = new Uint8Array(await blob.arrayBuffer());
+      return Array.from(arr); // tauri serializa Vec<u8> a partir de array de numeros
+    } catch (e) {
+      console.warn("captureThumbnail", e);
+      return null;
+    }
+  }, []);
+
+  const refreshSlots = useCallback(async () => {
+    try {
+      const list = await invoke("libretro_list_states", { romPath: game.path });
+      setSlots(list || []);
+    } catch (e) {
+      console.warn("list_states", e);
+    }
+  }, [game.path]);
+
+  const saveState = useCallback(async (slot = 0) => {
+    setSlotsBusy(true);
+    try {
+      const thumb = await captureThumbnail();
+      await invoke("libretro_save_state", { romPath: game.path, slot, thumbnailPng: thumb });
+      showStateMsg("ok", `Save slot ${slot} salvo`);
+      refreshSlots();
+    } catch (e) {
+      showStateMsg("error", `Erro: ${e}`);
+    } finally {
+      setSlotsBusy(false);
+    }
+  }, [game.path, showStateMsg, captureThumbnail, refreshSlots]);
+
+  const loadState = useCallback(async (slot = 0) => {
+    try {
+      await invoke("libretro_load_state", { romPath: game.path, slot });
+      showStateMsg("ok", `Save slot ${slot} carregado`);
+    } catch (e) {
+      showStateMsg("error", `${e}`);
+    }
+  }, [game.path, showStateMsg]);
+
+  const deleteState = useCallback(async (slot) => {
+    setSlotsBusy(true);
+    try {
+      await invoke("libretro_delete_state", { romPath: game.path, slot });
+      showStateMsg("ok", `Slot ${slot} apagado`);
+      refreshSlots();
+    } catch (e) {
+      showStateMsg("error", `${e}`);
+    } finally {
+      setSlotsBusy(false);
+    }
+  }, [game.path, showStateMsg, refreshSlots]);
+
+  // Auto-load (quick resume) + carrega lista de slots inicial
+  useEffect(() => {
+    if (!info) return;
+    refreshSlots();
+    if (autoLoadSlot != null && !autoLoadDoneRef.current) {
+      autoLoadDoneRef.current = true;
+      // Pequeno delay pra core estabilizar antes do unserialize
+      const t = setTimeout(() => { loadState(autoLoadSlot); }, 250);
+      return () => clearTimeout(t);
+    }
+  }, [info, autoLoadSlot, loadState, refreshSlots]);
+
+  // Input teclado -> libretro + hotkeys F5/F8/Tab
+  useEffect(() => {
+    const onKey = (e, pressed) => {
+      // Tab abre/fecha overlay de slots (so no keydown)
+      if (pressed && (e.key === "Tab" || e.key === "F1")) {
+        e.preventDefault();
+        setSlotsOpen((v) => {
+          if (!v) refreshSlots();
+          return !v;
+        });
+        return;
+      }
+      if (slotsOpen) {
+        if (pressed && e.key === "Escape") { e.preventDefault(); setSlotsOpen(false); return; }
+        // Numeros 1-9 carregam slot, Shift+1-9 salvam
+        if (pressed && /^[1-9]$/.test(e.key)) {
+          e.preventDefault();
+          const n = parseInt(e.key, 10);
+          if (e.shiftKey) saveState(n); else loadState(n);
+          return;
+        }
+        if (pressed && e.key === "0") { e.preventDefault(); if (e.shiftKey) saveState(0); else loadState(0); return; }
+        // Bloqueia input do jogo enquanto overlay aberto
+        return;
+      }
+      if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
+      // Hotkeys: F5 save quick (slot 0), F8 load quick (slot 0)
+      if (pressed) {
+        if (e.key === "F5") { e.preventDefault(); saveState(0); return; }
+        if (e.key === "F8") { e.preventDefault(); loadState(0); return; }
+      }
+      const id = KEY_MAP[e.key];
+      if (id !== undefined) {
+        e.preventDefault();
+        invoke("libretro_set_input", { buttonId: id, pressed }).catch(() => {});
+      }
+    };
+    const down = (e) => onKey(e, true);
+    const up = (e) => onKey(e, false);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, [KEY_MAP, onClose, saveState, loadState, slotsOpen, refreshSlots]);
+
+  // Input gamepad -> libretro (poll 60fps)
+  useEffect(() => {
+    if (!info) return;
+    let raf;
+    // Mapeamento std gamepad button -> libretro id
+    // Standard mapping: 0=A, 1=B, 2=X, 3=Y, 4=LB, 5=RB, 6=LT, 7=RT, 8=Back, 9=Start, 10=L3, 11=R3, 12=Up, 13=Down, 14=Left, 15=Right
+    const PAD_MAP = {
+      0: 0,    // A -> B(libretro)
+      1: 8,    // B -> A
+      2: 1,    // X -> Y
+      3: 9,    // Y -> X
+      4: 10,   // LB -> L
+      5: 11,   // RB -> R
+      6: 12,   // LT -> L2
+      7: 13,   // RT -> R2
+      8: 2,    // Back -> SELECT
+      9: 3,    // Start -> START
+      10: 14,  // L3
+      11: 15,  // R3
+      12: 4,   // Up
+      13: 5,   // Down
+      14: 6,   // Left
+      15: 7,   // Right
+    };
+    const lastState = new Array(16).fill(false);
+
+    function poll() {
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      let pad = null;
+      for (const p of pads) { if (p) { pad = p; break; } }
+      if (pad) {
+        // Combo Select+Start = sair
+        if (pad.buttons[8]?.pressed && pad.buttons[9]?.pressed) {
+          onClose();
+          return;
+        }
+        // Botoes
+        for (const [padIdx, libretroId] of Object.entries(PAD_MAP)) {
+          const pressed = pad.buttons[parseInt(padIdx)]?.pressed || false;
+          if (pressed !== lastState[libretroId]) {
+            lastState[libretroId] = pressed;
+            invoke("libretro_set_input", { buttonId: libretroId, pressed }).catch(() => {});
+          }
+        }
+        // Stick analogico esquerdo -> dpad
+        const ax = pad.axes[0] || 0;
+        const ay = pad.axes[1] || 0;
+        const left  = ax < -0.5;
+        const right = ax > 0.5;
+        const up    = ay < -0.5;
+        const down  = ay > 0.5;
+        if (left !== lastState[6]) { lastState[6] = left; invoke("libretro_set_input", { buttonId: 6, pressed: left }).catch(() => {}); }
+        if (right !== lastState[7]) { lastState[7] = right; invoke("libretro_set_input", { buttonId: 7, pressed: right }).catch(() => {}); }
+        if (up !== lastState[4]) { lastState[4] = up; invoke("libretro_set_input", { buttonId: 4, pressed: up }).catch(() => {}); }
+        if (down !== lastState[5]) { lastState[5] = down; invoke("libretro_set_input", { buttonId: 5, pressed: down }).catch(() => {}); }
+      }
+      raf = requestAnimationFrame(poll);
+    }
+    raf = requestAnimationFrame(poll);
+    return () => { if (raf) cancelAnimationFrame(raf); };
+  }, [info, onClose]);
+
+  return (
+    <div className="pb-emulator-view" onContextMenu={(e) => e.preventDefault()}>
+      <button className="pb-emulator-close" onClick={onClose} title="Sair (Esc / Select+Start)">
+        <CloseIcon />
+      </button>
+      <div className="pb-emulator-info">
+        <span className="pb-emulator-icon" style={{ color: system.color }}><SystemIcon id={system.id} /></span>
+        <span className="pb-emulator-game">{game.name}</span>
+        {info && <span className="pb-emulator-meta">{info.library_name} {info.library_version} · {info.base_width}×{info.base_height} · {Math.round(info.fps)}fps</span>}
+      </div>
+      <div className="pb-emulator-hints">
+        <kbd>Tab</kbd> Slots · <kbd>F5</kbd>/<kbd>F8</kbd> Quick · <kbd>Esc</kbd> Sair
+      </div>
+      {stateMsg && (
+        <div className={`pb-emulator-state-msg pb-emulator-state-${stateMsg.kind}`}>
+          {stateMsg.text}
+        </div>
+      )}
+      {error ? (
+        <div className="pb-emulator-error">
+          <strong>Erro ao carregar:</strong>
+          <code>{error}</code>
+          <button className="pb-btn pb-btn-primary" onClick={onClose}>Voltar</button>
+        </div>
+      ) : (
+        <canvas ref={canvasRef} className="pb-emulator-canvas" />
+      )}
+      {slotsOpen && (
+        <SaveStateOverlay
+          slots={slots}
+          busy={slotsBusy}
+          onClose={() => setSlotsOpen(false)}
+          onSave={(slot) => saveState(slot)}
+          onLoad={(slot) => loadState(slot)}
+          onDelete={(slot) => deleteState(slot)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ResumePromptModal({ info, onContinue, onFresh, onCancel }) {
+  function fmt(ts) {
+    if (!ts) return "";
+    const d = new Date(ts * 1000);
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 3600) return `${Math.max(1, Math.floor(diff / 60))}min atras`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h atras`;
+    if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d atras`;
+    return d.toLocaleDateString("pt-BR");
+  }
+  return (
+    <div className="pb-modal-backdrop" onClick={onCancel}>
+      <div className="pb-modal pb-resume-modal" onClick={(e) => e.stopPropagation()}>
+        <header className="pb-modal-header">
+          <h2>Continuar de onde parou?</h2>
+          <button className="pb-icon-btn" onClick={onCancel}><CloseIcon /></button>
+        </header>
+        <div className="pb-resume-body">
+          <p><strong>{info.game.name}</strong></p>
+          <p className="pb-resume-meta">Slot {info.slot} · salvo {fmt(info.when)}</p>
+          <div className="pb-resume-actions">
+            <button className="pb-btn pb-btn-primary" autoFocus onClick={onContinue}>Continuar</button>
+            <button className="pb-btn" onClick={onFresh}>Comecar do inicio</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SaveStateOverlay({ slots, busy, onClose, onSave, onLoad, onDelete }) {
+  const slotMap = useMemo(() => {
+    const m = new Map();
+    for (const s of slots) m.set(s.slot, s);
+    return m;
+  }, [slots]);
+  const cards = [];
+  for (let i = 1; i <= 9; i++) cards.push(i);
+
+  function fmtTime(ts) {
+    if (!ts) return "";
+    const d = new Date(ts * 1000);
+    const now = new Date();
+    const diff = (now.getTime() - d.getTime()) / 1000;
+    if (diff < 60) return "agora";
+    if (diff < 3600) return `${Math.floor(diff / 60)}min atras`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h atras`;
+    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
+
+  return (
+    <div className="pb-savestate-overlay" onClick={onClose}>
+      <div className="pb-savestate-panel" onClick={(e) => e.stopPropagation()}>
+        <header className="pb-savestate-header">
+          <h2>Save States</h2>
+          <button className="pb-icon-btn" onClick={onClose} title="Fechar (Tab/Esc)"><CloseIcon /></button>
+        </header>
+        <p className="pb-savestate-hint">
+          <kbd>1-9</kbd> carrega · <kbd>Shift+1-9</kbd> salva · clique nos slots abaixo
+        </p>
+        <div className="pb-savestate-grid">
+          {cards.map((n) => {
+            const info = slotMap.get(n);
+            const empty = !info;
+            return (
+              <div key={n} className={`pb-savestate-card ${empty ? "empty" : ""}`}>
+                <div className="pb-savestate-thumb">
+                  {info?.thumbnail_path ? (
+                    <img src={convertFileSrc(info.thumbnail_path)} alt={`Slot ${n}`} />
+                  ) : (
+                    <span className="pb-savestate-empty-label">vazio</span>
+                  )}
+                  <span className="pb-savestate-slot-num">{n}</span>
+                </div>
+                <div className="pb-savestate-meta">
+                  {info ? fmtTime(info.modified_at) : "—"}
+                </div>
+                <div className="pb-savestate-actions">
+                  <button
+                    className="pb-savestate-btn"
+                    disabled={busy}
+                    onClick={() => onSave(n)}
+                    title="Salvar (sobrescreve)"
+                  >Salvar</button>
+                  <button
+                    className="pb-savestate-btn pb-savestate-btn-primary"
+                    disabled={busy || empty}
+                    onClick={() => { onLoad(n); onClose(); }}
+                    title="Carregar"
+                  >Carregar</button>
+                  {!empty && (
+                    <button
+                      className="pb-savestate-btn pb-savestate-btn-danger"
+                      disabled={busy}
+                      onClick={() => onDelete(n)}
+                      title="Apagar"
+                    >×</button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -1444,6 +2409,9 @@ export default function PlayboxLauncher() {
   const [loading, setLoading] = useState(true);
   const [scanError, setScanError] = useState(null);
   const [selectedSystemIdx, setSelectedSystemIdx] = useState(0);
+  // focusZone: "games" (default, navega jogos) | "systems" (navega barra de sistemas)
+  // D-pad DOWN em games -> systems. D-pad UP em systems -> games. A em systems -> entra (volta pra games).
+  const [focusZone, setFocusZone] = useState("games");
   const [selectedGameIdx, setSelectedGameIdx] = useState(0);
   const [launchMsg, setLaunchMsg] = useState(null);
   const [covers, setCovers] = useState({});
@@ -1472,12 +2440,16 @@ export default function PlayboxLauncher() {
   const [discPicker, setDiscPicker] = useState(null);
   // Logs viewer modal
   const [logsOpen, setLogsOpen] = useState(false);
+  // Emulator embarcado: { system, game } | null
+  const [emulator, setEmulator] = useState(null);
+  const [resumePrompt, setResumePrompt] = useState(null);
   // Ordenacao do grid de jogos: "default" | "az" | "playtime" | "recent" | "fav"
   const [sortMode, setSortMode] = useState("default");
   const [rescanBusy, setRescanBusy] = useState(false);
   const [achievementToast, setAchievementToast] = useState(null);
   const [screenshots, setScreenshots] = useState({});
   const [gamepadConnected, setGamepadConnected] = useState(false);
+  const [gamepadDebug, setGamepadDebug] = useState(false);
 
   // Wrappers que disparam animação de saída antes de desmontar
   const closeSettings = useCallback(() => {
@@ -1586,17 +2558,18 @@ export default function PlayboxLauncher() {
   }, []);
 
   useEffect(() => {
-    if (config.music_enabled && splashDone && !launching && !quitting) {
+    if (config.music_enabled && splashDone && !launching && !quitting && !emulator) {
       if (!ambientMusic.isPlaying) {
         ambientMusic.start(config.music_volume ?? 0.3);
       } else {
         ambientMusic.setVolume(config.music_volume ?? 0.3);
       }
     } else {
-      ambientMusic.stop();
+      // Quando jogo abre ou emulador embarcado roda: para IMEDIATAMENTE (sem fade-out residual)
+      ambientMusic.stop({ immediate: !!(launching || emulator) });
     }
     return () => {};
-  }, [config.music_enabled, config.music_volume, splashDone, launching, quitting]);
+  }, [config.music_enabled, config.music_volume, splashDone, launching, quitting, emulator]);
 
   // Unlock audio context na primeira interação (autoplay policy)
   useEffect(() => {
@@ -1750,6 +2723,18 @@ export default function PlayboxLauncher() {
     sfx.confirm();
     setLaunching(true);
     setLaunchMsg({ kind: "launching", text: `Iniciando ${selectedGame.name}...` });
+    // CRITICO: minimiza/oculta o launcher ANTES de spawn do emulador.
+    // Se spawnar primeiro, o launcher continua em fullscreen exclusive segurando foco
+    // -> emulador abre por baixo, Windows trata launcher como prioridade, qualquer
+    //    botao do controle no emulador tambem chega no launcher e fecha o jogo.
+    try {
+      const w = getCurrentWindow();
+      try { await w.setFullscreen(false); } catch {}
+      try { await w.minimize(); } catch {}
+      try { await w.hide(); } catch {}
+    } catch (err) {
+      console.warn("pre-launch hide", err);
+    }
     try {
       await invoke("launch_game", { systemId: launchSystemId, romPath });
       setLaunchMsg({ kind: "ok", text: `${selectedGame.name} iniciado` });
@@ -1785,11 +2770,19 @@ export default function PlayboxLauncher() {
         });
       }
       setTimeout(() => setLaunchMsg(null), 3000);
-      setTimeout(() => setLaunching(false), 1200);
+      // launching fica true ate game-killed event chegar (combo Select+R1 ou Select+Start).
     } catch (e) {
       setLaunchMsg({ kind: "error", text: String(e) });
       setTimeout(() => setLaunchMsg(null), 8000);
       setLaunching(false);
+      // Restaura janela porque o emulador falhou ao abrir
+      try {
+        const w = getCurrentWindow();
+        try { await w.show(); } catch {}
+        try { await w.unminimize(); } catch {}
+        try { await w.setFullscreen(true); } catch {}
+        try { await w.setFocus(); } catch {}
+      } catch {}
     }
   }, [selected, selectedGame, launchSystemId, activeProfile, updateActiveProfile, checkAchievements]);
 
@@ -1798,9 +2791,27 @@ export default function PlayboxLauncher() {
     if (selectedGame.discs && selectedGame.discs.length > 1) {
       sfx.open();
       setDiscPicker({ system: selected, game: selectedGame });
-    } else {
-      launchGameWithPath(selectedGame.path);
+      return;
     }
+    // Sistema com libretro_core configurado = roda EMBARCADO no Playbox
+    if (selected?.libretro_core) {
+      sfx.confirm();
+      // Quick resume: se ja tem save, oferece continuar
+      invoke("libretro_list_states", { romPath: selectedGame.path })
+        .then((list) => {
+          if (Array.isArray(list) && list.length > 0) {
+            const latest = list.reduce((a, b) => (a.modified_at >= b.modified_at ? a : b));
+            setResumePrompt({ system: selected, game: selectedGame, slot: latest.slot, when: latest.modified_at });
+          } else {
+            setEmulator({ system: selected, game: selectedGame, autoLoadSlot: null });
+          }
+        })
+        .catch(() => {
+          setEmulator({ system: selected, game: selectedGame, autoLoadSlot: null });
+        });
+      return;
+    }
+    launchGameWithPath(selectedGame.path);
   }, [selected, selectedGame, launchGameWithPath]);
 
   const toggleFullscreen = useCallback(async () => {
@@ -2217,88 +3228,333 @@ export default function PlayboxLauncher() {
   // -------- Listener: emulador foi morto pelo combo Select+Start --------
   useEffect(() => {
     let unlisten;
-    listen("game-killed", () => {
+    listen("game-killed", async () => {
       setLaunching(false);
       setWelcomeBack(true);
       sfx.open();
       setTimeout(() => setWelcomeBack(false), 700);
-      setLaunchMsg({ kind: "ok", text: "Jogo encerrado pelo controle (Select+Start)" });
+      setLaunchMsg({ kind: "ok", text: "Jogo encerrado" });
       setTimeout(() => setLaunchMsg(null), 2200);
       invoke("discord_clear_activity").catch(() => {});
+      // Restaura janela do launcher (foi escondida + minimizada ao iniciar jogo externo)
+      try {
+        const w = getCurrentWindow();
+        try { await w.show(); } catch {}
+        try { await w.unminimize(); } catch {}
+        try { await w.setFullscreen(true); } catch {}
+        try { await w.setFocus(); } catch {}
+      } catch (err) {
+        console.warn("restore on game-killed", err);
+      }
     }).then((u) => { unlisten = u; });
     return () => { try { unlisten && unlisten(); } catch {} };
   }, []);
 
   // -------- Gamepad polling --------
+  // Refs pra valores que mudam a cada navegacao. Sem isso o useEffect re-cria
+  // o RAF e zera o cooldown -> 1 toque pula varios itens.
+  const padCtxRef = useRef({
+    selected: null,
+    selectedGame: null,
+    visibleGames: [],
+    displayedSystems: [],
+    handleLaunch: () => {},
+    toggleFavorite: () => {},
+    settingsOpen: false,
+    profilesOpen: false,
+    searchOpen: false,
+    launching: false,
+    emulatorOpen: false,
+    focusZone: "games",
+    setFocusZone: () => {},
+    closeSettings: () => {},
+    closeProfiles: () => {},
+    closeSearch: () => {},
+  });
+  // Handler de input de modal (cada modal seta o seu via useEffect ao montar).
+  // Recebe action: "left"|"right"|"up"|"down"|"a"|"b"|"y"|"x"|"start"|"select"
+  const modalGamepadRef = useRef(null);
+  useEffect(() => {
+    padCtxRef.current.selected = selected;
+    padCtxRef.current.selectedGame = selectedGame;
+    padCtxRef.current.visibleGames = visibleGames;
+    padCtxRef.current.displayedSystems = displayedSystems;
+    padCtxRef.current.handleLaunch = handleLaunch;
+    padCtxRef.current.toggleFavorite = toggleFavorite;
+    padCtxRef.current.settingsOpen = settingsOpen;
+    padCtxRef.current.profilesOpen = profilesOpen;
+    padCtxRef.current.searchOpen = searchOpen;
+    padCtxRef.current.launching = launching;
+    padCtxRef.current.emulatorOpen = !!emulator;
+    padCtxRef.current.focusZone = focusZone;
+    padCtxRef.current.setFocusZone = setFocusZone;
+    padCtxRef.current.closeSettings = closeSettings;
+    padCtxRef.current.closeProfiles = closeProfiles;
+    padCtxRef.current.closeSearch = closeSearch;
+  });
+
   useEffect(() => {
     if (!splashDone) return;
     let raf;
-    const last = { dir: 0, btn: 0, fav: 0, search: 0 };
-    const COOLDOWN_DIR = 180;
-    const COOLDOWN_BTN = 320;
+    // estado de input persistente entre frames
+    const st = {
+      // edge detection: guarda se direcao estava pressionada no frame anterior
+      prevLeft: false, prevRight: false, prevUp: false, prevDown: false,
+      prevA: false, prevB: false, prevX: false, prevY: false,
+      prevLB: false, prevRB: false, prevStart: false, prevSelect: false,
+      // auto-repeat
+      heldDir: null, heldSince: 0, lastRepeat: 0,
+      // identificacao do controle ja anunciada
+      announcedId: null,
+    };
+    const DEADZONE = 0.7;
+    const REPEAT_DELAY = 380;   // tempo segurando antes de comecar a repetir
+    const REPEAT_RATE = 110;    // intervalo entre repeticoes
 
     function navGame(delta) {
-      if (!selected || visibleGames.length === 0) return;
+      const ctx = padCtxRef.current;
+      if (!ctx.selected || ctx.visibleGames.length === 0) return;
       sfx.nav();
-      setSelectedGameIdx((g) => Math.max(0, Math.min(visibleGames.length - 1, g + delta)));
+      setSelectedGameIdx((g) => Math.max(0, Math.min(ctx.visibleGames.length - 1, g + delta)));
     }
     function navSys(delta) {
-      setSelectedSystemIdx((i) => Math.max(0, Math.min(displayedSystems.length - 1, i + delta)));
+      const ctx = padCtxRef.current;
+      sfx.nav();
+      setSelectedSystemIdx((i) => Math.max(0, Math.min(ctx.displayedSystems.length - 1, i + delta)));
+    }
+    // Roteamento por zona: na zona "games", LEFT/RIGHT navega jogos, DOWN vai pra systems.
+    // Na zona "systems", LEFT/RIGHT navega sistemas, UP volta pra games.
+    // LB/RB sempre trocam sistema (atalho rapido independente da zona).
+    function fireDir(dir) {
+      const ctx = padCtxRef.current;
+      if (dir === "lb") { navSys(-1); return; }
+      if (dir === "rb") { navSys(1); return; }
+      if (ctx.focusZone === "systems") {
+        if (dir === "right") navSys(1);
+        else if (dir === "left") navSys(-1);
+        else if (dir === "up") { sfx.nav(); ctx.setFocusZone("games"); }
+        // down em systems: nada (ja esta no fundo)
+      } else { // games
+        if (dir === "right") navGame(1);
+        else if (dir === "left") navGame(-1);
+        else if (dir === "down") { sfx.nav(); ctx.setFocusZone("systems"); }
+        // up em games: nada (ja esta no topo)
+      }
     }
 
     function poll() {
       try {
-      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-      let pad = null;
-      for (const p of pads) { if (p) { pad = p; break; } }
-      setGamepadConnected(!!pad);
-      if (!pad || settingsOpen || profilesOpen || searchOpen) {
-        raf = requestAnimationFrame(poll);
-        return;
-      }
-      const now = performance.now();
-      const ax = pad.axes[0] || 0;
-      const ay = pad.axes[1] || 0;
-      const dRight = (pad.buttons[15]?.pressed ? 1 : 0) || (ax > 0.5 ? 1 : 0);
-      const dLeft  = (pad.buttons[14]?.pressed ? 1 : 0) || (ax < -0.5 ? 1 : 0);
-      const dDown  = (pad.buttons[13]?.pressed ? 1 : 0) || (ay > 0.5 ? 1 : 0);
-      const dUp    = (pad.buttons[12]?.pressed ? 1 : 0) || (ay < -0.5 ? 1 : 0);
-      if ((dRight || dLeft || dDown || dUp) && now - last.dir > COOLDOWN_DIR) {
-        last.dir = now;
-        if (dRight) navGame(1);
-        else if (dLeft) navGame(-1);
-        else if (dDown) navSys(1);
-        else if (dUp) navSys(-1);
-      }
-      // A (0) = launch
-      if (pad.buttons[0]?.pressed && now - last.btn > COOLDOWN_BTN) {
-        last.btn = now;
-        if (selectedGame) handleLaunch();
-      }
-      // Y (3) = settings
-      if (pad.buttons[3]?.pressed && now - last.btn > COOLDOWN_BTN) {
-        last.btn = now;
-        sfx.confirm();
-        setSettingsOpen(true);
-      }
-      // X (2) = profiles
-      if (pad.buttons[2]?.pressed && now - last.btn > COOLDOWN_BTN) {
-        last.btn = now;
-        sfx.confirm();
-        setProfilesOpen(true);
-      }
-      // B (1) = nada por agora
-      // Start (9) = search
-      if (pad.buttons[9]?.pressed && now - last.search > COOLDOWN_BTN) {
-        last.search = now;
-        sfx.confirm();
-        setSearchOpen(true);
-      }
-      // RB (5) = favorito
-      if (pad.buttons[5]?.pressed && now - last.fav > COOLDOWN_BTN) {
-        last.fav = now;
-        toggleFavorite();
-      }
+        // Se o launcher esta oculto/minimizado, NAO processa input.
+        // Senao apertar botao no emulador externo (ex: B no Yuzu pra acao do jogo)
+        // o launcher ve e dispara kill_running_game — fechando o jogo do nada.
+        if (document.hidden || document.visibilityState !== "visible") {
+          raf = requestAnimationFrame(poll);
+          return;
+        }
+        const ctx = padCtxRef.current;
+        const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+        // Pega o primeiro pad com pelo menos 1 botao OU eixo nao-zero (filtra phantoms)
+        let pad = null;
+        for (const p of pads) {
+          if (!p) continue;
+          // Se ainda nao identificou nenhum, pega esse mesmo
+          pad = p;
+          break;
+        }
+        setGamepadConnected(!!pad);
+        // Publica diagnostico no window pra overlay ler
+        window.__pbGamepad = pad;
+        // Pausa polling quando emulador embarcado roda (input deve ir pro libretro).
+        if (!pad || ctx.emulatorOpen) {
+          raf = requestAnimationFrame(poll);
+          return;
+        }
+        // Quando ha modal aberto: input vai pro modal handler.
+        // Modal handler retorna true se consumiu o input.
+        const modalActive = ctx.settingsOpen || ctx.profilesOpen || ctx.searchOpen;
+        if (modalActive) {
+          const isStandardM = pad.mapping === "standard";
+          const ax = pad.axes[0] || 0;
+          const ay = pad.axes[1] || 0;
+          const right = (isStandardM && !!pad.buttons[15]?.pressed) || ax > DEADZONE || (pad.axes[6] || 0) > 0.5;
+          const left  = (isStandardM && !!pad.buttons[14]?.pressed) || ax < -DEADZONE || (pad.axes[6] || 0) < -0.5;
+          const down  = (isStandardM && !!pad.buttons[13]?.pressed) || ay > DEADZONE || (pad.axes[7] || 0) > 0.5;
+          const up    = (isStandardM && !!pad.buttons[12]?.pressed) || ay < -DEADZONE || (pad.axes[7] || 0) < -0.5;
+          const aBtn  = isStandardM && !!pad.buttons[0]?.pressed;
+          const bBtn  = isStandardM && !!pad.buttons[1]?.pressed;
+          const xBtn  = isStandardM && !!pad.buttons[2]?.pressed;
+          const yBtn  = isStandardM && !!pad.buttons[3]?.pressed;
+          const startBtn  = isStandardM && !!pad.buttons[9]?.pressed;
+          const selectBtn = isStandardM && !!pad.buttons[8]?.pressed;
+          const now = performance.now();
+          // direcao com edge + repeat
+          let firedNow = null;
+          if (right && !st.prevRight) firedNow = "right";
+          else if (left && !st.prevLeft) firedNow = "left";
+          else if (down && !st.prevDown) firedNow = "down";
+          else if (up && !st.prevUp) firedNow = "up";
+          if (firedNow) {
+            modalGamepadRef.current?.(firedNow);
+            st.heldDir = firedNow;
+            st.heldSince = now;
+            st.lastRepeat = now;
+          } else {
+            const stillHeld =
+              (st.heldDir === "right" && right) ||
+              (st.heldDir === "left" && left) ||
+              (st.heldDir === "down" && down) ||
+              (st.heldDir === "up" && up);
+            if (stillHeld && now - st.heldSince > REPEAT_DELAY && now - st.lastRepeat > REPEAT_RATE) {
+              modalGamepadRef.current?.(st.heldDir);
+              st.lastRepeat = now;
+            } else if (!stillHeld) {
+              st.heldDir = null;
+            }
+          }
+          st.prevRight = right; st.prevLeft = left; st.prevDown = down; st.prevUp = up;
+          // botoes: edge detection
+          if (aBtn && !st.prevA) modalGamepadRef.current?.("a");
+          if (bBtn && !st.prevB) {
+            // B fecha modal sempre (fallback se modal nao consumir)
+            const consumed = modalGamepadRef.current?.("b");
+            if (!consumed) {
+              sfx.back();
+              if (ctx.searchOpen) ctx.closeSearch();
+              else if (ctx.profilesOpen) ctx.closeProfiles();
+              else if (ctx.settingsOpen) ctx.closeSettings();
+            }
+          }
+          if (xBtn && !st.prevX) modalGamepadRef.current?.("x");
+          if (yBtn && !st.prevY) modalGamepadRef.current?.("y");
+          if (startBtn && !st.prevStart) modalGamepadRef.current?.("start");
+          if (selectBtn && !st.prevSelect) modalGamepadRef.current?.("select");
+          st.prevA = aBtn; st.prevB = bBtn; st.prevX = xBtn; st.prevY = yBtn;
+          st.prevStart = startBtn; st.prevSelect = selectBtn;
+          raf = requestAnimationFrame(poll);
+          return;
+        }
+        // Quando launching: SO processa combo Select+R1 pra cancelar (combo dificil de
+        // disparar acidentalmente durante gameplay). Botao unico apertado no emulador
+        // externo nao deve fechar o jogo via launcher.
+        if (ctx.launching) {
+          const isStandard2 = pad.mapping === "standard";
+          const selectHeld = isStandard2 && !!pad.buttons[8]?.pressed; // Select / Back
+          const r1Held = isStandard2 && !!pad.buttons[5]?.pressed;     // RB / R1
+          const comboCancel = selectHeld && r1Held;
+          if (comboCancel && !st.prevCancelCombo) {
+            st.prevCancelCombo = true;
+            sfx.back();
+            invoke("kill_running_game").catch(() => {});
+            setLaunching(false);
+            setLaunchMsg(null);
+            (async () => {
+              try {
+                const w = getCurrentWindow();
+                try { await w.show(); } catch {}
+                try { await w.unminimize(); } catch {}
+                try { await w.setFullscreen(true); } catch {}
+                try { await w.setFocus(); } catch {}
+              } catch {}
+            })();
+          } else if (!comboCancel) {
+            st.prevCancelCombo = false;
+          }
+          raf = requestAnimationFrame(poll);
+          return;
+        }
+        // Anuncia controle quando muda
+        if (st.announcedId !== pad.id) {
+          st.announcedId = pad.id;
+          // eslint-disable-next-line no-console
+          console.warn(`[gamepad] conectado: "${pad.id}" mapping=${pad.mapping || "(none)"} buttons=${pad.buttons.length} axes=${pad.axes.length}`);
+        }
+        const isStandard = pad.mapping === "standard";
+        const now = performance.now();
+        const ax = pad.axes[0] || 0;
+        const ay = pad.axes[1] || 0;
+        // D-pad como botoes SO confia se mapping for standard (Xbox via XInput)
+        const dpRight = isStandard && !!pad.buttons[15]?.pressed;
+        const dpLeft  = isStandard && !!pad.buttons[14]?.pressed;
+        const dpDown  = isStandard && !!pad.buttons[13]?.pressed;
+        const dpUp    = isStandard && !!pad.buttons[12]?.pressed;
+        // Em controles non-standard, alguns mapeiam D-pad como axes[6]/axes[7] (HAT)
+        // axes[9] em alguns DS4: -1=up, -0.71=up-right, etc. Detecta via valores discretos
+        const hatX = pad.axes[6] || 0;
+        const hatY = pad.axes[7] || 0;
+        const right = dpRight || ax > DEADZONE || hatX > 0.5;
+        const left  = dpLeft  || ax < -DEADZONE || hatX < -0.5;
+        const down  = dpDown  || ay > DEADZONE || hatY > 0.5;
+        const up    = dpUp    || ay < -DEADZONE || hatY < -0.5;
+        const lb    = isStandard && !!pad.buttons[4]?.pressed;
+        const rb    = isStandard && !!pad.buttons[5]?.pressed;
+
+        // edge: dispara so na transicao false->true
+        let firedNow = null;
+        if (right && !st.prevRight) firedNow = "right";
+        else if (left && !st.prevLeft) firedNow = "left";
+        else if (down && !st.prevDown) firedNow = "down";
+        else if (up && !st.prevUp) firedNow = "up";
+        else if (rb && !st.prevRB) firedNow = "rb";
+        else if (lb && !st.prevLB) firedNow = "lb";
+
+        if (firedNow) {
+          fireDir(firedNow);
+          st.heldDir = firedNow;
+          st.heldSince = now;
+          st.lastRepeat = now;
+        } else {
+          // auto-repeat se a direcao continua segurada
+          const stillHeld =
+            (st.heldDir === "right" && right) ||
+            (st.heldDir === "left" && left) ||
+            (st.heldDir === "down" && down) ||
+            (st.heldDir === "up" && up) ||
+            (st.heldDir === "rb" && rb) ||
+            (st.heldDir === "lb" && lb);
+          if (stillHeld && now - st.heldSince > REPEAT_DELAY && now - st.lastRepeat > REPEAT_RATE) {
+            fireDir(st.heldDir);
+            st.lastRepeat = now;
+          } else if (!stillHeld) {
+            st.heldDir = null;
+          }
+        }
+
+        st.prevRight = right; st.prevLeft = left; st.prevDown = down; st.prevUp = up;
+        st.prevLB = lb; st.prevRB = rb;
+
+        // botoes: edge detection (1 press = 1 acao). So aceita botoes em controle standard
+        // pra evitar disparar acoes erradas em controle generico mal-mapeado.
+        if (isStandard) {
+          const a = !!pad.buttons[0]?.pressed;
+          const b = !!pad.buttons[1]?.pressed;
+          const x = !!pad.buttons[2]?.pressed;
+          const y = !!pad.buttons[3]?.pressed;
+          const start = !!pad.buttons[9]?.pressed;
+          const select = !!pad.buttons[8]?.pressed;
+
+          // A: contextual conforme zona
+          if (a && !st.prevA) {
+            if (ctx.focusZone === "systems") {
+              // confirmar sistema selecionado e voltar pra zona de jogos
+              sfx.confirm();
+              ctx.setFocusZone("games");
+            } else if (ctx.selectedGame) {
+              ctx.handleLaunch();
+            }
+          }
+          // B: voltar pra zona systems (ou nada se ja la)
+          if (b && !st.prevB && ctx.focusZone === "games") {
+            sfx.back();
+            ctx.setFocusZone("systems");
+          }
+          if (y && !st.prevY) { sfx.confirm(); setSettingsOpen(true); }
+          if (x && !st.prevX) { sfx.confirm(); setProfilesOpen(true); }
+          if (start && !st.prevStart) { sfx.confirm(); setSearchOpen(true); }
+          if (select && !st.prevSelect) ctx.toggleFavorite();
+
+          st.prevA = a; st.prevB = b; st.prevX = x; st.prevY = y;
+          st.prevStart = start; st.prevSelect = select;
+        }
       } catch (err) {
         console.error("gamepad poll error", err);
       }
@@ -2306,13 +3562,33 @@ export default function PlayboxLauncher() {
     }
     raf = requestAnimationFrame(poll);
     return () => cancelAnimationFrame(raf);
-  }, [splashDone, settingsOpen, profilesOpen, searchOpen, systems, selected, selectedGame, handleLaunch, toggleFavorite]);
+  }, [splashDone]);
 
   // keyboard
   useEffect(() => {
     const onKey = (e) => {
       if (!splashDone) return;
       if (e.key === "F11") { e.preventDefault(); toggleFullscreen(); return; }
+      if (e.key === "F2") { e.preventDefault(); setGamepadDebug((v) => !v); return; }
+
+      // Cancelar tela "Iniciando..." se travada (emulador externo bugou)
+      if (launching && (e.key === "Escape" || e.key === "Backspace")) {
+        e.preventDefault();
+        sfx.back();
+        invoke("kill_running_game").catch(() => {});
+        setLaunching(false);
+        setLaunchMsg(null);
+        (async () => {
+          try {
+            const w = getCurrentWindow();
+            try { await w.show(); } catch {}
+            try { await w.unminimize(); } catch {}
+            try { await w.setFullscreen(true); } catch {}
+            try { await w.setFocus(); } catch {}
+          } catch {}
+        })();
+        return;
+      }
 
       if (searchOpen) {
         // search lida com Escape internamente
@@ -2335,26 +3611,39 @@ export default function PlayboxLauncher() {
       if (e.key === "Escape") { e.preventDefault(); sfx.confirm(); setSettingsOpen(true); return; }
 
       if (loading || displayedSystems.length === 0) return;
-      if (e.key === "ArrowRight" && visibleGames.length > 0) {
+      // Navegacao por zona (mesma logica do gamepad)
+      if (e.key === "ArrowRight") {
         e.preventDefault(); sfx.nav();
-        setSelectedGameIdx((g) => Math.min(visibleGames.length - 1, g + 1));
-      } else if (e.key === "ArrowLeft" && visibleGames.length > 0) {
+        if (focusZone === "systems") {
+          setSelectedSystemIdx((i) => Math.min(displayedSystems.length - 1, i + 1));
+        } else if (visibleGames.length > 0) {
+          setSelectedGameIdx((g) => Math.min(visibleGames.length - 1, g + 1));
+        }
+      } else if (e.key === "ArrowLeft") {
         e.preventDefault(); sfx.nav();
-        setSelectedGameIdx((g) => Math.max(0, g - 1));
+        if (focusZone === "systems") {
+          setSelectedSystemIdx((i) => Math.max(0, i - 1));
+        } else if (visibleGames.length > 0) {
+          setSelectedGameIdx((g) => Math.max(0, g - 1));
+        }
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        setSelectedSystemIdx((i) => Math.min(displayedSystems.length - 1, i + 1));
+        if (focusZone === "games") { sfx.nav(); setFocusZone("systems"); }
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setSelectedSystemIdx((i) => Math.max(0, i - 1));
-      } else if (e.key === "Enter" && selectedGame) {
+        if (focusZone === "systems") { sfx.nav(); setFocusZone("games"); }
+      } else if (e.key === "Enter") {
         e.preventDefault();
-        handleLaunch();
+        if (focusZone === "systems") { sfx.confirm(); setFocusZone("games"); }
+        else if (selectedGame) handleLaunch();
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        if (focusZone === "games") { sfx.back(); setFocusZone("systems"); }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [splashDone, settingsOpen, profilesOpen, searchOpen, loading, displayedSystems, selected, selectedGame, handleLaunch, toggleFullscreen, toggleFavorite]);
+  }, [splashDone, settingsOpen, profilesOpen, searchOpen, loading, displayedSystems, selected, selectedGame, handleLaunch, toggleFullscreen, toggleFavorite, launching, focusZone, visibleGames.length]);
 
   return (
     <div className={`pb ${quitting ? "quitting" : ""}`} style={{ "--accent": accentColor }}>
@@ -2486,11 +3775,13 @@ export default function PlayboxLauncher() {
                     const cover = covers[g.path];
                     const hasCover = typeof cover === "string" && cover.length > 0;
                     const isFav = favoriteSet.has(g.path);
+                    const playSec = activeProfile?.play_time?.[g.path] || 0;
+                    const lastPlayed = activeProfile?.last_played?.[g.path] || 0;
                     return (
                       <div key={g.path} className="pb-card-wrap">
                         <button
                           ref={i === selectedGameIdx ? activeCardRef : null}
-                          className={`pb-card ${i === selectedGameIdx ? "active" : ""} ${hasCover ? "has-cover" : ""}`}
+                          className={`pb-card ${i === selectedGameIdx ? (focusZone === "games" ? "active focused" : "active") : ""} ${hasCover ? "has-cover" : ""}`}
                           style={{ "--card-color": selected.color, animationDelay: `${i * 40}ms` }}
                           onClick={() => { sfx.click(); setSelectedGameIdx(i); }}
                           onDoubleClick={handleLaunch}
@@ -2513,6 +3804,14 @@ export default function PlayboxLauncher() {
                           {isFav && <span className="pb-card-fav"><StarIcon filled /></span>}
                           {g.discs && g.discs.length > 1 && (
                             <span className="pb-card-discs" title={`${g.discs.length} discos`}>💿×{g.discs.length}</span>
+                          )}
+                          {playSec > 0 && (
+                            <div className="pb-card-stats">
+                              <span className="pb-card-stat-time">{formatPlayTime(playSec)}</span>
+                              {lastPlayed > 0 && (
+                                <span className="pb-card-stat-when">{formatRelativeDays(lastPlayed)}</span>
+                              )}
+                            </div>
                           )}
                         </button>
                         <button
@@ -2540,7 +3839,7 @@ export default function PlayboxLauncher() {
         )}
       </main>
 
-      <nav className="pb-systems">
+      <nav className={`pb-systems ${focusZone === "systems" ? "focused" : ""}`}>
         <div className="pb-systems-list">
           {displayedSystems.map((sys, i) => {
             const isActive = i === selectedSystemIdx;
@@ -2549,7 +3848,7 @@ export default function PlayboxLauncher() {
             return (
               <button
                 key={sys.id}
-                className={`pb-sys ${isActive ? "active" : ""} ${isEmpty ? "empty" : ""} ${isFav ? "pb-sys-favorites" : ""}`}
+                className={`pb-sys ${isActive ? (focusZone === "systems" ? "active focused" : "active") : ""} ${isEmpty ? "empty" : ""} ${isFav ? "pb-sys-favorites" : ""}`}
                 style={{ "--sys-color": sys.color }}
                 onClick={() => setSelectedSystemIdx(i)}
                 title={`${sys.name}${sys.games.length ? ` · ${sys.games.length} jogos` : ""}`}
@@ -2571,15 +3870,32 @@ export default function PlayboxLauncher() {
       </nav>
 
       <div className="pb-hints">
-        <span className="pb-hint-key">+</span> Opcoes (S)
+        {focusZone === "games" ? (
+          <>
+            <span className="pb-hint-key">A</span> Iniciar
+            <span className="pb-hint-divider" />
+            <span className="pb-hint-key">B</span> Sistemas
+          </>
+        ) : (
+          <>
+            <span className="pb-hint-key">A</span> Entrar
+            <span className="pb-hint-divider" />
+            <span className="pb-hint-key">↑</span> Voltar
+          </>
+        )}
         <span className="pb-hint-divider" />
-        <span className="pb-hint-key">A</span> Iniciar
+        <span className="pb-hint-key">Y</span> Opcoes
+        <span className="pb-hint-divider" />
+        <span className="pb-hint-key">F2</span> Diagnostico
       </div>
+
+      {gamepadDebug && <GamepadDebugOverlay onClose={() => setGamepadDebug(false)} />}
 
       {settingsOpen && (
         <SettingsPanel
           closing={settingsClosing}
           onClose={closeSettings}
+          modalGamepadRef={modalGamepadRef}
           systems={systems}
           romsRoot={romsRoot}
           emulatorsRoot={emulatorsRoot}
@@ -2612,6 +3928,7 @@ export default function PlayboxLauncher() {
           closing={searchClosing}
           systems={systems}
           onClose={closeSearch}
+          modalGamepadRef={modalGamepadRef}
           onPick={({ system, game }) => {
             selectGameByPath(system.id, game.path);
             closeSearch();
@@ -2633,6 +3950,7 @@ export default function PlayboxLauncher() {
           onUpdate={updateProfile}
           onDelete={deleteProfile}
           onClose={closeProfiles}
+          modalGamepadRef={modalGamepadRef}
         />
       )}
 
@@ -2728,6 +4046,32 @@ export default function PlayboxLauncher() {
         <LogsViewerModal onClose={() => { sfx.back(); setLogsOpen(false); }} />
       )}
 
+      {emulator && (
+        <EmulatorView
+          system={emulator.system}
+          game={emulator.game}
+          autoLoadSlot={emulator.autoLoadSlot}
+          onClose={() => { sfx.back(); setEmulator(null); }}
+        />
+      )}
+
+      {resumePrompt && (
+        <ResumePromptModal
+          info={resumePrompt}
+          onContinue={() => {
+            const r = resumePrompt;
+            setResumePrompt(null);
+            setEmulator({ system: r.system, game: r.game, autoLoadSlot: r.slot });
+          }}
+          onFresh={() => {
+            const r = resumePrompt;
+            setResumePrompt(null);
+            setEmulator({ system: r.system, game: r.game, autoLoadSlot: null });
+          }}
+          onCancel={() => { sfx.back(); setResumePrompt(null); }}
+        />
+      )}
+
       {launching && selectedBgSrc && (
         <div className="pb-launching">
           <img className="pb-launching-bg" src={selectedBgSrc} alt="" aria-hidden />
@@ -2735,6 +4079,22 @@ export default function PlayboxLauncher() {
             <div className="pb-launching-label">INICIANDO</div>
             <div className="pb-launching-title">{selectedGame?.name}</div>
             <div className="pb-launching-system">{selected?.name}</div>
+            <button
+              className="pb-launching-cancel"
+              onClick={async () => {
+                sfx.back();
+                try { await invoke("kill_running_game"); } catch {}
+                setLaunching(false);
+                setLaunchMsg(null);
+                try {
+                  const w = getCurrentWindow();
+                  try { await w.show(); } catch {}
+                  try { await w.unminimize(); } catch {}
+                  try { await w.setFullscreen(true); } catch {}
+                  try { await w.setFocus(); } catch {}
+                } catch {}
+              }}
+            >Cancelar (Esc / Select+R1)</button>
           </div>
         </div>
       )}
