@@ -279,7 +279,7 @@ const EMULATORS: &[EmulatorConfig] = &[
         folder_name: "XBOX",
         emulator_rel: "XBOX\\xemu.exe",
         extensions: &["iso", "xiso"],
-        launch_args: &[],
+        launch_args: &["-dvd_path"],
         igdb_platform: 11,
     },
     EmulatorConfig {
@@ -850,6 +850,13 @@ fn launch_game(system_id: String, rom_path: String) -> Result<(), String> {
     command.arg(&rom_path);
     if let Some(parent) = exe.parent() {
         command.current_dir(parent);
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const HIGH_PRIORITY_CLASS: u32 = 0x0000_0080;
+        command.creation_flags(HIGH_PRIORITY_CLASS);
     }
 
     let child = command
