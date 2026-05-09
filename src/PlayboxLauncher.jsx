@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -1353,6 +1354,10 @@ function SettingsPanel({
 
         <div className="pb-settings-section">
           <h3>Atualizações</h3>
+          <div className="pb-version-line">
+            <span className="pb-version-label">Versão instalada:</span>
+            <strong className="pb-version-current">v{appVersion || "?"}</strong>
+          </div>
           <button className="pb-settings-btn" onClick={() => { sfx.click(); doCheckUpdate(); }} disabled={updateBusy}>
             <RefreshIcon /> {updateBusy ? "Verificando..." : "Verificar atualização"}
           </button>

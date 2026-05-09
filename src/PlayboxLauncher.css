@@ -3780,6 +3780,20 @@
 .pb-coll-status-abandoned .pb-coll-status-icon { color: #f87171; opacity: 0.7; }
 .pb-coll-status-abandoned strong { color: #f87171; opacity: 0.85; }
 
+/* ===== Version line ===== */
+.pb-version-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  border-left: 3px solid rgba(139, 92, 246, 0.6);
+}
+.pb-version-label { font-size: 12px; opacity: 0.65; text-transform: uppercase; letter-spacing: 0.4px; }
+.pb-version-current { font-size: 16px; font-weight: 700; color: #c4b5fd; font-variant-numeric: tabular-nums; }
+
 /* ===== RetroAchievements ===== */
 .pb-ra-card {
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.06), rgba(96, 165, 250, 0.04));
