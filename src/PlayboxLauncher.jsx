@@ -3999,6 +3999,10 @@ export default function PlayboxLauncher() {
                     const isFav = favoriteSet.has(g.path);
                     const playSec = activeProfile?.play_time?.[g.path] || 0;
                     const lastPlayed = activeProfile?.last_played?.[g.path] || 0;
+                    const sysId = g._origin_system_id || selected.id;
+                    const meta = gameMetaMap[`${sysId}::${g.path}`];
+                    const metaStatus = meta?.status || "";
+                    const metaRating = meta?.rating || 0;
                     return (
                       <div key={g.path} className="pb-card-wrap">
                         <button
@@ -4026,6 +4030,16 @@ export default function PlayboxLauncher() {
                           {isFav && <span className="pb-card-fav"><StarIcon filled /></span>}
                           {g.discs && g.discs.length > 1 && (
                             <span className="pb-card-discs" title={`${g.discs.length} discos`}>💿×{g.discs.length}</span>
+                          )}
+                          {metaStatus && (
+                            <span className={`pb-card-status pb-card-status-${metaStatus}`} title={GAME_STATUS_LABELS[metaStatus]}>
+                              {GAME_STATUS_EMOJI[metaStatus]}
+                            </span>
+                          )}
+                          {metaRating > 0 && (
+                            <span className="pb-card-rating" title={`${metaRating}/5 estrelas`}>
+                              {"★".repeat(metaRating)}
+                            </span>
                           )}
                           {playSec > 0 && (
                             <div className="pb-card-stats">
