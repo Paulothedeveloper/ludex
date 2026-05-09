@@ -97,24 +97,88 @@ fn discord_clear_activity() -> Result<(), String> {
     Ok(())
 }
 
-static RUNNING_GAME: OnceLock<Arc<StdMutex<Option<Child>>>> = OnceLock::new();
+/// Info do jogo rodando atualmente. PID e metadata; o ownership do Child fica
+/// na thread que faz wait() e registra a sessao quando termina.
+#[derive(Clone)]
+struct RunningGameInfo {
+    pid: u32,
+    started_at: u64,
+    system_id: String,
+    rom_path: String,
+    rom_name: String,
+}
+
+static RUNNING_GAME: OnceLock<Arc<StdMutex<Option<RunningGameInfo>>>> = OnceLock::new();
 static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
 
-fn running_game_slot() -> Arc<StdMutex<Option<Child>>> {
+fn running_game_slot() -> Arc<StdMutex<Option<RunningGameInfo>>> {
     RUNNING_GAME
         .get_or_init(|| Arc::new(StdMutex::new(None)))
         .clone()
 }
 
 fn kill_running_game_inner() -> bool {
-    let slot = running_game_slot();
-    let mut guard = slot.lock().unwrap();
-    if let Some(mut child) = guard.take() {
-        let _ = child.kill();
-        let _ = child.wait();
+    let info = {
+        let slot = running_game_slot();
+        let guard = slot.lock().unwrap();
+        guard.clone()
+    };
+    if let Some(info) = info {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            let _ = Command::new("taskkill")
+                .args(["/PID", &info.pid.to_string(), "/T", "/F"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .status();
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = Command::new("kill").args(["-9", &info.pid.to_string()]).status();
+        }
+        // A thread de wait() vai detectar o processo morto, registrar sessao e limpar o slot.
         true
     } else {
         false
+    }
+}
+
+/// Registra duracao da sessao no profile ativo + atualiza last_played.
+/// Tambem emite evento "game-ended" pro front re-fetchar config.
+fn register_session_end(info: &RunningGameInfo, duration_sec: u64) {
+    let mut cfg = load_config();
+    if let Some(active_id) = cfg.active_profile_id.clone() {
+        if let Some(profile) = cfg.profiles.iter_mut().find(|p| p.id == active_id) {
+            let key = format!("{}::{}", info.system_id, info.rom_path);
+            let entry = profile.play_time.entry(key.clone()).or_insert(0);
+            *entry = entry.saturating_add(duration_sec);
+            profile.last_played = Some(LastPlayed {
+                system_id: info.system_id.clone(),
+                rom_path: info.rom_path.clone(),
+                rom_name: info.rom_name.clone(),
+                at: info.started_at + duration_sec,
+            });
+            // Sessions: so guarda se durou >= 30 segundos (filtra falhas de boot)
+            if duration_sec >= 30 {
+                profile.sessions.push(PlaySession {
+                    started_at: info.started_at,
+                    duration_sec,
+                    rom_path: info.rom_path.clone(),
+                    rom_name: info.rom_name.clone(),
+                    system_id: info.system_id.clone(),
+                });
+                // Cap em 500 sessoes mais recentes
+                if profile.sessions.len() > 500 {
+                    let drop_n = profile.sessions.len() - 500;
+                    profile.sessions.drain(0..drop_n);
+                }
+            }
+            let _ = save_config_internal(cfg);
+        }
+    }
+    if let Some(handle) = APP_HANDLE.get() {
+        let _ = handle.emit("game-ended", duration_sec);
     }
 }
 
@@ -843,6 +907,13 @@ fn launch_game(system_id: String, rom_path: String) -> Result<(), String> {
         return Err(format!("ROM nao encontrada em: {}", rom_path));
     }
 
+    let rom_name = rom.file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| rom_path.clone());
+
+    // Mata jogo anterior se existir
+    kill_running_game_inner();
+
     let mut command = Command::new(&exe);
     for arg in cfg.launch_args {
         command.arg(arg);
@@ -859,18 +930,66 @@ fn launch_game(system_id: String, rom_path: String) -> Result<(), String> {
         command.creation_flags(HIGH_PRIORITY_CLASS);
     }
 
-    let child = command
+    let mut child = command
         .spawn()
         .map_err(|e| format!("Falha ao executar emulador: {}", e))?;
 
-    // Mata jogo anterior (defensivo) e armazena o novo PID
-    let slot = running_game_slot();
-    let mut guard = slot.lock().unwrap();
-    if let Some(mut prev) = guard.take() {
-        let _ = prev.kill();
-        let _ = prev.wait();
+    let pid = child.id();
+    let started_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    let info = RunningGameInfo {
+        pid,
+        started_at,
+        system_id: system_id.clone(),
+        rom_path: rom_path.clone(),
+        rom_name: rom_name.clone(),
+    };
+
+    // Incrementa total_launches imediatamente
+    {
+        let mut cfg_now = load_config();
+        if let Some(active_id) = cfg_now.active_profile_id.clone() {
+            if let Some(profile) = cfg_now.profiles.iter_mut().find(|p| p.id == active_id) {
+                profile.total_launches = profile.total_launches.saturating_add(1);
+                profile.last_played = Some(LastPlayed {
+                    system_id: system_id.clone(),
+                    rom_path: rom_path.clone(),
+                    rom_name: rom_name.clone(),
+                    at: started_at,
+                });
+                let _ = save_config_internal(cfg_now);
+            }
+        }
     }
-    *guard = Some(child);
+
+    {
+        let slot = running_game_slot();
+        let mut guard = slot.lock().unwrap();
+        *guard = Some(info.clone());
+    }
+
+    // Thread que faz wait() no Child e registra duracao quando o jogo termina
+    std::thread::spawn(move || {
+        let _ = child.wait();
+        let ended_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(info.started_at);
+        let duration = ended_at.saturating_sub(info.started_at);
+        register_session_end(&info, duration);
+        // Limpa o slot se ainda for esse jogo
+        let slot = running_game_slot();
+        let mut guard = slot.lock().unwrap();
+        if let Some(current) = guard.as_ref() {
+            if current.pid == info.pid {
+                *guard = None;
+            }
+        }
+    });
+
     Ok(())
 }
 
@@ -1230,6 +1349,9 @@ struct AppConfig {
     /// Musica ambiente no menu
     music_enabled: bool,
     music_volume: f32,
+    /// RetroAchievements: username + web API key (gerada em /controlpanel.php)
+    ra_username: Option<String>,
+    ra_api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1255,8 +1377,10 @@ impl Default for AppConfig {
             roms_root: None,
             discord_app_id: None,
             custom_theme: None,
-            music_enabled: false,
-            music_volume: 0.4,
+            music_enabled: true,
+            music_volume: 0.35,
+            ra_username: None,
+            ra_api_key: None,
         }
     }
 }
@@ -2571,6 +2695,282 @@ fn pick_random_game(roms_root: Option<String>) -> Option<RandomGamePick> {
 }
 
 // ============================================================
+// === PLAY STATS — agregados de playtime do profile ativo ===
+// ============================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TopGameStat {
+    system_id: String,
+    rom_path: String,
+    rom_name: String,
+    seconds: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PlayStats {
+    total_play_seconds: u64,
+    total_launches: u32,
+    total_sessions: u32,
+    distinct_games_played: u32,
+    top_games: Vec<TopGameStat>,
+    recent_sessions: Vec<PlaySession>,
+    last_played: Option<LastPlayed>,
+}
+
+#[tauri::command]
+fn get_play_stats() -> PlayStats {
+    let cfg = load_config();
+    let active_id = match cfg.active_profile_id.clone() {
+        Some(id) => id,
+        None => return PlayStats {
+            total_play_seconds: 0, total_launches: 0, total_sessions: 0,
+            distinct_games_played: 0, top_games: Vec::new(),
+            recent_sessions: Vec::new(), last_played: None,
+        },
+    };
+    let profile = match cfg.profiles.iter().find(|p| p.id == active_id) {
+        Some(p) => p,
+        None => return PlayStats {
+            total_play_seconds: 0, total_launches: 0, total_sessions: 0,
+            distinct_games_played: 0, top_games: Vec::new(),
+            recent_sessions: Vec::new(), last_played: None,
+        },
+    };
+
+    let total_play_seconds: u64 = profile.play_time.values().sum();
+    let distinct_games_played = profile.play_time.iter().filter(|(_, &s)| s > 0).count() as u32;
+
+    // Top 5 jogos. Tenta resolver rom_name a partir das sessions (mais recente).
+    let mut name_lookup: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for s in profile.sessions.iter().rev() {
+        let key = format!("{}::{}", s.system_id, s.rom_path);
+        name_lookup.entry(key).or_insert_with(|| s.rom_name.clone());
+    }
+
+    let mut top_pairs: Vec<(String, u64)> = profile.play_time.iter()
+        .filter(|(_, &s)| s > 0)
+        .map(|(k, v)| (k.clone(), *v))
+        .collect();
+    top_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+    top_pairs.truncate(5);
+
+    let top_games: Vec<TopGameStat> = top_pairs.into_iter().map(|(key, seconds)| {
+        let (system_id, rom_path) = match key.split_once("::") {
+            Some((sid, rp)) => (sid.to_string(), rp.to_string()),
+            None => (String::new(), key.clone()),
+        };
+        let rom_name = name_lookup.get(&key)
+            .cloned()
+            .or_else(|| {
+                std::path::Path::new(&rom_path).file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+            })
+            .unwrap_or_else(|| rom_path.clone());
+        TopGameStat { system_id, rom_path, rom_name, seconds }
+    }).collect();
+
+    // Ultimas 10 sessoes
+    let mut recent_sessions: Vec<PlaySession> = profile.sessions.iter().rev().take(10).cloned().collect();
+    recent_sessions.reverse();
+
+    PlayStats {
+        total_play_seconds,
+        total_launches: profile.total_launches,
+        total_sessions: profile.sessions.len() as u32,
+        distinct_games_played,
+        top_games,
+        recent_sessions,
+        last_played: profile.last_played.clone(),
+    }
+}
+
+// ============================================================
+// === RETROACHIEVEMENTS — login + summary + recent ach ======
+// ============================================================
+// Web API key gerada em https://retroachievements.org/controlpanel.php
+// Endpoints: https://retroachievements.org/API/
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct RaRecentAchievement {
+    title: String,
+    description: String,
+    points: i32,
+    badge_url: String,
+    game_title: String,
+    game_id: u32,
+    console_name: String,
+    date_iso: String,
+    hardcore: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct RaSummary {
+    authenticated: bool,
+    username: String,
+    avatar_url: String,
+    total_points: i32,
+    softcore_points: i32,
+    rank: i32,
+    total_ranked: i32,
+    member_since: String,
+    recent_achievements: Vec<RaRecentAchievement>,
+    last_game_title: String,
+    last_game_image_url: String,
+    rich_presence_msg: String,
+}
+
+fn ra_creds_from_cfg(cfg: &AppConfig) -> Option<(String, String)> {
+    let u = cfg.ra_username.clone()?;
+    let k = cfg.ra_api_key.clone()?;
+    if u.is_empty() || k.is_empty() { return None; }
+    Some((u, k))
+}
+
+async fn ra_fetch_summary_internal(username: &str, api_key: &str) -> Result<RaSummary, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent("Playbox/0.3 (RA-companion)")
+        .build()
+        .map_err(|e| format!("http client: {}", e))?;
+
+    // 1) GetUserSummary
+    let url = format!(
+        "https://retroachievements.org/API/API_GetUserSummary.php?u={}&y={}&g=1&a=10",
+        urlencode(username), urlencode(api_key)
+    );
+    let resp = client.get(&url).send().await
+        .map_err(|e| format!("ra summary req: {}", e))?;
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| format!("ra summary body: {}", e))?;
+    if !status.is_success() {
+        return Err(format!("ra summary HTTP {}: {}", status, text.chars().take(200).collect::<String>()));
+    }
+    let v: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("ra summary json: {} (body: {})", e, text.chars().take(120).collect::<String>()))?;
+
+    // RA retorna 200 com {"User":null} se invalid, ou erro string. Detecta:
+    if v.get("User").map(|u| u.is_null()).unwrap_or(true) && v.get("RecentAchievements").is_none() {
+        return Err("Credenciais invalidas (RA respondeu sem User).".to_string());
+    }
+
+    let user = v.get("User").and_then(|x| x.as_str()).unwrap_or(username).to_string();
+    let total_points = v.get("TotalPoints").and_then(|x| x.as_i64()).unwrap_or(0) as i32;
+    let softcore = v.get("TotalSoftcorePoints").and_then(|x| x.as_i64()).unwrap_or(0) as i32;
+    let rank = v.get("Rank").and_then(|x| x.as_i64()).unwrap_or(0) as i32;
+    let total_ranked = v.get("TotalRanked").and_then(|x| x.as_i64())
+        .or_else(|| v.get("TotalRanked").and_then(|x| x.as_str()).and_then(|s| s.parse().ok()))
+        .unwrap_or(0) as i32;
+    let member_since = v.get("MemberSince").and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let rich = v.get("RichPresenceMsg").and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let last_game_title = v.get("LastGame")
+        .and_then(|g| g.get("Title"))
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string();
+    let last_game_img = v.get("LastGame")
+        .and_then(|g| g.get("ImageIcon"))
+        .and_then(|x| x.as_str())
+        .map(|p| if p.starts_with("http") { p.to_string() } else { format!("https://retroachievements.org{}", p) })
+        .unwrap_or_default();
+
+    // 2) GetUserRecentAchievements (ultimas 24h, ate 50)
+    let url2 = format!(
+        "https://retroachievements.org/API/API_GetUserRecentAchievements.php?u={}&y={}&m=1440&c=20",
+        urlencode(username), urlencode(api_key)
+    );
+    let recent: Vec<RaRecentAchievement> = match client.get(&url2).send().await {
+        Ok(r) => match r.text().await {
+            Ok(t) => parse_recent_achievements(&t),
+            Err(_) => Vec::new(),
+        },
+        Err(_) => Vec::new(),
+    };
+
+    Ok(RaSummary {
+        authenticated: true,
+        username: user.clone(),
+        avatar_url: format!("https://media.retroachievements.org/UserPic/{}.png", user),
+        total_points,
+        softcore_points: softcore,
+        rank,
+        total_ranked,
+        member_since,
+        recent_achievements: recent,
+        last_game_title,
+        last_game_image_url: last_game_img,
+        rich_presence_msg: rich,
+    })
+}
+
+fn parse_recent_achievements(text: &str) -> Vec<RaRecentAchievement> {
+    let v: serde_json::Value = match serde_json::from_str(text) { Ok(v) => v, Err(_) => return Vec::new() };
+    let arr = match v.as_array() { Some(a) => a, None => return Vec::new() };
+    arr.iter().map(|a| {
+        let badge = a.get("BadgeName").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let badge_url = if badge.is_empty() {
+            String::new()
+        } else {
+            format!("https://media.retroachievements.org/Badge/{}.png", badge)
+        };
+        RaRecentAchievement {
+            title: a.get("Title").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+            description: a.get("Description").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+            points: a.get("Points").and_then(|x| x.as_i64())
+                .or_else(|| a.get("Points").and_then(|x| x.as_str()).and_then(|s| s.parse().ok()))
+                .unwrap_or(0) as i32,
+            badge_url,
+            game_title: a.get("GameTitle").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+            game_id: a.get("GameID").and_then(|x| x.as_u64()).unwrap_or(0) as u32,
+            console_name: a.get("ConsoleName").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+            date_iso: a.get("Date").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+            hardcore: a.get("HardcoreMode").and_then(|x| x.as_i64()).map(|n| n == 1).unwrap_or(false),
+        }
+    }).collect()
+}
+
+fn urlencode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
+#[tauri::command]
+async fn ra_save_credentials(username: String, api_key: String) -> Result<RaSummary, String> {
+    let u = username.trim().to_string();
+    let k = api_key.trim().to_string();
+    if u.is_empty() || k.is_empty() {
+        return Err("username/api_key vazios".to_string());
+    }
+    // Valida antes de salvar
+    let summary = ra_fetch_summary_internal(&u, &k).await?;
+    let mut cfg = load_config();
+    cfg.ra_username = Some(u);
+    cfg.ra_api_key = Some(k);
+    save_config_internal(cfg)?;
+    Ok(summary)
+}
+
+#[tauri::command]
+fn ra_clear_credentials() -> Result<(), String> {
+    let mut cfg = load_config();
+    cfg.ra_username = None;
+    cfg.ra_api_key = None;
+    save_config_internal(cfg)
+}
+
+#[tauri::command]
+async fn ra_get_summary() -> Result<RaSummary, String> {
+    let cfg = load_config();
+    let (u, k) = ra_creds_from_cfg(&cfg).ok_or("RA nao configurado")?;
+    ra_fetch_summary_internal(&u, &k).await
+}
+
+// ============================================================
 // === SYSTEM HEALTH CHECK — diagnostica setup de cada emu ===
 // ============================================================
 
@@ -2735,7 +3135,11 @@ pub fn run() {
             set_game_status,
             set_game_notes,
             pick_random_game,
-            system_health_check
+            system_health_check,
+            get_play_stats,
+            ra_save_credentials,
+            ra_clear_credentials,
+            ra_get_summary
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

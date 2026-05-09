@@ -379,8 +379,16 @@ const ACHIEVEMENTS = [
   { id: "first_launch",   name: "Primeiro Jogo",   desc: "Lancou seu primeiro jogo",      check: (p) => p.total_launches >= 1 },
   { id: "ten_launches",   name: "Aquecendo",       desc: "Lancou 10 jogos",                check: (p) => p.total_launches >= 10 },
   { id: "fifty_launches", name: "Veterano",        desc: "Lancou 50 jogos",                check: (p) => p.total_launches >= 50 },
-  { id: "multi_console",  name: "Multi-Console",   desc: "Jogou em 3+ sistemas diferentes", check: (p) => new Set(Object.keys(p.play_time || {})).size >= 3 },
-  { id: "five_systems",   name: "Polimata",        desc: "Jogou em 5+ sistemas diferentes", check: (p) => new Set(Object.keys(p.play_time || {})).size >= 5 },
+  { id: "multi_console",  name: "Multi-Console",   desc: "Jogou em 3+ sistemas diferentes", check: (p) => {
+      const s = new Set();
+      for (const k of Object.keys(p.play_time || {})) s.add(k.includes("::") ? k.split("::")[0] : k);
+      return s.size >= 3;
+    } },
+  { id: "five_systems",   name: "Polimata",        desc: "Jogou em 5+ sistemas diferentes", check: (p) => {
+      const s = new Set();
+      for (const k of Object.keys(p.play_time || {})) s.add(k.includes("::") ? k.split("::")[0] : k);
+      return s.size >= 5;
+    } },
   { id: "ten_favorites",  name: "Curador",         desc: "Marcou 10 favoritos",            check: (p) => (p.favorites || []).length >= 10 },
   { id: "marathon",       name: "Maratona",        desc: "Acumulou 1 hora de jogo total",  check: (p) => Object.values(p.play_time || {}).reduce((a, b) => a + b, 0) >= 3600 },
 ];
@@ -951,9 +959,70 @@ function SettingsPanel({
   const [discordStatus, setDiscordStatus] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
   const [updateBusy, setUpdateBusy] = useState(false);
+  // RetroAchievements
+  const [raUser, setRaUser] = useState(config.ra_username || "");
+  const [raKey, setRaKey] = useState(config.ra_api_key || "");
+  const [raSummary, setRaSummary] = useState(null);
+  const [raStatus, setRaStatus] = useState(null);
+  const [raBusy, setRaBusy] = useState(false);
   const panelRef = useRef(null);
   const [focusIdx, setFocusIdx] = useState(0);
   useEffect(() => { setDiscordId(config.discord_app_id || ""); }, [config.discord_app_id]);
+  useEffect(() => { setRaUser(config.ra_username || ""); setRaKey(config.ra_api_key || ""); }, [config.ra_username, config.ra_api_key]);
+
+  // Carrega summary RA on mount se já configurado
+  useEffect(() => {
+    if (!config.ra_username || !config.ra_api_key) { setRaSummary(null); return; }
+    let cancelled = false;
+    invoke("ra_get_summary").then((s) => { if (!cancelled) setRaSummary(s); })
+      .catch((e) => { if (!cancelled) setRaStatus({ kind: "warn", text: "Falha ao buscar RA: " + String(e).slice(0, 120) }); });
+    return () => { cancelled = true; };
+  }, [config.ra_username, config.ra_api_key]);
+
+  async function saveRa() {
+    if (!raUser.trim() || !raKey.trim()) {
+      setRaStatus({ kind: "error", text: "Informe usuario e Web API Key." });
+      return;
+    }
+    setRaBusy(true);
+    setRaStatus({ kind: "info", text: "Validando credenciais..." });
+    try {
+      const summary = await invoke("ra_save_credentials", { username: raUser.trim(), apiKey: raKey.trim() });
+      setRaSummary(summary);
+      setRaStatus({ kind: "ok", text: `Conectado como ${summary.username}!` });
+    } catch (e) {
+      setRaStatus({ kind: "error", text: String(e).slice(0, 200) });
+    } finally {
+      setRaBusy(false);
+    }
+  }
+
+  async function clearRa() {
+    try {
+      await invoke("ra_clear_credentials");
+      setRaSummary(null);
+      setRaUser("");
+      setRaKey("");
+      setRaStatus({ kind: "ok", text: "RetroAchievements desconectado." });
+      setTimeout(() => setRaStatus(null), 2500);
+    } catch (e) {
+      setRaStatus({ kind: "error", text: String(e) });
+    }
+  }
+
+  async function refreshRa() {
+    setRaBusy(true);
+    try {
+      const s = await invoke("ra_get_summary");
+      setRaSummary(s);
+      setRaStatus({ kind: "ok", text: "Atualizado." });
+      setTimeout(() => setRaStatus(null), 2000);
+    } catch (e) {
+      setRaStatus({ kind: "error", text: String(e).slice(0, 200) });
+    } finally {
+      setRaBusy(false);
+    }
+  }
 
   // Coleta elementos focaveis dentro do painel pra navegar com gamepad
   const getFocusables = useCallback(() => {
@@ -1257,6 +1326,7 @@ function SettingsPanel({
               <div className="pb-stat"><strong>{Object.keys(activeProfile.play_time || {}).length}</strong><span>jogos abertos</span></div>
             </div>
             <CollectionStats gameMeta={activeProfile.game_meta || {}} systems={systems} />
+            <TopPlayedList playTime={activeProfile.play_time || {}} sessions={activeProfile.sessions || []} systems={systems} />
             <SessionsGraph sessions={activeProfile.sessions} />
           </div>
         )}
@@ -1316,6 +1386,95 @@ function SettingsPanel({
           {discordStatus && (
             <p className="pb-settings-hint" style={{ color: discordStatus.kind === "error" ? "#fca5a5" : discordStatus.kind === "warn" ? "#fcd34d" : "#86efac" }}>
               {discordStatus.text}
+            </p>
+          )}
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>RetroAchievements</h3>
+          {raSummary ? (
+            <div className="pb-ra-card">
+              <div className="pb-ra-header">
+                <img className="pb-ra-avatar" src={raSummary.avatar_url} alt={raSummary.username} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                <div className="pb-ra-meta">
+                  <strong className="pb-ra-username">{raSummary.username}</strong>
+                  <span className="pb-ra-points">{raSummary.total_points.toLocaleString()} pts</span>
+                  {raSummary.rank > 0 && <span className="pb-ra-rank">Rank #{raSummary.rank.toLocaleString()}{raSummary.total_ranked > 0 ? ` / ${raSummary.total_ranked.toLocaleString()}` : ""}</span>}
+                </div>
+              </div>
+              {raSummary.last_game_title && (
+                <div className="pb-ra-last">
+                  {raSummary.last_game_image_url && <img src={raSummary.last_game_image_url} alt="" />}
+                  <div>
+                    <span className="pb-ra-last-label">Último jogo</span>
+                    <strong>{raSummary.last_game_title}</strong>
+                    {raSummary.rich_presence_msg && <em>{raSummary.rich_presence_msg}</em>}
+                  </div>
+                </div>
+              )}
+              {raSummary.recent_achievements.length > 0 && (
+                <>
+                  <h4 className="pb-ra-sub">Conquistas recentes ({raSummary.recent_achievements.length})</h4>
+                  <ul className="pb-ra-ach-list">
+                    {raSummary.recent_achievements.slice(0, 8).map((a, i) => (
+                      <li key={i} className={`pb-ra-ach ${a.hardcore ? "hardcore" : ""}`}>
+                        {a.badge_url && <img className="pb-ra-ach-badge" src={a.badge_url} alt="" />}
+                        <div className="pb-ra-ach-body">
+                          <div className="pb-ra-ach-row">
+                            <strong>{a.title}</strong>
+                            <span className="pb-ra-ach-points">{a.points} pts{a.hardcore ? " · 🔥" : ""}</span>
+                          </div>
+                          <span className="pb-ra-ach-desc">{a.description}</span>
+                          <span className="pb-ra-ach-game">{a.game_title} · {a.console_name}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <button className="pb-settings-btn" onClick={() => { sfx.click(); refreshRa(); }} disabled={raBusy}>
+                  <RefreshIcon /> {raBusy ? "..." : "Atualizar"}
+                </button>
+                <button className="pb-settings-btn pb-settings-btn-danger" onClick={() => { sfx.back(); clearRa(); }}>
+                  <PowerIcon /> Desconectar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="pb-settings-hint" style={{ marginBottom: 10 }}>
+                Mostra suas conquistas, pontos e ranking do <code>retroachievements.org</code>.
+                Pegue sua <strong>Web API Key</strong> em <code>retroachievements.org/controlpanel.php</code>.
+              </p>
+              <input
+                type="text"
+                className="pb-input"
+                placeholder="Username RA"
+                value={raUser}
+                onChange={(e) => setRaUser(e.target.value)}
+                style={{ marginBottom: 8 }}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <input
+                type="password"
+                className="pb-input"
+                placeholder="Web API Key (32 caracteres)"
+                value={raKey}
+                onChange={(e) => setRaKey(e.target.value)}
+                style={{ marginBottom: 10 }}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button className="pb-settings-btn" onClick={() => { sfx.click(); saveRa(); }} disabled={raBusy}>
+                <RefreshIcon /> {raBusy ? "Validando..." : "Conectar"}
+              </button>
+            </>
+          )}
+          {raStatus && (
+            <p className="pb-settings-hint" style={{ color: raStatus.kind === "error" ? "#fca5a5" : raStatus.kind === "warn" ? "#fcd34d" : raStatus.kind === "info" ? "#a5b4fc" : "#86efac" }}>
+              {raStatus.text}
             </p>
           )}
         </div>
@@ -1387,7 +1546,7 @@ function SettingsPanel({
           <p className="pb-settings-hint">Útil quando algum jogo não abre — mostra as últimas 200 linhas do log.</p>
         </div>
 
-        <footer className="pb-settings-footer">Playbox Launcher · v0.2</footer>
+        <footer className="pb-settings-footer">Playbox Launcher · v0.3</footer>
       </aside>
     </>
   );
@@ -1643,6 +1802,76 @@ function LogsViewerModal({ onClose }) {
           </div>
         </div>
         <pre className="pb-logs-content">{filtered}</pre>
+      </div>
+    </div>
+  );
+}
+
+function TopPlayedList({ playTime, sessions, systems }) {
+  // Resolve rom_name a partir das sessions (mais recente) ou do scan de systems
+  const nameByKey = useMemo(() => {
+    const map = {};
+    for (let i = sessions.length - 1; i >= 0; i--) {
+      const s = sessions[i];
+      const key = `${s.system_id}::${s.rom_path}`;
+      if (!map[key]) map[key] = { name: s.rom_name, system_id: s.system_id };
+    }
+    for (const sys of systems) {
+      for (const g of sys.games || []) {
+        const key = `${sys.id}::${g.path}`;
+        if (!map[key]) map[key] = { name: g.name, system_id: sys.id };
+      }
+    }
+    return map;
+  }, [sessions, systems]);
+
+  const top = useMemo(() => {
+    const entries = Object.entries(playTime || {})
+      .filter(([_, sec]) => sec > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    return entries.map(([key, seconds]) => {
+      const info = nameByKey[key] || {};
+      const fallbackName = (key.split("::")[1] || key).split(/[\\/]/).pop().replace(/\.[^.]+$/, "");
+      return {
+        key,
+        seconds,
+        name: info.name || fallbackName,
+        system_id: info.system_id || (key.split("::")[0] || ""),
+      };
+    });
+  }, [playTime, nameByKey]);
+
+  if (top.length === 0) return null;
+  const max = top[0].seconds || 1;
+
+  return (
+    <div className="pb-top-played" style={{ marginTop: 14 }}>
+      <h4 style={{ margin: "0 0 10px", fontSize: 13, opacity: 0.7, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+        Top jogos por tempo
+      </h4>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {top.map((g, i) => {
+          const sys = systems.find((s) => s.id === g.system_id);
+          const pct = Math.max(6, Math.round((g.seconds / max) * 100));
+          return (
+            <div key={g.key} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ minWidth: 18, textAlign: "right", opacity: 0.5, fontSize: 12 }}>{i + 1}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13, marginBottom: 4 }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {sys && <span style={{ opacity: 0.5, marginRight: 6, fontSize: 11 }}>{sys.name}</span>}
+                    {g.name}
+                  </span>
+                  <strong style={{ flexShrink: 0 }}>{formatPlayTime(g.seconds)}</strong>
+                </div>
+                <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: sys?.color || "#8b5cf6", borderRadius: 2, transition: "width 280ms cubic-bezier(0.4,0,0.2,1)" }} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -2805,14 +3034,27 @@ export default function PlayboxLauncher() {
 
   const visibleGames = useMemo(() => {
     if (!selected) return [];
-    const playTime = (config.profiles.find((p) => p.id === config.active_profile_id)?.play_time) || {};
+    const profile = config.profiles.find((p) => p.id === config.active_profile_id);
+    const playTime = profile?.play_time || {};
+    const sessions = profile?.sessions || [];
+    // Mapeia rom_path -> ultimo timestamp jogado (a partir de sessions)
+    const lastByRom = {};
+    for (const s of sessions) {
+      const cur = lastByRom[s.rom_path] || 0;
+      const end = (s.started_at || 0) + (s.duration_sec || 0);
+      if (end > cur) lastByRom[s.rom_path] = end;
+    }
+    const ptKey = (g) => `${g._origin_system_id || selected.id}::${g.path}`;
     let games = [...selected.games];
     switch (sortMode) {
       case "az":
         games.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
         break;
       case "playtime":
-        games.sort((a, b) => (playTime[b.path] || 0) - (playTime[a.path] || 0));
+        games.sort((a, b) => (playTime[ptKey(b)] || 0) - (playTime[ptKey(a)] || 0));
+        break;
+      case "recent":
+        games.sort((a, b) => (lastByRom[b.path] || 0) - (lastByRom[a.path] || 0));
         break;
       case "fav":
         games = games.filter((g) => favoriteSet.has(g.path));
@@ -3035,27 +3277,18 @@ export default function PlayboxLauncher() {
       // Discord Rich Presence (silent no-op se nao configurado)
       const sysName = selected?.name || launchSystemId;
       invoke("discord_set_activity", { gameName: selectedGame.name, systemName: sysName }).catch(() => {});
-      // registra stats no perfil ativo
+      // total_launches/last_played/play_time agora são escritos pelo backend (launch_game + thread de wait).
+      // O front só dispara achievement toast otimisticamente para o feedback imediato do "Primeiro Jogo".
       if (activeProfile) {
-        updateActiveProfile((p) => {
-          const updated = {
-            ...p,
-            total_launches: (p.total_launches || 0) + 1,
-            play_time: { ...(p.play_time || {}), [selectedGame.path]: p.play_time?.[selectedGame.path] || 0 },
-            last_played: {
-              system_id: launchSystemId,
-              rom_path: selectedGame.path,
-              rom_name: selectedGame.name,
-              at: Math.floor(Date.now() / 1000),
-            },
-          };
-          const { achievements, newly } = checkAchievements(updated);
-          if (newly.length > 0) {
-            setAchievementToast(newly[0]);
-            sfx.achievement();
-          }
-          return { ...updated, achievements };
-        });
+        const optimistic = {
+          ...activeProfile,
+          total_launches: (activeProfile.total_launches || 0) + 1,
+        };
+        const { newly } = checkAchievements(optimistic);
+        if (newly.length > 0) {
+          setAchievementToast(newly[0]);
+          sfx.achievement();
+        }
       }
       setTimeout(() => setLaunchMsg(null), 3000);
       // launching fica true ate game-killed event chegar (combo Select+R1 ou Select+Start).
@@ -3252,36 +3485,8 @@ export default function PlayboxLauncher() {
     setConfig((prev) => ({ ...prev, wallpaper_path: null }));
   }, []);
 
-  // -------- Track play time quando app volta foco --------
-  useEffect(() => {
-    function onFocus() {
-      const start = launchStartRef.current;
-      if (!start || !activeProfile) return;
-      const elapsed = Math.floor((Date.now() - start.started_at) / 1000);
-      if (elapsed < 30) return; // ignora "tab swap" rápido
-      const cap = Math.min(elapsed, 24 * 3600); // cap 24h por sessão
-      launchStartRef.current = null;
-      updateActiveProfile((p) => {
-        const prev = p.play_time?.[start.rom_path] || 0;
-        const newSession = {
-          started_at: Math.floor(start.started_at / 1000),
-          duration_sec: cap,
-          rom_path: start.rom_path,
-          rom_name: start.rom_name || "",
-          system_id: start.system_id || "",
-        };
-        // Mantem so as ultimas 200 sessoes
-        const sessions = [...(p.sessions || []), newSession].slice(-200);
-        return {
-          ...p,
-          play_time: { ...(p.play_time || {}), [start.rom_path]: prev + cap },
-          sessions,
-        };
-      });
-    }
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [activeProfile, updateActiveProfile]);
+  // (Antes: tracking de playtime via "focus" da janela. Agora o backend faz isso
+  //  via thread.wait() do Child no launch_game e emite "game-ended" quando termina.)
 
   // -------- Re-escanear ROMs --------
   const rescanRoms = useCallback(async () => {
@@ -3537,6 +3742,33 @@ export default function PlayboxLauncher() {
     }).then((u) => { unlisten = u; });
     return () => { try { unlisten && unlisten(); } catch {} };
   }, []);
+
+  // -------- Listener: emulador externo terminou (thread de wait registrou sessao) --------
+  // Refetch config do disco pra atualizar play_time/sessions/last_played + dispara achievements.
+  useEffect(() => {
+    let unlisten;
+    listen("game-ended", async () => {
+      try {
+        const c = await invoke("load_config");
+        if (c) {
+          setConfig(c);
+          const profile = c.profiles?.find((p) => p.id === c.active_profile_id);
+          if (profile) {
+            const { achievements, newly } = checkAchievements(profile);
+            if (newly.length > 0) {
+              // Persist novos achievements no profile
+              updateActiveProfile((p) => ({ ...p, achievements }));
+              setAchievementToast(newly[0]);
+              sfx.achievement();
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("game-ended refetch", e);
+      }
+    }).then((u) => { unlisten = u; });
+    return () => { try { unlisten && unlisten(); } catch {} };
+  }, [checkAchievements, updateActiveProfile]);
 
   // -------- Gamepad polling --------
   // Refs pra valores que mudam a cada navegacao. Sem isso o useEffect re-cria
@@ -4045,6 +4277,7 @@ export default function PlayboxLauncher() {
                   {[
                     { id: "default", label: "Padrão" },
                     { id: "az",       label: "A-Z" },
+                    { id: "recent",   label: "Recentes" },
                     { id: "playtime", label: "Mais jogados" },
                     { id: "fav",      label: "★ Favoritos" },
                   ].map((opt) => (
@@ -4065,10 +4298,10 @@ export default function PlayboxLauncher() {
                     const cover = covers[g.path];
                     const hasCover = typeof cover === "string" && cover.length > 0;
                     const isFav = favoriteSet.has(g.path);
-                    const playSec = activeProfile?.play_time?.[g.path] || 0;
-                    const lastPlayed = activeProfile?.last_played?.[g.path] || 0;
                     const sysId = g._origin_system_id || selected.id;
-                    const meta = gameMetaMap[`${sysId}::${g.path}`];
+                    const ptKey = `${sysId}::${g.path}`;
+                    const playSec = activeProfile?.play_time?.[ptKey] || 0;
+                    const meta = gameMetaMap[ptKey];
                     const metaStatus = meta?.status || "";
                     const metaRating = meta?.rating || 0;
                     return (
@@ -4112,9 +4345,6 @@ export default function PlayboxLauncher() {
                           {playSec > 0 && (
                             <div className="pb-card-stats">
                               <span className="pb-card-stat-time">{formatPlayTime(playSec)}</span>
-                              {lastPlayed > 0 && (
-                                <span className="pb-card-stat-when">{formatRelativeDays(lastPlayed)}</span>
-                              )}
                             </div>
                           )}
                         </button>
@@ -4318,7 +4548,7 @@ export default function PlayboxLauncher() {
           closing={detailClosing}
           system={detailPanel.system}
           game={detailPanel.game}
-          playTimeSec={(activeProfile?.play_time?.[detailPanel.game.path]) || 0}
+          playTimeSec={(activeProfile?.play_time?.[`${detailPanel.system.id}::${detailPanel.game.path}`]) || 0}
           isFavorite={favoriteSet.has(detailPanel.game.path)}
           gameMeta={gameMetaMap[`${detailPanel.system.id}::${detailPanel.game.path}`]}
           onClose={closeDetailPanel}
