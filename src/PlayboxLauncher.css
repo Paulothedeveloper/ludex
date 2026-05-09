@@ -3445,3 +3445,85 @@
   outline: 2px solid #fff;
   outline-offset: -1px;
 }
+
+/* ========================================
+   GAME PERSONAL META — status / rating / notes
+   ======================================== */
+
+.pb-detail-personal {
+  margin-top: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pb-detail-personal-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.pb-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--pb-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 160ms ease;
+  user-select: none;
+}
+.pb-status-pill:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-1px); }
+.pb-status-pill .pb-status-icon { font-size: 16px; opacity: 0.85; }
+.pb-status-none { opacity: 0.7; }
+.pb-status-wishlist { background: rgba(252, 211, 77, 0.15); border-color: rgba(252, 211, 77, 0.45); color: #fcd34d; }
+.pb-status-playing { background: rgba(96, 165, 250, 0.15); border-color: rgba(96, 165, 250, 0.45); color: #60a5fa; }
+.pb-status-beat { background: rgba(74, 222, 128, 0.15); border-color: rgba(74, 222, 128, 0.45); color: #4ade80; }
+.pb-status-mastered { background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(236, 72, 153, 0.2)); border-color: rgba(168, 85, 247, 0.55); color: #c4b5fd; box-shadow: 0 0 14px rgba(168, 85, 247, 0.25); }
+.pb-status-abandoned { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.4); color: #fca5a5; opacity: 0.85; }
+
+.pb-rating {
+  display: inline-flex;
+  gap: 2px;
+}
+.pb-rating-star {
+  background: none;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  padding: 4px 2px;
+  transition: color 120ms, transform 120ms;
+}
+.pb-rating-star:hover { transform: scale(1.18); color: rgba(252, 211, 77, 0.6); }
+.pb-rating-star.filled { color: #fcd34d; text-shadow: 0 0 6px rgba(252, 211, 77, 0.45); }
+
+.pb-detail-notes {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: var(--pb-text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 60px;
+  max-height: 240px;
+  outline: none;
+  transition: border-color 160ms;
+  box-sizing: border-box;
+}
+.pb-detail-notes:focus { border-color: rgba(96, 165, 250, 0.6); background: rgba(0, 0, 0, 0.35); }
+.pb-detail-notes::placeholder { color: rgba(255, 255, 255, 0.32); font-style: italic; }

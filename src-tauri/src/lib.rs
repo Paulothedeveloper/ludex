@@ -1140,6 +1140,20 @@ struct PlaySession {
     system_id: String,
 }
 
+/// Metadata pessoal do jogo: rating, status, notas. Uma entry por (system_id::rom_path).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+struct GameMeta {
+    /// 0..=5 estrelas (0 = sem rating)
+    rating: u8,
+    /// "wishlist" | "playing" | "beat" | "mastered" | "abandoned" | "" (none)
+    status: String,
+    /// Notas livres do usuario
+    notes: String,
+    /// Timestamp Unix de quando foi marcado como "beat"/"mastered" (0 = nao marcado)
+    completed_at: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 struct Profile {
@@ -1153,6 +1167,8 @@ struct Profile {
     achievements: Vec<String>,
     last_played: Option<LastPlayed>,
     sessions: Vec<PlaySession>,
+    /// Metadata pessoal por jogo (chave = "system_id::rom_path")
+    game_meta: std::collections::BTreeMap<String, GameMeta>,
 }
 
 impl Default for Profile {
@@ -1168,8 +1184,31 @@ impl Default for Profile {
             achievements: Vec::new(),
             last_played: None,
             sessions: Vec::new(),
+            game_meta: std::collections::BTreeMap::new(),
         }
     }
+}
+
+/// Helper: obtem ou cria entry de game_meta no profile ativo, salva config.
+fn update_active_game_meta<F: FnOnce(&mut GameMeta)>(
+    system_id: &str,
+    rom_path: &str,
+    f: F,
+) -> Result<(), String> {
+    let mut cfg = load_config();
+    let active_id = cfg.active_profile_id.clone().ok_or("nenhum profile ativo")?;
+    let key = format!("{}::{}", system_id, rom_path);
+    let profile = cfg.profiles.iter_mut().find(|p| p.id == active_id)
+        .ok_or("profile ativo nao encontrado")?;
+    let entry = profile.game_meta.entry(key).or_default();
+    f(entry);
+    save_config_internal(cfg)
+}
+
+fn save_config_internal(cfg: AppConfig) -> Result<(), String> {
+    let path = config_path().ok_or("config path indisponivel")?;
+    let content = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+    std::fs::write(&path, content).map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2458,6 +2497,166 @@ fn spawn_gamepad_hotkey_listener() {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+// ============================================================
+// === GAME PERSONAL METADATA — rating, status, notes ========
+// ============================================================
+
+#[tauri::command]
+fn set_game_rating(system_id: String, rom_path: String, rating: u8) -> Result<(), String> {
+    let r = rating.min(5);
+    update_active_game_meta(&system_id, &rom_path, |m| { m.rating = r; })
+}
+
+#[tauri::command]
+fn set_game_status(system_id: String, rom_path: String, status: String) -> Result<(), String> {
+    let valid = ["", "wishlist", "playing", "beat", "mastered", "abandoned"];
+    if !valid.contains(&status.as_str()) {
+        return Err(format!("status invalido: {}", status));
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    update_active_game_meta(&system_id, &rom_path, |m| {
+        let was_completed = m.status == "beat" || m.status == "mastered";
+        let will_be_completed = status == "beat" || status == "mastered";
+        m.status = status;
+        if will_be_completed && !was_completed {
+            m.completed_at = now;
+        } else if !will_be_completed {
+            m.completed_at = 0;
+        }
+    })
+}
+
+#[tauri::command]
+fn set_game_notes(system_id: String, rom_path: String, notes: String) -> Result<(), String> {
+    let trimmed = notes.chars().take(4000).collect::<String>();
+    update_active_game_meta(&system_id, &rom_path, |m| { m.notes = trimmed; })
+}
+
+// ============================================================
+// === RANDOM GAME — sorteia jogo entre todos os scaneados ===
+// ============================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RandomGamePick {
+    system_id: String,
+    rom_path: String,
+    rom_name: String,
+}
+
+#[tauri::command]
+fn pick_random_game(roms_root: Option<String>) -> Option<RandomGamePick> {
+    use std::time::SystemTime;
+    let systems = scan_roms(roms_root);
+    let mut pool: Vec<RandomGamePick> = Vec::new();
+    for sys in systems {
+        for game in sys.games {
+            pool.push(RandomGamePick {
+                system_id: sys.id.clone(),
+                rom_path: game.path.clone(),
+                rom_name: game.name.clone(),
+            });
+        }
+    }
+    if pool.is_empty() { return None; }
+    // PRNG simples baseada em timestamp nanos (sem dep externa)
+    let nanos = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(1);
+    let idx = (nanos.wrapping_mul(2862933555777941757).wrapping_add(3037000493)) as usize % pool.len();
+    pool.into_iter().nth(idx)
+}
+
+// ============================================================
+// === SYSTEM HEALTH CHECK — diagnostica setup de cada emu ===
+// ============================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SystemHealth {
+    system_id: String,
+    system_name: String,
+    /// "ok" | "warn" | "error"
+    status: String,
+    /// Emulador externo encontrado (.exe presente)
+    emulator_present: bool,
+    emulator_path: String,
+    /// Quantas ROMs detectadas
+    rom_count: u32,
+    /// Lista de avisos / erros pra mostrar ao user
+    issues: Vec<String>,
+    /// Lista de checks que passaram
+    checks_ok: Vec<String>,
+}
+
+#[tauri::command]
+fn system_health_check() -> Vec<SystemHealth> {
+    let emu_root = current_emulators_root();
+    let roms_root = current_roms_root();
+    let scanned = scan_roms(Some(roms_root.to_string_lossy().to_string()));
+    let mut out = Vec::new();
+    for cfg in EMULATORS.iter() {
+        let exe = emu_root.join(cfg.emulator_rel);
+        let emulator_present = exe.is_file();
+        let emulator_path = exe.to_string_lossy().to_string();
+        let scan_match = scanned.iter().find(|s| s.id == cfg.id);
+        let rom_count = scan_match.map(|s| s.games.len() as u32).unwrap_or(0);
+        let mut issues: Vec<String> = Vec::new();
+        let mut checks_ok: Vec<String> = Vec::new();
+
+        if emulator_present {
+            checks_ok.push(format!("Emulador encontrado em {}", cfg.emulator_rel));
+        } else {
+            issues.push(format!("Emulador {}.exe NAO encontrado em {}", cfg.name, cfg.emulator_rel));
+        }
+
+        if rom_count > 0 {
+            checks_ok.push(format!("{} ROMs detectadas", rom_count));
+        } else {
+            issues.push(format!("Nenhuma ROM em pasta {}/", cfg.folder_name));
+        }
+
+        // Check BIOS pra Xbox (xemu)
+        if cfg.id == "xbox" {
+            let bios_dir = emu_root.join(cfg.folder_name).join("bios");
+            let mcpx = bios_dir.join("mcpx_1.0.bin");
+            let complex = bios_dir.join("complex_4627.bin");
+            let hdd = bios_dir.join("xbox_hdd.qcow2");
+            if mcpx.is_file() && complex.is_file() && hdd.is_file() {
+                checks_ok.push("3 BIOS files Xbox presentes (mcpx + complex + qcow2)".to_string());
+            } else {
+                let mut missing = Vec::new();
+                if !mcpx.is_file() { missing.push("mcpx_1.0.bin"); }
+                if !complex.is_file() { missing.push("complex_4627.bin"); }
+                if !hdd.is_file() { missing.push("xbox_hdd.qcow2"); }
+                issues.push(format!("BIOS Xbox faltando: {}", missing.join(", ")));
+            }
+        }
+
+        let status = if !issues.is_empty() && !emulator_present {
+            "error".to_string()
+        } else if !issues.is_empty() {
+            "warn".to_string()
+        } else {
+            "ok".to_string()
+        };
+
+        out.push(SystemHealth {
+            system_id: cfg.id.to_string(),
+            system_name: cfg.name.to_string(),
+            status,
+            emulator_present,
+            emulator_path,
+            rom_count,
+            issues,
+            checks_ok,
+        });
+    }
+    out
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -2531,7 +2730,12 @@ pub fn run() {
             list_save_slots,
             swap_profile_saves,
             unlink_profile_saves,
-            setup_switch_keys
+            setup_switch_keys,
+            set_game_rating,
+            set_game_status,
+            set_game_notes,
+            pick_random_game,
+            system_health_check
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -2153,10 +2153,54 @@ function DiscPickerModal({ system, game, onCancel, onPick }) {
   );
 }
 
-function GameDetailPanel({ system, game, playTimeSec, onClose, onLaunch, onPickCover, onResyncCover, onOpenLocation, onToggleFavorite, isFavorite, closing }) {
+const GAME_STATUS_LABELS = {
+  "": "Sem status",
+  "wishlist": "Quero jogar",
+  "playing": "Jogando",
+  "beat": "Zerei",
+  "mastered": "Platinei",
+  "abandoned": "Abandonei",
+};
+const GAME_STATUS_ORDER = ["", "wishlist", "playing", "beat", "mastered", "abandoned"];
+const GAME_STATUS_EMOJI = {
+  "": "○",
+  "wishlist": "★",
+  "playing": "▶",
+  "beat": "✔",
+  "mastered": "✦",
+  "abandoned": "✕",
+};
+
+function GameDetailPanel({ system, game, playTimeSec, gameMeta, onClose, onLaunch, onPickCover, onResyncCover, onOpenLocation, onToggleFavorite, isFavorite, onSetRating, onSetStatus, onSetNotes, closing }) {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeShot, setActiveShot] = useState(0);
+  const [notesDraft, setNotesDraft] = useState(gameMeta?.notes || "");
+  const notesTimerRef = useRef(null);
+
+  // Sincroniza draft quando muda de jogo
+  useEffect(() => {
+    setNotesDraft(gameMeta?.notes || "");
+  }, [game.path, gameMeta?.notes]);
+
+  // Auto-save notas (debounce 600ms)
+  useEffect(() => {
+    if (notesDraft === (gameMeta?.notes || "")) return;
+    if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
+    notesTimerRef.current = setTimeout(() => {
+      onSetNotes && onSetNotes(notesDraft);
+    }, 600);
+    return () => { if (notesTimerRef.current) clearTimeout(notesTimerRef.current); };
+  }, [notesDraft]);
+
+  const cycleStatus = () => {
+    const cur = gameMeta?.status || "";
+    const idx = GAME_STATUS_ORDER.indexOf(cur);
+    const next = GAME_STATUS_ORDER[(idx + 1) % GAME_STATUS_ORDER.length];
+    onSetStatus && onSetStatus(next);
+  };
+  const curStatus = gameMeta?.status || "";
+  const curRating = gameMeta?.rating || 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -2252,6 +2296,38 @@ function GameDetailPanel({ system, game, playTimeSec, onClose, onLaunch, onPickC
               <strong>{game.extension?.toUpperCase() || "—"}</strong>
               <span>formato</span>
             </div>
+          </div>
+
+          {/* Personal library: status + rating + notes */}
+          <div className="pb-detail-personal">
+            <div className="pb-detail-personal-row">
+              <button
+                className={`pb-status-pill pb-status-${curStatus || "none"}`}
+                onClick={cycleStatus}
+                title="Clique pra ciclar entre os status (sem status → quero jogar → jogando → zerei → platinei → abandonei)"
+              >
+                <span className="pb-status-icon">{GAME_STATUS_EMOJI[curStatus]}</span>
+                <span className="pb-status-label">{GAME_STATUS_LABELS[curStatus]}</span>
+              </button>
+              <div className="pb-rating" role="group" aria-label="Sua nota">
+                {[1,2,3,4,5].map((n) => (
+                  <button
+                    key={n}
+                    className={`pb-rating-star ${n <= curRating ? "filled" : ""}`}
+                    onClick={() => onSetRating && onSetRating(n === curRating ? 0 : n)}
+                    title={`${n} estrela${n > 1 ? "s" : ""} (clique de novo pra limpar)`}
+                  >★</button>
+                ))}
+              </div>
+            </div>
+            <textarea
+              className="pb-detail-notes"
+              placeholder="Suas notas sobre o jogo... (auto-salva)"
+              value={notesDraft}
+              onChange={(e) => setNotesDraft(e.target.value)}
+              maxLength={4000}
+              rows={3}
+            />
           </div>
 
           {loading && !details && (
@@ -2484,6 +2560,63 @@ export default function PlayboxLauncher() {
     () => new Set((config.profiles.find((p) => p.id === config.active_profile_id)?.favorites) || []),
     [config.profiles, config.active_profile_id]
   );
+
+  // Map de game_meta do profile ativo: chave = "system_id::rom_path"
+  const gameMetaMap = useMemo(
+    () => (config.profiles.find((p) => p.id === config.active_profile_id)?.game_meta) || {},
+    [config.profiles, config.active_profile_id]
+  );
+
+  const updateGameMetaLocal = (systemId, romPath, patch) => {
+    const key = `${systemId}::${romPath}`;
+    setConfig((prev) => {
+      const profiles = prev.profiles.map((p) => {
+        if (p.id !== prev.active_profile_id) return p;
+        const game_meta = { ...(p.game_meta || {}) };
+        const entry = { rating: 0, status: "", notes: "", completed_at: 0, ...(game_meta[key] || {}), ...patch };
+        // Set completed_at se virou completed
+        if (patch.status !== undefined) {
+          const wasCompleted = (game_meta[key]?.status === "beat" || game_meta[key]?.status === "mastered");
+          const willBeCompleted = patch.status === "beat" || patch.status === "mastered";
+          if (willBeCompleted && !wasCompleted) entry.completed_at = Math.floor(Date.now() / 1000);
+          else if (!willBeCompleted) entry.completed_at = 0;
+        }
+        game_meta[key] = entry;
+        return { ...p, game_meta };
+      });
+      return { ...prev, profiles };
+    });
+  };
+
+  const setGameRating = (systemId, romPath, rating) => {
+    updateGameMetaLocal(systemId, romPath, { rating });
+    invoke("set_game_rating", { systemId, romPath, rating }).catch((e) => console.error("set_game_rating", e));
+  };
+  const setGameStatus = (systemId, romPath, status) => {
+    updateGameMetaLocal(systemId, romPath, { status });
+    invoke("set_game_status", { systemId, romPath, status }).catch((e) => console.error("set_game_status", e));
+  };
+  const setGameNotes = (systemId, romPath, notes) => {
+    updateGameMetaLocal(systemId, romPath, { notes });
+    invoke("set_game_notes", { systemId, romPath, notes }).catch((e) => console.error("set_game_notes", e));
+  };
+
+  const pickRandomGame = async () => {
+    try {
+      const pick = await invoke("pick_random_game", { romsRoot: config.roms_root || null });
+      if (!pick) {
+        sfx.back();
+        return;
+      }
+      sfx.confirm();
+      const sys = systems.find((s) => s.id === pick.system_id);
+      const game = sys?.games.find((g) => g.path === pick.rom_path);
+      if (sys && game) {
+        setSelectedSystemIdx(systems.indexOf(sys));
+        setDetailPanel({ system: sys, game });
+      }
+    } catch (e) { console.error("pick_random_game", e); }
+  };
 
   const favoritesSystem = useMemo(() => {
     if (favoriteSet.size === 0) return null;
@@ -3605,6 +3738,7 @@ export default function PlayboxLauncher() {
 
       if (e.key === "/" ) { e.preventDefault(); sfx.confirm(); setSearchOpen(true); return; }
       if (e.key === "s" || e.key === "S") { e.preventDefault(); sfx.confirm(); setSettingsOpen(true); return; }
+      if (e.key === "r" || e.key === "R") { e.preventDefault(); pickRandomGame(); return; }
       if (e.key === "p" || e.key === "P") { e.preventDefault(); sfx.confirm(); setProfilesOpen(true); return; }
       if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleFavorite(); return; }
       if ((e.key === "d" || e.key === "D") && selected && selectedGame) { e.preventDefault(); openDetailPanel(selected, selectedGame); return; }
@@ -3700,6 +3834,7 @@ export default function PlayboxLauncher() {
             <span className="pb-search-pill-label">Buscar jogo</span>
             <kbd className="pb-search-pill-kbd">/</kbd>
           </button>
+          <button className="pb-icon-btn" onClick={pickRandomGame} title="Surpresa! (R) — escolhe jogo aleatorio">🎲</button>
           <button className="pb-icon-btn" onClick={() => { sfx.confirm(); setSettingsOpen(true); }} title="Configuracoes (S)"><GearIcon /></button>
           {gamepadConnected && <span className="pb-gamepad-indicator" title="Controle conectado"><GamepadIcon /></span>}
           <span className="pb-clock">{time}</span>
@@ -4015,12 +4150,16 @@ export default function PlayboxLauncher() {
           game={detailPanel.game}
           playTimeSec={(activeProfile?.play_time?.[detailPanel.game.path]) || 0}
           isFavorite={favoriteSet.has(detailPanel.game.path)}
+          gameMeta={gameMetaMap[`${detailPanel.system.id}::${detailPanel.game.path}`]}
           onClose={closeDetailPanel}
           onLaunch={() => { closeDetailPanel(); setTimeout(() => handleLaunch(), MODAL_EXIT_MS); }}
           onPickCover={() => pickCustomCover(detailPanel.system.id, detailPanel.game)}
           onResyncCover={() => resyncSingleCover(detailPanel.system.id, detailPanel.game)}
           onOpenLocation={() => openGameLocation(detailPanel.game)}
           onToggleFavorite={() => toggleFavorite()}
+          onSetRating={(rating) => setGameRating(detailPanel.system.id, detailPanel.game.path, rating)}
+          onSetStatus={(status) => setGameStatus(detailPanel.system.id, detailPanel.game.path, status)}
+          onSetNotes={(notes) => setGameNotes(detailPanel.system.id, detailPanel.game.path, notes)}
         />
       )}
 
