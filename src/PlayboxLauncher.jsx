@@ -960,6 +960,8 @@ function SettingsPanel({
   const [discordStatus, setDiscordStatus] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
   const [updateBusy, setUpdateBusy] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
+  useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
   // RetroAchievements
   const [raUser, setRaUser] = useState(config.ra_username || "");
   const [raKey, setRaKey] = useState(config.ra_api_key || "");
