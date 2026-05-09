@@ -1256,6 +1256,7 @@ function SettingsPanel({
               <div className="pb-stat"><strong>{formatPlayTime(totalPlayTime)}</strong><span>tempo total</span></div>
               <div className="pb-stat"><strong>{Object.keys(activeProfile.play_time || {}).length}</strong><span>jogos abertos</span></div>
             </div>
+            <CollectionStats gameMeta={activeProfile.game_meta || {}} systems={systems} />
             <SessionsGraph sessions={activeProfile.sessions} />
           </div>
         )}
@@ -1642,6 +1643,73 @@ function LogsViewerModal({ onClose }) {
           </div>
         </div>
         <pre className="pb-logs-content">{filtered}</pre>
+      </div>
+    </div>
+  );
+}
+
+function CollectionStats({ gameMeta, systems }) {
+  // Conta total de jogos disponiveis na coleção
+  const totalGames = systems.reduce((sum, s) => sum + (s.games?.length || 0), 0);
+
+  // Conta por status
+  const counts = { wishlist: 0, playing: 0, beat: 0, mastered: 0, abandoned: 0 };
+  let ratedCount = 0;
+  let ratingSum = 0;
+  for (const key of Object.keys(gameMeta)) {
+    const m = gameMeta[key];
+    if (m.status && counts[m.status] !== undefined) counts[m.status]++;
+    if (m.rating > 0) {
+      ratedCount++;
+      ratingSum += m.rating;
+    }
+  }
+  const completed = counts.beat + counts.mastered;
+  const completionRate = totalGames > 0 ? Math.round((completed / totalGames) * 100) : 0;
+  const avgRating = ratedCount > 0 ? (ratingSum / ratedCount) : 0;
+
+  return (
+    <div className="pb-collection-stats">
+      <div className="pb-coll-row">
+        <div className="pb-coll-card pb-coll-card-total">
+          <strong>{totalGames}</strong>
+          <span>jogos na coleção</span>
+        </div>
+        <div className="pb-coll-card">
+          <strong>{completionRate}%</strong>
+          <span>completion rate</span>
+        </div>
+        <div className="pb-coll-card">
+          <strong>{avgRating > 0 ? avgRating.toFixed(1) : "—"}<small>{avgRating > 0 ? " ★" : ""}</small></strong>
+          <span>nota média ({ratedCount} avaliados)</span>
+        </div>
+      </div>
+      <div className="pb-coll-status-grid">
+        <div className="pb-coll-status pb-coll-status-wishlist">
+          <span className="pb-coll-status-icon">{GAME_STATUS_EMOJI.wishlist}</span>
+          <strong>{counts.wishlist}</strong>
+          <span>quero jogar</span>
+        </div>
+        <div className="pb-coll-status pb-coll-status-playing">
+          <span className="pb-coll-status-icon">{GAME_STATUS_EMOJI.playing}</span>
+          <strong>{counts.playing}</strong>
+          <span>jogando</span>
+        </div>
+        <div className="pb-coll-status pb-coll-status-beat">
+          <span className="pb-coll-status-icon">{GAME_STATUS_EMOJI.beat}</span>
+          <strong>{counts.beat}</strong>
+          <span>zerei</span>
+        </div>
+        <div className="pb-coll-status pb-coll-status-mastered">
+          <span className="pb-coll-status-icon">{GAME_STATUS_EMOJI.mastered}</span>
+          <strong>{counts.mastered}</strong>
+          <span>platinei</span>
+        </div>
+        <div className="pb-coll-status pb-coll-status-abandoned">
+          <span className="pb-coll-status-icon">{GAME_STATUS_EMOJI.abandoned}</span>
+          <strong>{counts.abandoned}</strong>
+          <span>abandonei</span>
+        </div>
       </div>
     </div>
   );

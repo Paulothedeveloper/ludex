@@ -3696,3 +3696,86 @@
 .pb-icon-btn {
   font-size: 16px; /* dado tem proporcao melhor assim */
 }
+
+/* ========================================
+   COLLECTION STATS — completion rate + status counts
+   ======================================== */
+
+.pb-collection-stats {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pb-coll-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.pb-coll-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pb-coll-card strong {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--pb-text);
+}
+.pb-coll-card strong small {
+  font-size: 12px;
+  color: #fcd34d;
+  margin-left: 2px;
+}
+.pb-coll-card span {
+  font-size: 11px;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.pb-coll-card-total {
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.1), rgba(168, 85, 247, 0.08));
+  border-color: rgba(96, 165, 250, 0.25);
+}
+.pb-coll-card-total strong { color: #93c5fd; }
+
+.pb-coll-status-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.pb-coll-status {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 10px 6px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: transform 160ms;
+}
+.pb-coll-status:hover { transform: translateY(-2px); }
+.pb-coll-status-icon { font-size: 20px; line-height: 1; opacity: 0.85; }
+.pb-coll-status strong { font-size: 18px; font-weight: 700; }
+.pb-coll-status span { font-size: 10px; opacity: 0.65; text-transform: uppercase; letter-spacing: 0.4px; }
+
+.pb-coll-status-wishlist .pb-coll-status-icon { color: #fcd34d; }
+.pb-coll-status-wishlist strong { color: #fcd34d; }
+.pb-coll-status-playing .pb-coll-status-icon { color: #60a5fa; }
+.pb-coll-status-playing strong { color: #60a5fa; }
+.pb-coll-status-beat .pb-coll-status-icon { color: #4ade80; }
+.pb-coll-status-beat strong { color: #4ade80; }
+.pb-coll-status-mastered .pb-coll-status-icon { color: #c4b5fd; text-shadow: 0 0 6px rgba(168, 85, 247, 0.5); }
+.pb-coll-status-mastered strong { color: #c4b5fd; }
+.pb-coll-status-mastered { background: rgba(168, 85, 247, 0.06); border-color: rgba(168, 85, 247, 0.2); }
+.pb-coll-status-abandoned .pb-coll-status-icon { color: #f87171; opacity: 0.7; }
+.pb-coll-status-abandoned strong { color: #f87171; opacity: 0.85; }
