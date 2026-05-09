@@ -3527,3 +3527,102 @@
 }
 .pb-detail-notes:focus { border-color: rgba(96, 165, 250, 0.6); background: rgba(0, 0, 0, 0.35); }
 .pb-detail-notes::placeholder { color: rgba(255, 255, 255, 0.32); font-style: italic; }
+
+/* ========================================
+   HEALTH CHECK MODAL
+   ======================================== */
+
+.pb-health-modal {
+  width: min(900px, 95vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.pb-health-summary {
+  display: flex;
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.pb-health-badge {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pb-health-ok { background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.3); }
+.pb-health-warn { background: rgba(252, 211, 77, 0.15); color: #fcd34d; border: 1px solid rgba(252, 211, 77, 0.3); }
+.pb-health-error { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+.pb-health-list {
+  overflow-y: auto;
+  padding: 12px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pb-health-loading {
+  padding: 30px;
+  text-align: center;
+  opacity: 0.7;
+}
+
+.pb-health-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  border-left: 4px solid rgba(255, 255, 255, 0.15);
+}
+.pb-health-item.pb-health-ok { border-left-color: #4ade80; }
+.pb-health-item.pb-health-warn { border-left-color: #fcd34d; }
+.pb-health-item.pb-health-error { border-left-color: #f87171; }
+
+.pb-health-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.pb-health-status-icon {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+}
+.pb-health-item.pb-health-ok .pb-health-status-icon { color: #4ade80; }
+.pb-health-item.pb-health-warn .pb-health-status-icon { color: #fcd34d; }
+.pb-health-item.pb-health-error .pb-health-status-icon { color: #f87171; }
+.pb-health-name { font-size: 15px; }
+.pb-health-rom-count {
+  margin-left: auto;
+  font-size: 12px;
+  opacity: 0.6;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.pb-health-checks {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0 0 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.pb-health-checks li { margin: 2px 0; }
+.pb-health-checks-ok li { color: rgba(74, 222, 128, 0.85); }
+.pb-health-checks-issue li { color: rgba(248, 113, 113, 0.95); }
+
+.pb-health-path {
+  margin-top: 8px;
+  font-size: 11px;
+  opacity: 0.4;
+}
+.pb-health-path code {
+  background: rgba(0, 0, 0, 0.25);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+}

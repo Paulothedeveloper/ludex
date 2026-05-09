@@ -432,6 +432,8 @@ function StarIcon({ filled }) {
 function PlayIcon() { return (<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden><polygon points="6 4 20 12 6 20 6 4" /></svg>); }
 function FolderIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>); }
 function InfoIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>); }
+function CheckIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><polyline points="20 6 9 17 4 12" /></svg>); }
+function ShieldIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>); }
 function SortIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="15" y2="12" /><line x1="3" y1="18" x2="9" y2="18" /></svg>); }
 function ImageIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>); }
 function GamepadIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><line x1="6" y1="11" x2="10" y2="11" /><line x1="8" y1="9" x2="8" y2="13" /><line x1="15" y1="12" x2="15.01" y2="12" /><line x1="18" y1="10" x2="18.01" y2="10" /><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258A4 4 0 0 0 17.32 5z" /></svg>); }
@@ -942,7 +944,7 @@ function SettingsPanel({
   onSetupSwitchKeys, switchKeysStatus,
   onToggleSavesIsolation, savesStatus,
   onToggleMusic, onSetMusicVolume,
-  onShowLogs,
+  onShowLogs, onShowHealth,
   modalGamepadRef,
 }) {
   const [discordId, setDiscordId] = useState(config.discord_app_id || "");
@@ -1374,6 +1376,10 @@ function SettingsPanel({
 
         <div className="pb-settings-section">
           <h3>Diagnóstico</h3>
+          <button className="pb-settings-btn" onClick={() => { sfx.click(); onShowHealth && onShowHealth(); }}>
+            <CheckIcon /> Health Check dos emuladores
+          </button>
+          <p className="pb-settings-hint">Verifica setup de cada emulador (.exe presente, ROMs detectadas, BIOS Xbox, etc).</p>
           <button className="pb-settings-btn" onClick={() => { sfx.click(); onShowLogs(); }}>
             <InfoIcon /> Ver logs do app
           </button>
@@ -1457,6 +1463,86 @@ function GamepadDebugOverlay({ onClose }) {
         <div className="pb-gamepad-debug-help">
           <strong>GameSir T4n Lite:</strong> aperte <kbd>HOME + Y</kbd> por 3s pra entrar em modo XInput (Windows).<br />
           Outros modos: HOME+A=Android · HOME+B=iOS · HOME+X=Switch · <strong>HOME+Y=Windows/XInput</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HealthCheckModal({ onClose }) {
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await invoke("system_health_check");
+      setItems(res);
+    } catch (e) {
+      console.error("system_health_check", e);
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const summary = items ? {
+    ok: items.filter((x) => x.status === "ok").length,
+    warn: items.filter((x) => x.status === "warn").length,
+    error: items.filter((x) => x.status === "error").length,
+  } : null;
+
+  return (
+    <div className="pb-modal-backdrop" onClick={onClose}>
+      <div className="pb-modal pb-health-modal" onClick={(e) => e.stopPropagation()}>
+        <header className="pb-modal-header">
+          <h2><ShieldIcon /> Health Check dos Emuladores</h2>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="pb-icon-btn" onClick={load} title="Re-verificar" disabled={loading}><RefreshIcon /></button>
+            <button className="pb-icon-btn" onClick={onClose}><CloseIcon /></button>
+          </div>
+        </header>
+
+        {summary && (
+          <div className="pb-health-summary">
+            <span className="pb-health-badge pb-health-ok">{summary.ok} OK</span>
+            <span className="pb-health-badge pb-health-warn">{summary.warn} avisos</span>
+            <span className="pb-health-badge pb-health-error">{summary.error} erros</span>
+          </div>
+        )}
+
+        <div className="pb-health-list">
+          {loading && <div className="pb-health-loading">Verificando todos os emuladores...</div>}
+          {items && items.map((s) => (
+            <div key={s.system_id} className={`pb-health-item pb-health-${s.status}`}>
+              <div className="pb-health-head">
+                <span className="pb-health-status-icon">
+                  {s.status === "ok" ? "✓" : s.status === "warn" ? "⚠" : "✕"}
+                </span>
+                <strong className="pb-health-name">{s.system_name}</strong>
+                <span className="pb-health-rom-count">{s.rom_count} ROMs</span>
+              </div>
+              {s.checks_ok.length > 0 && (
+                <ul className="pb-health-checks pb-health-checks-ok">
+                  {s.checks_ok.map((c, i) => <li key={i}>✓ {c}</li>)}
+                </ul>
+              )}
+              {s.issues.length > 0 && (
+                <ul className="pb-health-checks pb-health-checks-issue">
+                  {s.issues.map((c, i) => <li key={i}>✕ {c}</li>)}
+                </ul>
+              )}
+              <div className="pb-health-path"><code>{s.emulator_path}</code></div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -2516,6 +2602,7 @@ export default function PlayboxLauncher() {
   const [discPicker, setDiscPicker] = useState(null);
   // Logs viewer modal
   const [logsOpen, setLogsOpen] = useState(false);
+  const [healthOpen, setHealthOpen] = useState(false);
   // Emulator embarcado: { system, game } | null
   const [emulator, setEmulator] = useState(null);
   const [resumePrompt, setResumePrompt] = useState(null);
@@ -4055,6 +4142,7 @@ export default function PlayboxLauncher() {
           onToggleMusic={toggleMusic}
           onSetMusicVolume={setMusicVolume}
           onShowLogs={() => { closeSettings(); setTimeout(() => setLogsOpen(true), MODAL_EXIT_MS); }}
+          onShowHealth={() => { closeSettings(); setTimeout(() => setHealthOpen(true), MODAL_EXIT_MS); }}
         />
       )}
 
@@ -4183,6 +4271,10 @@ export default function PlayboxLauncher() {
 
       {logsOpen && (
         <LogsViewerModal onClose={() => { sfx.back(); setLogsOpen(false); }} />
+      )}
+
+      {healthOpen && (
+        <HealthCheckModal onClose={() => { sfx.back(); setHealthOpen(false); }} />
       )}
 
       {emulator && (
