@@ -3885,6 +3885,176 @@
 .pb-ra-ach-game { font-size: 10px; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.4px; }
 
 /* =================================================================
+ * LUDEX SPLASH v2 — bg animado + PNG art + entrada com vida
+ * ================================================================= */
+
+/* Override do bg estatico do .pb-splash quando .lx-splash-v2 esta presente */
+.pb-splash.lx-splash-v2 {
+  background: #04020c;
+  animation: pb-splash-out 0.6s ease 3.3s forwards;
+  overflow: hidden;
+}
+
+.lx-splash-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 1100px 800px at 50% 100%, rgba(124, 58, 237, 0.45), transparent 70%),
+    radial-gradient(ellipse 900px 700px at 20% 30%, rgba(236, 72, 153, 0.28), transparent 70%),
+    radial-gradient(ellipse 800px 600px at 85% 25%, rgba(59, 130, 246, 0.22), transparent 70%),
+    linear-gradient(160deg, #050015 0%, #0a0420 50%, #150830 100%);
+  z-index: 0;
+  overflow: hidden;
+}
+
+.lx-splash-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.55;
+  pointer-events: none;
+  will-change: transform;
+}
+.lx-splash-orb-a {
+  width: 320px; height: 320px;
+  background: radial-gradient(circle, #c4b5fd, transparent 70%);
+  top: 12%; left: 8%;
+  animation: lxOrbDrift1 14s ease-in-out infinite;
+}
+.lx-splash-orb-b {
+  width: 260px; height: 260px;
+  background: radial-gradient(circle, #f9a8d4, transparent 70%);
+  top: 60%; left: 75%;
+  animation: lxOrbDrift2 18s ease-in-out infinite;
+}
+.lx-splash-orb-c {
+  width: 380px; height: 380px;
+  background: radial-gradient(circle, #818cf8, transparent 70%);
+  top: 70%; left: 12%;
+  animation: lxOrbDrift3 16s ease-in-out infinite;
+}
+.lx-splash-orb-d {
+  width: 220px; height: 220px;
+  background: radial-gradient(circle, #fbcfe8, transparent 70%);
+  top: 18%; left: 70%;
+  animation: lxOrbDrift1 20s ease-in-out infinite reverse;
+}
+
+/* Grain sutil — textura de filme em cima do bg */
+.lx-splash-grain {
+  position: absolute;
+  inset: -20%;
+  background-image:
+    radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+    radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 4px 4px, 7px 7px;
+  background-position: 0 0, 2px 2px;
+  opacity: 0.35;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  animation: lxGrainShift 0.4s steps(8) infinite;
+}
+
+/* PNG dos 3 cards: sobe + escala + tilt sutil + glow embaixo. Top-aligned
+ * pra dar espaco pro logo embaixo. Pointer-events none pra nao bloquear. */
+.lx-splash-art {
+  position: absolute;
+  top: 8%;
+  left: 50%;
+  transform: translateX(-50%) translateY(40px) scale(0.92);
+  width: min(820px, 78vw);
+  max-height: 60vh;
+  height: auto;
+  object-fit: contain;
+  z-index: 2;
+  opacity: 0;
+  filter: drop-shadow(0 30px 60px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 40px rgba(124, 58, 237, 0.35));
+  animation: lxSplashArtIn 1400ms cubic-bezier(0.22, 1, 0.36, 1) 200ms forwards;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Glow roxo/pink embaixo da arte — disfarça o fade-out inferior do PNG */
+.lx-splash-art-glow {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(900px, 90vw);
+  height: 280px;
+  background: radial-gradient(ellipse 60% 60% at 50% 30%, rgba(196, 181, 253, 0.32), transparent 70%);
+  filter: blur(20px);
+  z-index: 1;
+  opacity: 0;
+  animation: lxFadeIn 1200ms ease 800ms forwards;
+  pointer-events: none;
+}
+
+/* "Chao" reflexivo — gradient escuro pra baixo + leve brilho horizontal */
+.lx-splash-art-floor {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 38%;
+  background:
+    linear-gradient(to top, #04020c 0%, rgba(4, 2, 12, 0.7) 30%, transparent 100%),
+    radial-gradient(ellipse 70% 100% at 50% 100%, rgba(124, 58, 237, 0.28), transparent 70%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Conteudo (logo + tagline + barra) em cima do tudo, ancorado embaixo */
+.lx-splash-content-v2 {
+  position: relative;
+  z-index: 3;
+  margin-top: auto;
+  margin-bottom: 8vh;
+}
+.lx-splash-logo-v2 {
+  font-size: 58px;
+  font-weight: 800;
+  letter-spacing: 0.5em;
+  background: linear-gradient(135deg, #c4b5fd 0%, #f9a8d4 50%, #c4b5fd 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 40px rgba(196, 181, 253, 0.18);
+  animation: lxLogoShine 3.5s ease-in-out 600ms infinite, pb-splash-logo 1.2s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+@keyframes lxSplashArtIn {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(40px) scale(0.92); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+@keyframes lxOrbDrift1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(60px, -40px) scale(1.1); }
+}
+@keyframes lxOrbDrift2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-80px, 30px) scale(0.9); }
+}
+@keyframes lxOrbDrift3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(40px, -60px) scale(1.15); }
+}
+@keyframes lxLogoShine {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+@keyframes lxGrainShift {
+  0% { transform: translate(0, 0); }
+  20%{ transform: translate(-3px, 2px); }
+  40%{ transform: translate(2px, -3px); }
+  60%{ transform: translate(-2px, -1px); }
+  80%{ transform: translate(3px, 1px); }
+ 100%{ transform: translate(0, 0); }
+}
+
+/* =================================================================
  * LUDEX FIRST-RUN ONBOARDING — tour spotlight + liquid glass + perfil
  * ================================================================= */
 

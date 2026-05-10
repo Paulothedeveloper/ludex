@@ -728,10 +728,31 @@ function AchievementToast({ achievement, onDone }) {
 
 function SplashScreen({ profileName }) {
   return (
-    <div className="pb-splash">
-      <div className="pb-splash-content">
-        <div className="pb-splash-logo">PLAYBOX</div>
-        <div className="pb-splash-tagline">EMULATION STATION</div>
+    <div className="pb-splash lx-splash-v2">
+      {/* Background animado: gradient roxo/pink + 4 orbs flutuando */}
+      <div className="lx-splash-bg">
+        <span className="lx-splash-orb lx-splash-orb-a" />
+        <span className="lx-splash-orb lx-splash-orb-b" />
+        <span className="lx-splash-orb lx-splash-orb-c" />
+        <span className="lx-splash-orb lx-splash-orb-d" />
+        <div className="lx-splash-grain" aria-hidden />
+      </div>
+
+      {/* PNG: 3 cards lado-a-lado. Sobe + fade + tilt sutil. Fundo trabalhado
+       * pra disfarcar o fade-out inferior do PNG (gradient escurecendo embaixo). */}
+      <img
+        className="lx-splash-art"
+        src="/splash-art.png"
+        alt=""
+        aria-hidden
+        draggable="false"
+      />
+      <div className="lx-splash-art-glow" aria-hidden />
+      <div className="lx-splash-art-floor" aria-hidden />
+
+      <div className="pb-splash-content lx-splash-content-v2">
+        <div className="pb-splash-logo lx-splash-logo-v2">L U D E X</div>
+        <div className="pb-splash-tagline">SUA BIBLIOTECA RETRO EM UM LUGAR SO</div>
         {profileName && <div className="pb-splash-welcome">Bem-vindo, {profileName}</div>}
         <div className="pb-splash-bar"><div className="pb-splash-bar-fill" /></div>
       </div>
@@ -3103,7 +3124,7 @@ export default function LudexLauncher() {
   // splash boot + intro music
   useEffect(() => {
     sfx.intro();
-    const t = setTimeout(() => setSplashDone(true), 2200);
+    const t = setTimeout(() => setSplashDone(true), 3500);
     return () => clearTimeout(t);
   }, []);
 
