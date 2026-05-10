@@ -274,12 +274,22 @@ function shuffle(arr) {
 }
 
 const ambientMusic = {
-  audio: null,         // HTMLAudioElement
-  playlist: [],        // array de file paths
-  queue: [],           // ordem shufflada atual
+  audio: null,            // HTMLAudioElement atual
+  audioListeners: null,   // { onEnded, onError } pra removeEventListener depois
+  playlist: [],           // array de file paths
+  queue: [],              // ordem shufflada atual
   current: 0,
   targetVolume: 0.3,
   fadeInterval: null,
+  fadeOutInterval: null,  // fade-out tem interval separado pra nao colidir com fade-in
+  /**
+   * Generation counter pra invalidar callbacks pendentes. Cada start()/stop()
+   * incrementa. Listeners (ended/error) so disparam _next() se sua geracao
+   * ainda for a atual. Resolve race quando user desativa musica e o ended
+   * listener dispara depois — bug que fazia musica nova tocar sozinha apos
+   * desativar.
+   */
+  generation: 0,
 
   async load() {
     try {
@@ -295,7 +305,9 @@ const ambientMusic = {
   },
 
   start(volume = 0.3) {
-    this.stop();
+    // Hard stop antes (sem fade-out, sem propagar listeners) pra eliminar audio
+    // antigo COMPLETAMENTE antes do novo. Evita 2 musicas tocando ao mesmo tempo.
+    this.stop({ immediate: true });
     if (!this.playlist.length) return;
     this.targetVolume = Math.max(0, Math.min(1, volume));
     this._playCurrent();
@@ -308,15 +320,27 @@ const ambientMusic = {
     try {
       const url = convertFileSrc(path);
       const audio = new Audio(url);
-      audio.volume = 0; // fade-in
+      audio.volume = 0;
       audio.preload = "auto";
-      audio.addEventListener("ended", () => this._next());
-      audio.addEventListener("error", (e) => {
+      // Captura geracao atual; listener so age se geracao nao mudou (ou seja,
+      // se ninguem chamou stop ou start nesse meio tempo).
+      const myGen = ++this.generation;
+      const onEnded = () => {
+        if (myGen !== this.generation) return; // foi parado, ignora
+        if (this.audio !== audio) return;       // outro audio assumiu
+        this._next();
+      };
+      const onError = (e) => {
+        if (myGen !== this.generation) return;
+        if (this.audio !== audio) return;
         console.error("audio error", e);
         this._next();
-      });
+      };
+      audio.addEventListener("ended", onEnded);
+      audio.addEventListener("error", onError);
       audio.play().catch((e) => console.error("audio play", e));
       this.audio = audio;
+      this.audioListeners = { onEnded, onError };
       this._fadeTo(this.targetVolume, 1500);
     } catch (e) {
       console.error("play track", e);
@@ -325,7 +349,6 @@ const ambientMusic = {
 
   _next() {
     this.current = (this.current + 1) % (this.queue.length || 1);
-    // Re-shuffle se voltou pro inicio
     if (this.current === 0) this.queue = shuffle(this.playlist);
     this._playCurrent();
   },
@@ -349,35 +372,58 @@ const ambientMusic = {
     if (this.audio) this._fadeTo(this.targetVolume, 300);
   },
 
+  /**
+   * Para a musica.
+   * - Sempre incrementa generation (invalida listeners pendentes).
+   * - Sempre remove os listeners do audio atual (defensa dupla).
+   * - Sempre pause() imediato.
+   * - Se opts.immediate=false, faz fade-out visual de 400ms ANTES do null,
+   *   mas o audio ja foi efetivamente desligado (sem chance de ended disparar).
+   */
   stop(opts = {}) {
     const immediate = !!opts.immediate;
+    // Invalida qualquer callback pendente (gen check)
+    this.generation++;
     if (this.fadeInterval) { clearInterval(this.fadeInterval); this.fadeInterval = null; }
-    if (this.audio) {
-      const a = this.audio;
-      this.audio = null;
-      if (immediate) {
-        try { a.pause(); a.volume = 0; a.src = ""; } catch {}
-        return;
-      }
-      try {
-        // Fade-out + pause
-        const start = a.volume;
-        const startTime = performance.now();
-        const dur = 500;
-        const interval = setInterval(() => {
-          const elapsed = performance.now() - startTime;
-          const t = Math.min(1, elapsed / dur);
-          a.volume = start * (1 - t);
-          if (t >= 1) {
-            clearInterval(interval);
-            try { a.pause(); a.src = ""; } catch {}
-          }
-        }, 50);
-      } catch {}
+    if (this.fadeOutInterval) { clearInterval(this.fadeOutInterval); this.fadeOutInterval = null; }
+    if (!this.audio) return;
+    const a = this.audio;
+    const ls = this.audioListeners;
+    this.audio = null;
+    this.audioListeners = null;
+    // Remove listeners DEFINITIVAMENTE — defesa dupla contra ended/error
+    if (ls) {
+      try { a.removeEventListener("ended", ls.onEnded); } catch {}
+      try { a.removeEventListener("error", ls.onError); } catch {}
     }
+    if (immediate) {
+      try { a.pause(); a.volume = 0; a.src = ""; a.load(); } catch {}
+      return;
+    }
+    // Fade-out cosmetico: audio ja sem listeners, ended/error nao disparam nada
+    try {
+      const start = a.volume;
+      const startTime = performance.now();
+      const dur = 400;
+      this.fadeOutInterval = setInterval(() => {
+        const elapsed = performance.now() - startTime;
+        const t = Math.min(1, elapsed / dur);
+        a.volume = start * (1 - t);
+        if (t >= 1) {
+          clearInterval(this.fadeOutInterval);
+          this.fadeOutInterval = null;
+          try { a.pause(); a.src = ""; a.load(); } catch {}
+        }
+      }, 40);
+    } catch {}
   },
 
   skip() {
+    // Para o audio atual com cleanup completo, depois toca proxima.
+    // Sem isso, o audio antigo poderia continuar tocando 1-2s ate o GC pegar
+    // (e listeners ainda ativos disparariam _next em loop infinito).
+    this.stop({ immediate: true });
+    if (!this.playlist.length) return;
     this._next();
   },
 
