@@ -425,8 +425,11 @@ fn resolve_emulators_root(custom: Option<&str>) -> PathBuf {
         }
     }
     // Autodetect: roda na ordem de prioridade. Primeiro acha = vence.
+    // Ludex (novo nome do projeto) vem antes do legacy Playbox.
     let candidates = [
+        PathBuf::from("D:\\Projetos do Claude\\Ludex\\emulators"),
         PathBuf::from("D:\\Projetos do Claude\\Playbox\\emulators"),
+        PathBuf::from("D:\\Ludex\\emulators"),
         PathBuf::from("D:\\Playbox\\emulators"),
         PathBuf::from("C:\\Ludex\\emulators"),
     ];
@@ -445,7 +448,9 @@ fn resolve_roms_root(custom: Option<&str>) -> PathBuf {
         if p.is_dir() { return p; }
     }
     let candidates = [
+        PathBuf::from("D:\\Projetos do Claude\\Ludex\\roms"),
         PathBuf::from("D:\\Projetos do Claude\\Playbox\\roms"),
+        PathBuf::from("D:\\Ludex\\roms"),
         PathBuf::from("D:\\Playbox\\roms"),
         PathBuf::from("C:\\Ludex\\roms"),
     ];
