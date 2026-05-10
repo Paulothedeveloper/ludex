@@ -1101,28 +1101,28 @@ fn token_cache() -> &'static Mutex<Option<CachedToken>> {
 
 fn covers_dir() -> Option<PathBuf> {
     let base = dirs::data_dir()?;
-    let dir = base.join("Playbox").join("covers");
+    let dir = base.join("Ludex").join("covers");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir)
 }
 
 fn screenshots_dir() -> Option<PathBuf> {
     let base = dirs::data_dir()?;
-    let dir = base.join("Playbox").join("screenshots");
+    let dir = base.join("Ludex").join("screenshots");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir)
 }
 
 fn details_dir() -> Option<PathBuf> {
     let base = dirs::data_dir()?;
-    let dir = base.join("Playbox").join("details");
+    let dir = base.join("Ludex").join("details");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir)
 }
 
 fn token_path() -> Option<PathBuf> {
     let base = dirs::data_dir()?;
-    let dir = base.join("Playbox");
+    let dir = base.join("Ludex");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir.join("igdb_token.json"))
 }
@@ -1279,6 +1279,9 @@ struct Profile {
     id: String,
     name: String,
     photo_path: Option<String>,
+    /// ID de um avatar default do Ludex (av-purple, av-pink, etc) escolhido no
+    /// onboarding. Vazio se o user usou foto custom (photo_path) ou nao escolheu.
+    avatar_id: Option<String>,
     created_at: u64,
     favorites: Vec<String>,
     play_time: std::collections::BTreeMap<String, u64>,
@@ -1296,6 +1299,7 @@ impl Default for Profile {
             id: String::new(),
             name: String::new(),
             photo_path: None,
+            avatar_id: None,
             created_at: 0,
             favorites: Vec::new(),
             play_time: std::collections::BTreeMap::new(),
@@ -1352,6 +1356,9 @@ struct AppConfig {
     /// RetroAchievements: username + web API key (gerada em /controlpanel.php)
     ra_username: Option<String>,
     ra_api_key: Option<String>,
+    /// Marca que o usuario completou o onboarding+criacao de perfil. Default false em
+    /// configs novas/legadas; setado pelo front com complete_first_run() apos o tour.
+    first_run_done: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1381,27 +1388,28 @@ impl Default for AppConfig {
             music_volume: 0.35,
             ra_username: None,
             ra_api_key: None,
+            first_run_done: false,
         }
     }
 }
 
 fn config_path() -> Option<PathBuf> {
     let base = dirs::data_dir()?;
-    let dir = base.join("Playbox");
+    let dir = base.join("Ludex");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir.join("config.json"))
 }
 
 fn profiles_dir() -> Option<PathBuf> {
     let base = dirs::data_dir()?;
-    let dir = base.join("Playbox").join("profiles");
+    let dir = base.join("Ludex").join("profiles");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir)
 }
 
 fn wallpapers_dir() -> Option<PathBuf> {
     let base = dirs::data_dir()?;
-    let dir = base.join("Playbox").join("wallpapers");
+    let dir = base.join("Ludex").join("wallpapers");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir)
 }
@@ -1664,7 +1672,7 @@ fn move_dir_contents(from: &Path, to: &Path) -> Result<u32, String> {
 
 fn profile_saves_dir(profile_id: &str, emu_id: &str) -> Option<PathBuf> {
     let base = dirs::data_dir()?;
-    let dir = base.join("Playbox").join("profiles").join(profile_id).join("saves").join(emu_id);
+    let dir = base.join("Ludex").join("profiles").join(profile_id).join("saves").join(emu_id);
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir)
 }
@@ -2073,7 +2081,7 @@ fn libretro_set_input(button_id: u32, pressed: bool) {
 
 fn save_state_path(rom_path: &str, slot: u32) -> Option<PathBuf> {
     let base = dirs::data_dir()?;
-    let dir = base.join("Playbox").join("saves-libretro");
+    let dir = base.join("Ludex").join("saves-libretro");
     std::fs::create_dir_all(&dir).ok()?;
     let stem = Path::new(rom_path).file_stem()?.to_string_lossy().to_string();
     let safe = sanitize_filename(&stem);
@@ -2082,7 +2090,7 @@ fn save_state_path(rom_path: &str, slot: u32) -> Option<PathBuf> {
 
 fn save_thumb_path(rom_path: &str, slot: u32) -> Option<PathBuf> {
     let base = dirs::data_dir()?;
-    let dir = base.join("Playbox").join("saves-libretro");
+    let dir = base.join("Ludex").join("saves-libretro");
     std::fs::create_dir_all(&dir).ok()?;
     let stem = Path::new(rom_path).file_stem()?.to_string_lossy().to_string();
     let safe = sanitize_filename(&stem);
@@ -2251,7 +2259,7 @@ fn read_app_logs(max_lines: Option<usize>) -> Result<String, String> {
     let limit = max_lines.unwrap_or(200);
     // tauri-plugin-log salva em <log_dir>/<bundle_id>.log
     let base = dirs::data_local_dir().or_else(dirs::data_dir).ok_or("data dir indisponivel")?;
-    let log_dir = base.join("com.paulobatista.playbox").join("logs");
+    let log_dir = base.join("gg.ludex.app").join("logs");
     let mut log_files: Vec<PathBuf> = Vec::new();
     if log_dir.is_dir() {
         if let Ok(entries) = std::fs::read_dir(&log_dir) {
@@ -2287,6 +2295,77 @@ fn open_in_explorer(path: String) -> Result<(), String> {
         .arg(&path)
         .spawn()
         .map_err(|e| format!("explorer.exe: {}", e))?;
+    Ok(())
+}
+
+/// Marca que o onboarding + criacao de perfil terminaram. Chamado pelo front
+/// no fim do FirstRunWizard. Configs antigas (Playbox v0.3.x) tem default false,
+/// mas se ja existir um active_profile_id, o front trata como done.
+#[tauri::command]
+fn complete_first_run() -> Result<(), String> {
+    let mut cfg = load_config();
+    cfg.first_run_done = true;
+    save_config_internal(cfg)
+}
+
+/// Estrutura de pastas por sistema: ROMs, DLCs, Mods/Patches.
+/// Tudo fica em <roms_root>/<folder_name>/, com subpastas _DLC e _MODS criadas
+/// on-demand. Underscore prefixo evita que o scanner pegue como ROM.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SystemFolders {
+    system_id: String,
+    system_name: String,
+    roms_path: String,
+    dlc_path: String,
+    mods_path: String,
+}
+
+#[tauri::command]
+fn get_system_folders(system_id: String) -> Result<SystemFolders, String> {
+    let cfg = EMULATORS.iter().find(|c| c.id == system_id)
+        .ok_or_else(|| format!("Sistema desconhecido: {}", system_id))?;
+    let roms_root = current_roms_root();
+    let base = roms_root.join(cfg.folder_name);
+    let dlc = base.join("_DLC");
+    let mods = base.join("_MODS");
+    // Cria as pastas se nao existem (silenciosamente, ok se ja existir)
+    let _ = std::fs::create_dir_all(&base);
+    let _ = std::fs::create_dir_all(&dlc);
+    let _ = std::fs::create_dir_all(&mods);
+    Ok(SystemFolders {
+        system_id: cfg.id.to_string(),
+        system_name: cfg.name.to_string(),
+        roms_path: base.to_string_lossy().to_string(),
+        dlc_path: dlc.to_string_lossy().to_string(),
+        mods_path: mods.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+fn open_folder(path: String) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    if !p.exists() {
+        // tenta criar (caso seja uma pasta nova nao escrita ainda)
+        std::fs::create_dir_all(&p).map_err(|e| format!("criar pasta: {}", e))?;
+    }
+    Command::new("explorer.exe")
+        .arg(&path)
+        .spawn()
+        .map_err(|e| format!("explorer.exe: {}", e))?;
+    Ok(())
+}
+
+/// Abre uma URL no navegador padrao do user. Usado pra "Sugestoes de jogos"
+/// que linka pra sites externos (vimms, romhacking, etc).
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("URL invalida (precisa http/https)".into());
+    }
+    Command::new("cmd")
+        .args(["/C", "start", "", &url])
+        .spawn()
+        .map_err(|e| format!("abrir url: {}", e))?;
     Ok(())
 }
 
@@ -2829,7 +2908,7 @@ fn ra_creds_from_cfg(cfg: &AppConfig) -> Option<(String, String)> {
 async fn ra_fetch_summary_internal(username: &str, api_key: &str) -> Result<RaSummary, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
-        .user_agent("Playbox/0.3 (RA-companion)")
+        .user_agent("Ludex/0.4 (RA-companion)")
         .build()
         .map_err(|e| format!("http client: {}", e))?;
 
@@ -3139,7 +3218,11 @@ pub fn run() {
             get_play_stats,
             ra_save_credentials,
             ra_clear_credentials,
-            ra_get_summary
+            ra_get_summary,
+            complete_first_run,
+            get_system_folders,
+            open_folder,
+            open_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

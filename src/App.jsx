@@ -1,6 +1,6 @@
 import React from "react";
 import { invoke } from "@tauri-apps/api/core";
-import PlayboxLauncher from "./PlayboxLauncher";
+import LudexLauncher from "./LudexLauncher";
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -11,7 +11,7 @@ class ErrorBoundary extends React.Component {
     return { error };
   }
   componentDidCatch(error, info) {
-    console.error("Playbox crash", error, info);
+    console.error("Ludex crash", error, info);
     this.setState({ info });
   }
   async resetConfig() {
@@ -31,7 +31,7 @@ class ErrorBoundary extends React.Component {
         fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif", padding: 32,
       }}>
         <div style={{ maxWidth: 720, textAlign: "left" }}>
-          <h1 style={{ fontSize: 22, margin: 0, color: "#f87171" }}>Playbox falhou ao iniciar</h1>
+          <h1 style={{ fontSize: 22, margin: 0, color: "#f87171" }}>Ludex falhou ao iniciar</h1>
           <p style={{ color: "#aaa", marginTop: 12 }}>Detalhe do erro:</p>
           <pre style={{
             background: "#0f0f0f", padding: 14, borderRadius: 8,
@@ -61,7 +61,7 @@ class ErrorBoundary extends React.Component {
 export default function App() {
   return (
     <ErrorBoundary>
-      <PlayboxLauncher />
+      <LudexLauncher />
     </ErrorBoundary>
   );
 }

@@ -1,7 +1,7 @@
 [package]
-name = "playbox"
-version = "0.3.2"
-description = "Playbox Launcher - Emulation Station"
+name = "ludex"
+version = "0.4.0"
+description = "Ludex - Sua biblioteca retro em um lugar so"
 authors = ["Paulo Batista"]
 license = ""
 repository = ""

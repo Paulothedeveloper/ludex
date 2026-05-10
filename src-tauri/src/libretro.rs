@@ -121,7 +121,7 @@ static STATE: OnceLock<Arc<StdMutex<LibretroState>>> = OnceLock::new();
 pub fn state() -> Arc<StdMutex<LibretroState>> {
     STATE.get_or_init(|| {
         let dir_base = dirs::data_dir()
-            .map(|d| d.join("Playbox"))
+            .map(|d| d.join("Ludex"))
             .unwrap_or_else(|| std::path::PathBuf::from("."));
         let sys_dir  = dir_base.join("system");
         let save_dir = dir_base.join("saves-libretro");

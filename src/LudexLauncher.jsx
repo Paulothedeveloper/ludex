@@ -6,7 +6,9 @@ import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { check as checkUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import "./PlayboxLauncher.css";
+import "./LudexLauncher.css";
+import LudexOnboarding, { DEFAULT_AVATARS, avatarUrl } from "./LudexOnboarding";
+import { EmptyStateSystem, SuggestionsModal, ControlsTipModal } from "./LudexExtras";
 
 // === Captura global de erros JS -> log do Rust ===
 // Garante que crashes do frontend chegam ao arquivo de log lido pelo LogsViewerModal.
@@ -954,6 +956,7 @@ function SettingsPanel({
   onToggleSavesIsolation, savesStatus,
   onToggleMusic, onSetMusicVolume,
   onShowLogs, onShowHealth,
+  onOpenSuggestions,
   modalGamepadRef,
 }) {
   const [discordId, setDiscordId] = useState(config.discord_app_id || "");
@@ -1369,7 +1372,17 @@ function SettingsPanel({
             </p>
           )}
           <p className="pb-settings-hint" style={{ marginTop: 6 }}>
-            Verifica novas versões em <code>github.com/EllaeMyApp/playbox-launcher</code>. Baixa e reinicia automaticamente.
+            Verifica novas versões em <code>github.com/EllaeMyApp/ludex</code>. Baixa e reinicia automaticamente.
+          </p>
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>Onde baixar jogos / DLCs / mods</h3>
+          <button className="pb-settings-btn" onClick={() => { sfx.click(); onOpenSuggestions && onOpenSuggestions(); }}>
+            🌐 Abrir guia de fontes
+          </button>
+          <p className="pb-settings-hint" style={{ marginTop: 6 }}>
+            Lista de sites populares por categoria (ROMs, traduções PT-BR, mods de FPS/resolução, DLCs). Aviso legal e dicas pra evitar quebrar saves.
           </p>
         </div>
 
@@ -1537,7 +1550,7 @@ function SettingsPanel({
             {isFullscreen ? "Sair da Tela Cheia" : "Entrar em Tela Cheia"}
           </button>
           <button className="pb-settings-btn pb-settings-btn-danger" onClick={() => { sfx.back(); onQuit(); }}>
-            <PowerIcon /> Sair do Playbox
+            <PowerIcon /> Sair do Ludex
           </button>
         </div>
 
@@ -1553,7 +1566,7 @@ function SettingsPanel({
           <p className="pb-settings-hint">Útil quando algum jogo não abre — mostra as últimas 200 linhas do log.</p>
         </div>
 
-        <footer className="pb-settings-footer">Playbox Launcher · v0.3</footer>
+        <footer className="pb-settings-footer">Ludex · v0.4</footer>
       </aside>
     </>
   );
@@ -1778,7 +1791,7 @@ function LogsViewerModal({ onClose }) {
     <div className="pb-modal-backdrop" onClick={onClose}>
       <div className="pb-modal pb-logs-modal" onClick={(e) => e.stopPropagation()}>
         <header className="pb-modal-header">
-          <h2>Logs do Playbox</h2>
+          <h2>Logs do Ludex</h2>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="pb-icon-btn" onClick={load} title="Recarregar" disabled={busy}><RefreshIcon /></button>
             <button className="pb-icon-btn" onClick={onClose}><CloseIcon /></button>
@@ -2870,7 +2883,7 @@ function DeleteConfirmModal({ game, system, onCancel, onConfirm }) {
   );
 }
 
-export default function PlayboxLauncher() {
+export default function LudexLauncher() {
   const [systems, setSystems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scanError, setScanError] = useState(null);
@@ -2893,6 +2906,11 @@ export default function PlayboxLauncher() {
   const [welcomeBack, setWelcomeBack] = useState(false);
   const [systemEnter, setSystemEnter] = useState({ id: null, key: 0 });
   const [quitting, setQuitting] = useState(false);
+  // First-run onboarding + utilitarios novos do v0.4
+  const [firstRunActive, setFirstRunActive] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [suggestionsTab, setSuggestionsTab] = useState("roms");
+  const [controlsTip, setControlsTip] = useState(null); // { system } | null
   const [romsRoot, setRomsRoot] = useState("");
   const [emulatorsRoot, setEmulatorsRoot] = useState("");
   // Menu de contexto: { x, y, system, game } | null
@@ -3125,7 +3143,14 @@ export default function PlayboxLauncher() {
       try {
         const c = await invoke("load_config");
         if (c) setConfig(c);
-        if ((c?.profiles || []).length === 0) setProfilesOpen(true);
+        // First-run: ativa onboarding se nao tem profile ativo E nao tem first_run_done.
+        // Configs migradas do Playbox (que ja tem profile) sao tratadas como done.
+        const hasProfile = (c?.profiles || []).length > 0 && !!c?.active_profile_id;
+        if (!hasProfile && !c?.first_run_done) {
+          setFirstRunActive(true);
+        } else if ((c?.profiles || []).length === 0) {
+          setProfilesOpen(true);
+        }
       } catch (e) {
         console.error("load_config", e);
       }
@@ -3321,7 +3346,7 @@ export default function PlayboxLauncher() {
       setDiscPicker({ system: selected, game: selectedGame });
       return;
     }
-    // Sistema com libretro_core configurado = roda EMBARCADO no Playbox
+    // Sistema com libretro_core configurado = roda EMBARCADO no Ludex
     if (selected?.libretro_core) {
       sfx.confirm();
       // Quick resume: se ja tem save, oferece continuar
@@ -3375,7 +3400,7 @@ export default function PlayboxLauncher() {
   }, [selected?.id, splashDone]);
 
   // -------- Profiles --------
-  const createProfile = useCallback(async ({ name, photoSourcePath }) => {
+  const createProfile = useCallback(async ({ name, photoSourcePath, avatarId }) => {
     const id = genId();
     let photo_path = null;
     if (photoSourcePath) {
@@ -3388,11 +3413,27 @@ export default function PlayboxLauncher() {
     }
     setConfig((prev) => ({
       ...prev,
-      profiles: [...prev.profiles, { id, name, photo_path, created_at: Math.floor(Date.now() / 1000) }],
+      profiles: [...prev.profiles, {
+        id, name, photo_path,
+        avatar_id: photo_path ? null : (avatarId || null),
+        created_at: Math.floor(Date.now() / 1000),
+      }],
       active_profile_id: prev.active_profile_id || id,
     }));
     closeProfiles();
   }, [closeProfiles]);
+
+  // Conclui o onboarding: cria profile, persiste, marca first_run_done no backend.
+  const handleFirstRunComplete = useCallback(async ({ name, avatar, customPhotoPath }) => {
+    await createProfile({
+      name,
+      avatarId: avatar?.id,
+      photoSourcePath: customPhotoPath || null,
+    });
+    try { await invoke("complete_first_run"); } catch (e) { console.error("complete_first_run", e); }
+    setFirstRunActive(false);
+    sfx.confirm();
+  }, [createProfile]);
 
   const selectProfile = useCallback((id) => {
     setConfig((prev) => ({ ...prev, active_profile_id: id }));
@@ -4194,7 +4235,7 @@ export default function PlayboxLauncher() {
 
       {!splashDone && <SplashScreen profileName={activeProfile?.name} />}
 
-      <header className="pb-top">
+      <header className="pb-top" data-tour="topbar">
         <div className="pb-top-left">
           {activeProfile ? (
             <button className="pb-top-avatar" onClick={() => { sfx.open(); setProfilesOpen(true); }} title="Trocar perfil (P)">
@@ -4229,7 +4270,7 @@ export default function PlayboxLauncher() {
             <kbd className="pb-search-pill-kbd">/</kbd>
           </button>
           <button className="pb-icon-btn" onClick={pickRandomGame} title="Surpresa! (R) — escolhe jogo aleatorio">🎲</button>
-          <button className="pb-icon-btn" onClick={() => { sfx.confirm(); setSettingsOpen(true); }} title="Configuracoes (S)"><GearIcon /></button>
+          <button className="pb-icon-btn" data-tour="settings" onClick={() => { sfx.confirm(); setSettingsOpen(true); }} title="Configuracoes (S)"><GearIcon /></button>
           {gamepadConnected && <span className="pb-gamepad-indicator" title="Controle conectado"><GamepadIcon /></span>}
           <span className="pb-clock">{time}</span>
         </div>
@@ -4280,7 +4321,7 @@ export default function PlayboxLauncher() {
                 )}
               </div>
               {selected.games.length > 0 && (
-                <div className="pb-sort-pills">
+                <div className="pb-sort-pills" data-tour="sort">
                   {[
                     { id: "default", label: "Padrão" },
                     { id: "az",       label: "A-Z" },
@@ -4299,7 +4340,7 @@ export default function PlayboxLauncher() {
             </div>
 
             {visibleGames.length > 0 && (
-              <div className="pb-grid-wrap" key={`grid-${selected.id}-${sortMode}`}>
+              <div className="pb-grid-wrap" key={`grid-${selected.id}-${sortMode}`} data-tour="grid">
                 <div className="pb-grid">
                   {visibleGames.map((g, i) => {
                     const cover = covers[g.path];
@@ -4372,6 +4413,14 @@ export default function PlayboxLauncher() {
             {selected.games.length === 0 && !selected.emulator_exists && (
               <div className="pb-warn">Emulador nao encontrado em disco</div>
             )}
+
+            {selected.games.length === 0 && (
+              <EmptyStateSystem
+                system={selected}
+                onOpenSuggestions={() => { sfx.open(); setSuggestionsTab("roms"); setSuggestionsOpen(true); }}
+                onOpenControls={() => { sfx.open(); setControlsTip({ system: selected }); }}
+              />
+            )}
           </>
         )}
 
@@ -4381,7 +4430,7 @@ export default function PlayboxLauncher() {
       </main>
 
       <nav className={`pb-systems ${focusZone === "systems" ? "focused" : ""}`}>
-        <div className="pb-systems-list">
+        <div className="pb-systems-list" data-tour="systems">
           {displayedSystems.map((sys, i) => {
             const isActive = i === selectedSystemIdx;
             const isEmpty = sys.games.length === 0;
@@ -4462,6 +4511,7 @@ export default function PlayboxLauncher() {
           onSetMusicVolume={setMusicVolume}
           onShowLogs={() => { closeSettings(); setTimeout(() => setLogsOpen(true), MODAL_EXIT_MS); }}
           onShowHealth={() => { closeSettings(); setTimeout(() => setHealthOpen(true), MODAL_EXIT_MS); }}
+          onOpenSuggestions={() => { closeSettings(); setTimeout(() => { setSuggestionsTab("roms"); setSuggestionsOpen(true); }, MODAL_EXIT_MS); }}
         />
       )}
 
@@ -4647,6 +4697,24 @@ export default function PlayboxLauncher() {
             >Cancelar (Esc / Select+R1)</button>
           </div>
         </div>
+      )}
+
+      {/* Modais novos do v0.4 (sugestoes de jogos + dicas de controle) */}
+      <SuggestionsModal
+        open={suggestionsOpen}
+        defaultTab={suggestionsTab}
+        onClose={() => setSuggestionsOpen(false)}
+      />
+      <ControlsTipModal
+        open={!!controlsTip}
+        system={controlsTip?.system}
+        onClose={() => setControlsTip(null)}
+      />
+
+      {/* First-run onboarding: tour spotlight + criacao de perfil. Fica em
+       * cima de tudo (z-index 9000) ate o user concluir. */}
+      {firstRunActive && splashDone && (
+        <LudexOnboarding onComplete={handleFirstRunComplete} />
       )}
     </div>
   );
