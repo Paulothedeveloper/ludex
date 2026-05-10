@@ -3955,52 +3955,49 @@
   animation: lxGrainShift 0.4s steps(8) infinite;
 }
 
-/* PNG dos 3 cards: sobe + escala + tilt sutil + glow embaixo. Top-aligned
- * pra dar espaco pro logo embaixo. Pointer-events none pra nao bloquear. */
+/* PNG dos 3 cards: cobre TELA INTEIRA com object-fit cover. Fundo roxo do
+ * .lx-splash-bg fica visivel atraves dos cantos transparentes do PNG e da
+ * leve dessaturacao por filter. Subtle Ken Burns: scale 1.05 -> 1.0 + opacity. */
 .lx-splash-art {
   position: absolute;
-  top: 8%;
-  left: 50%;
-  transform: translateX(-50%) translateY(40px) scale(0.92);
-  width: min(820px, 78vw);
-  max-height: 60vh;
-  height: auto;
-  object-fit: contain;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
   z-index: 2;
   opacity: 0;
-  filter: drop-shadow(0 30px 60px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 40px rgba(124, 58, 237, 0.35));
-  animation: lxSplashArtIn 1400ms cubic-bezier(0.22, 1, 0.36, 1) 200ms forwards;
+  transform: scale(1.05);
+  filter: drop-shadow(0 0 80px rgba(124, 58, 237, 0.4));
+  animation: lxSplashArtIn 1600ms cubic-bezier(0.22, 1, 0.36, 1) 300ms forwards;
   pointer-events: none;
   user-select: none;
 }
 
-/* Glow roxo/pink embaixo da arte — disfarça o fade-out inferior do PNG */
+/* Tinta roxa sobre o PNG pra integrar com o bg + reduzir contraste agressivo */
 .lx-splash-art-glow {
   position: absolute;
-  top: 45%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(900px, 90vw);
-  height: 280px;
-  background: radial-gradient(ellipse 60% 60% at 50% 30%, rgba(196, 181, 253, 0.32), transparent 70%);
-  filter: blur(20px);
-  z-index: 1;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 50%, transparent 30%, rgba(10, 4, 32, 0.35) 100%),
+    linear-gradient(180deg, rgba(124, 58, 237, 0.15) 0%, transparent 30%, transparent 70%, rgba(20, 12, 38, 0.6) 100%);
+  z-index: 3;
   opacity: 0;
-  animation: lxFadeIn 1200ms ease 800ms forwards;
+  animation: lxFadeIn 1500ms ease 500ms forwards;
   pointer-events: none;
+  mix-blend-mode: multiply;
 }
 
-/* "Chao" reflexivo — gradient escuro pra baixo + leve brilho horizontal */
+/* "Chao" reflexivo — gradient escuro pra baixo, espaco pro logo respirar */
 .lx-splash-art-floor {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 38%;
+  height: 40%;
   background:
-    linear-gradient(to top, #04020c 0%, rgba(4, 2, 12, 0.7) 30%, transparent 100%),
-    radial-gradient(ellipse 70% 100% at 50% 100%, rgba(124, 58, 237, 0.28), transparent 70%);
-  z-index: 1;
+    linear-gradient(to top, #04020c 0%, rgba(4, 2, 12, 0.85) 25%, rgba(20, 12, 38, 0.4) 60%, transparent 100%),
+    radial-gradient(ellipse 70% 80% at 50% 100%, rgba(124, 58, 237, 0.35), transparent 70%);
+  z-index: 4;
   pointer-events: none;
 }
 
@@ -4025,9 +4022,9 @@
 }
 
 @keyframes lxSplashArtIn {
-  0%   { opacity: 0; transform: translateX(-50%) translateY(40px) scale(0.92); }
-  60%  { opacity: 1; }
-  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  0%   { opacity: 0; transform: scale(1.05); }
+  40%  { opacity: 1; }
+  100% { opacity: 1; transform: scale(1.0); }
 }
 @keyframes lxOrbDrift1 {
   0%, 100% { transform: translate(0, 0) scale(1); }
@@ -4631,6 +4628,131 @@
 @keyframes lxCaretBlink {
   0%, 49% { opacity: 1; }
   50%, 100% { opacity: 0; }
+}
+
+/* =================================================================
+ * LX-MODAL — overlay animado pra Suggestions e ControlsTip
+ * ================================================================= */
+.lx-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 8500;
+  background: rgba(4, 2, 12, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  animation: lxFadeIn 220ms ease both;
+}
+.lx-modal {
+  width: min(560px, 100%);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  background: rgba(20, 12, 38, 0.85);
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.55);
+  color: #fff;
+  overflow: hidden;
+  animation: lxModalIn 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.lx-modal.lx-modal-large {
+  width: min(820px, 100%);
+}
+.lx-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid rgba(167, 139, 250, 0.18);
+  flex-shrink: 0;
+}
+.lx-modal-header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+}
+.lx-modal-close {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(229, 222, 244, 0.7);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 160ms, color 160ms, transform 160ms;
+}
+.lx-modal-close:hover {
+  background: rgba(248, 113, 113, 0.18);
+  color: #fca5a5;
+  transform: scale(1.08);
+}
+.lx-modal > * {
+  padding-left: 22px;
+  padding-right: 22px;
+}
+.lx-modal > .lx-modal-header {
+  padding-left: 22px;
+  padding-right: 22px;
+}
+.lx-modal > .lx-suggestions,
+.lx-modal > .lx-controls-tip {
+  padding-top: 16px;
+  padding-bottom: 22px;
+}
+.lx-modal > .lx-sugg-warn,
+.lx-modal > .pb-sort-pills {
+  margin-top: 14px;
+}
+
+@keyframes lxModalIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+/* =================================================================
+ * TOOLBAR DE SISTEMA (top bar) — botoes ROMs/DLCs/Mods/Sites/Controle
+ * ================================================================= */
+.lx-top-sys-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: 18px;
+  align-items: center;
+}
+.lx-top-sys-btn {
+  height: 32px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(167, 139, 250, 0.18);
+  color: rgba(229, 222, 244, 0.85);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 160ms, border-color 160ms, transform 140ms;
+}
+.lx-top-sys-btn span {
+  font-size: 11.5px;
+  letter-spacing: 0.3px;
+}
+.lx-top-sys-btn:hover {
+  background: rgba(124, 58, 237, 0.18);
+  border-color: rgba(196, 181, 253, 0.45);
+  transform: translateY(-1px);
+}
+.lx-top-sys-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 /* =================================================================

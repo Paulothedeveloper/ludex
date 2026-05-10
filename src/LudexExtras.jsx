@@ -6,13 +6,13 @@ const ic = (size = 18) => ({
   width: size, height: size, viewBox: "0 0 24 24", fill: "none",
   stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", strokeLinejoin: "round",
 });
-const FolderIcon  = (p) => <svg {...ic(p?.size)}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>;
-const GiftIcon    = (p) => <svg {...ic(p?.size)}><path d="M20 12v9H4v-9"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z"/></svg>;
-const ToolsIcon   = (p) => <svg {...ic(p?.size)}><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5 2.5-2.5Z"/></svg>;
-const GlobeIcon   = (p) => <svg {...ic(p?.size)}><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>;
-const GamepadIcon = (p) => <svg {...ic(p?.size)}><path d="M6 9h2M7 8v2M16 9h.01M18 11h.01M5 6h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3 4 4 0 0 1-3-1l-1-1H8l-1 1a4 4 0 0 1-3 1 3 3 0 0 1-3-3V9a3 3 0 0 1 3-3Z"/></svg>;
-const WarningIcon = (p) => <svg {...ic(p?.size)}><path d="M12 3 1 21h22L12 3Z"/><path d="M12 10v5M12 18v.01"/></svg>;
-const ExternalIcon = (p) => <svg {...ic(p?.size)}><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M20 14v6H4V4h6"/></svg>;
+export const FolderIcon  = (p) => <svg {...ic(p?.size)}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>;
+export const GiftIcon    = (p) => <svg {...ic(p?.size)}><path d="M20 12v9H4v-9"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z"/></svg>;
+export const ToolsIcon   = (p) => <svg {...ic(p?.size)}><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5 2.5-2.5Z"/></svg>;
+export const GlobeIcon   = (p) => <svg {...ic(p?.size)}><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>;
+export const GamepadIcon = (p) => <svg {...ic(p?.size)}><path d="M6 9h2M7 8v2M16 9h.01M18 11h.01M5 6h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3 4 4 0 0 1-3-1l-1-1H8l-1 1a4 4 0 0 1-3 1 3 3 0 0 1-3-3V9a3 3 0 0 1 3-3Z"/></svg>;
+export const WarningIcon = (p) => <svg {...ic(p?.size)}><path d="M12 3 1 21h22L12 3Z"/><path d="M12 10v5M12 18v.01"/></svg>;
+export const ExternalIcon = (p) => <svg {...ic(p?.size)}><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M20 14v6H4V4h6"/></svg>;
 const CloseIconLx  = (p) => <svg {...ic(p?.size)}><path d="M6 6l12 12M18 6 6 18"/></svg>;
 
 /**
@@ -144,11 +144,11 @@ export function SuggestionsModal({ open, onClose, defaultTab = "roms" }) {
   }
 
   return (
-    <div className="pb-modal-overlay" onClick={onClose}>
-      <div className="pb-modal pb-modal-large" onClick={(e) => e.stopPropagation()} role="dialog">
-        <div className="pb-modal-header">
+    <div className="lx-modal-overlay" onClick={onClose}>
+      <div className="lx-modal lx-modal-large" onClick={(e) => e.stopPropagation()} role="dialog">
+        <div className="lx-modal-header">
           <h2>Onde baixar — guia de fontes</h2>
-          <button className="pb-modal-close" onClick={onClose}>×</button>
+          <button className="lx-modal-close" onClick={onClose} aria-label="Fechar"><CloseIconLx /></button>
         </div>
 
         <div className="lx-sugg-warn">
@@ -266,11 +266,11 @@ export function ControlsTipModal({ open, onClose, system }) {
   const tip = CONTROL_TIPS[system.id];
 
   return (
-    <div className="pb-modal-overlay" onClick={onClose}>
-      <div className="pb-modal" onClick={(e) => e.stopPropagation()} role="dialog">
-        <div className="pb-modal-header">
+    <div className="lx-modal-overlay" onClick={onClose}>
+      <div className="lx-modal" onClick={(e) => e.stopPropagation()} role="dialog">
+        <div className="lx-modal-header">
           <h2>Controle — {system.name}</h2>
-          <button className="pb-modal-close" onClick={onClose}>×</button>
+          <button className="lx-modal-close" onClick={onClose} aria-label="Fechar"><CloseIconLx /></button>
         </div>
 
         <div className="lx-controls-tip">

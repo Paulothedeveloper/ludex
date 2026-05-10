@@ -8,7 +8,14 @@ import { check as checkUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import "./LudexLauncher.css";
 import LudexOnboarding, { DEFAULT_AVATARS, avatarUrl, getProfileAvatarUrl } from "./LudexOnboarding";
-import { EmptyStateSystem, SuggestionsModal, ControlsTipModal } from "./LudexExtras";
+import {
+  EmptyStateSystem, SuggestionsModal, ControlsTipModal,
+  FolderIcon as LxFolderIcon,
+  GiftIcon as LxGiftIcon,
+  ToolsIcon as LxToolsIcon,
+  GlobeIcon as LxGlobeIcon,
+  GamepadIcon as LxGamepadIcon,
+} from "./LudexExtras";
 
 // === Captura global de erros JS -> log do Rust ===
 // Garante que crashes do frontend chegam ao arquivo de log lido pelo LogsViewerModal.
@@ -710,10 +717,15 @@ function SearchOverlay({ systems, onPick, onClose, closing, modalGamepadRef }) {
 }
 
 function AchievementToast({ achievement, onDone }) {
+  // Capture onDone na ref pra timer disparar uma unica vez na vida do component
+  // (deps [onDone] no useEffect fazia o parent re-render cancelar e reagendar
+  // o timer infinitamente, e a conquista nunca sumia).
+  const doneRef = useRef(onDone);
+  useEffect(() => { doneRef.current = onDone; }, [onDone]);
   useEffect(() => {
-    const t = setTimeout(onDone, 4500);
+    const t = setTimeout(() => { doneRef.current && doneRef.current(); }, 4500);
     return () => clearTimeout(t);
-  }, [onDone]);
+  }, []);
   return (
     <div className="pb-achievement">
       <div className="pb-achievement-icon"><StarIcon filled /></div>
@@ -768,6 +780,8 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
   const [clearPhoto, setClearPhoto] = useState(false);
   const [photoErr, setPhotoErr] = useState(null);
   const [focusedIdx, setFocusedIdx] = useState(0);
+  // avatarId: usado quando user nao tem foto custom. Default = primeiro avatar.
+  const [avatarId, setAvatarId] = useState(DEFAULT_AVATARS[0].id);
 
   // Total na lista = perfis + botao "Novo Perfil"
   const totalCells = profiles.length + 1;
@@ -785,6 +799,7 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
     setPhotoPath(null);
     setClearPhoto(false);
     setPhotoErr(null);
+    setAvatarId(profile.avatar_id || DEFAULT_AVATARS[0].id);
   }
 
   function startCreate() {
@@ -793,6 +808,7 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
     setPhotoPath(null);
     setClearPhoto(false);
     setPhotoErr(null);
+    setAvatarId(DEFAULT_AVATARS[0].id);
   }
 
   function backToList() {
@@ -812,14 +828,21 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
 
   async function submit() {
     if (!name.trim()) return;
+    // Se nao tem foto custom (nem nova nem antiga preservada), usa avatar default
+    const usesAvatar = !photoPath && (clearPhoto || !editingProfile?.photo_path);
     if (mode === "create") {
-      await onCreate({ name: name.trim(), photoSourcePath: photoPath });
+      await onCreate({
+        name: name.trim(),
+        photoSourcePath: photoPath,
+        avatarId: usesAvatar ? avatarId : null,
+      });
     } else if (editingProfile) {
       await onUpdate({
         id: editingProfile.id,
         name: name.trim(),
         photoSourcePath: photoPath,
         clearPhoto,
+        avatarId: usesAvatar ? avatarId : null,
       });
     }
     backToList();
@@ -932,7 +955,7 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
                 ? <img src={convertFileSrc(photoPath)} alt="preview" />
                 : currentPhotoSrc
                   ? <img src={currentPhotoSrc} alt="atual" />
-                  : <span><UserIcon /><br />Escolher foto</span>}
+                  : <img src={avatarUrl(DEFAULT_AVATARS.find(a => a.id === avatarId))} alt="avatar" />}
             </button>
             {(photoPath || currentPhotoSrc) && (
               <button
@@ -940,10 +963,39 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
                 className="pb-btn pb-btn-ghost pb-btn-sm"
                 onClick={() => { setPhotoPath(null); setClearPhoto(true); }}
               >
-                Remover foto
+                Remover foto e usar avatar
               </button>
             )}
             {photoErr && <div className="pb-warn">{photoErr}</div>}
+
+            {/* Grid de avatares default - so visivel quando nao tem foto custom */}
+            {!photoPath && !currentPhotoSrc && (
+              <div className="lx-avatar-grid" style={{ marginTop: 8 }}>
+                {DEFAULT_AVATARS.map((av) => {
+                  const selected = av.id === avatarId;
+                  return (
+                    <button
+                      key={av.id}
+                      type="button"
+                      className={`lx-avatar-tile ${selected ? "selected" : ""}`}
+                      title={av.label}
+                      onClick={() => { sfx.click(); setAvatarId(av.id); }}
+                    >
+                      <img src={avatarUrl(av)} alt={av.label} />
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  className="lx-avatar-tile lx-avatar-custom"
+                  onClick={pickPhoto}
+                  title="Usar foto do PC"
+                >
+                  <span>+ Foto</span>
+                </button>
+              </div>
+            )}
+
             <input
               type="text"
               className="pb-input"
@@ -3498,7 +3550,7 @@ export default function LudexLauncher() {
     invoke("delete_profile_photo", { profileId: id }).catch(() => {});
   }, []);
 
-  const updateProfile = useCallback(async ({ id, name, photoSourcePath, clearPhoto }) => {
+  const updateProfile = useCallback(async ({ id, name, photoSourcePath, clearPhoto, avatarId }) => {
     let nextPhotoPath = undefined; // undefined = nao mexer
     if (clearPhoto) {
       try { await invoke("delete_profile_photo", { profileId: id }); } catch (e) { console.error(e); }
@@ -3513,11 +3565,18 @@ export default function LudexLauncher() {
     }
     setConfig((prev) => ({
       ...prev,
-      profiles: prev.profiles.map((p) =>
-        p.id === id
-          ? { ...p, name, ...(nextPhotoPath !== undefined ? { photo_path: nextPhotoPath } : {}) }
-          : p
-      ),
+      profiles: prev.profiles.map((p) => {
+        if (p.id !== id) return p;
+        const updated = { ...p, name };
+        if (nextPhotoPath !== undefined) updated.photo_path = nextPhotoPath;
+        // avatar_id so eh aplicado quando nao tem foto custom (avatarId vem null
+        // do form quando a foto vence). Quando tem foto, avatar_id zera pra evitar
+        // ambiguidade no display.
+        if (avatarId !== undefined) {
+          updated.avatar_id = avatarId; // pode ser null tambem (limpar)
+        }
+        return updated;
+      }),
     }));
   }, []);
 
@@ -4302,6 +4361,63 @@ export default function LudexLauncher() {
                 <SystemIcon id={selected.id} />
               </span>
               <span className="pb-top-system-name">{selected.name}</span>
+            </div>
+          )}
+          {selected && (
+            <div className="lx-top-sys-actions">
+              <button
+                className="lx-top-sys-btn"
+                title="Abrir pasta de ROMs"
+                onClick={async () => {
+                  sfx.click();
+                  try {
+                    const f = await invoke("get_system_folders", { systemId: selected.id });
+                    await invoke("open_folder", { path: f.roms_path });
+                  } catch (e) { console.error(e); }
+                }}
+              >
+                <LxFolderIcon /><span>ROMs</span>
+              </button>
+              <button
+                className="lx-top-sys-btn"
+                title="Abrir pasta de DLCs"
+                onClick={async () => {
+                  sfx.click();
+                  try {
+                    const f = await invoke("get_system_folders", { systemId: selected.id });
+                    await invoke("open_folder", { path: f.dlc_path });
+                  } catch (e) { console.error(e); }
+                }}
+              >
+                <LxGiftIcon /><span>DLCs</span>
+              </button>
+              <button
+                className="lx-top-sys-btn"
+                title="Abrir pasta de Mods/Patches"
+                onClick={async () => {
+                  sfx.click();
+                  try {
+                    const f = await invoke("get_system_folders", { systemId: selected.id });
+                    await invoke("open_folder", { path: f.mods_path });
+                  } catch (e) { console.error(e); }
+                }}
+              >
+                <LxToolsIcon /><span>Mods</span>
+              </button>
+              <button
+                className="lx-top-sys-btn"
+                title="Onde baixar (guia de fontes)"
+                onClick={() => { sfx.open(); setSuggestionsTab("roms"); setSuggestionsOpen(true); }}
+              >
+                <LxGlobeIcon /><span>Sites</span>
+              </button>
+              <button
+                className="lx-top-sys-btn"
+                title="Configurar controle deste emulador"
+                onClick={() => { sfx.open(); setControlsTip({ system: selected }); }}
+              >
+                <LxGamepadIcon /><span>Controle</span>
+              </button>
             </div>
           )}
         </div>
