@@ -4709,6 +4709,11 @@
 .lx-modal > .lx-sugg-warn,
 .lx-modal > .pb-sort-pills {
   margin-top: 14px;
+  flex-wrap: wrap;       /* quebra linha em vez de cortar a ultima pill */
+  border-radius: 14px;   /* pill multilinha precisa border-radius menor */
+  padding: 6px;
+  row-gap: 6px;
+  justify-content: flex-start;
 }
 
 @keyframes lxModalIn {

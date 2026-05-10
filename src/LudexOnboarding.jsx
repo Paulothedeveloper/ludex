@@ -5,7 +5,9 @@ import VirtualKeyboard from "./LudexOSK";
 // 10 avatares SVG procedurais (data URI) — sem assets externos.
 // Cada um tem cor/glyph diferente. Inicial do nome do user é desenhada por cima
 // se passada via prop, mas o "default" sozinho já é suficiente.
-function buildAvatarSvg({ bg1, bg2, glyph, glyphColor = "#fff" }) {
+// dominant-baseline=central + text-anchor=middle = centro geometrico exato
+// independente da metrica de cada caractere. glyphSize ajusta caso a caso.
+function buildAvatarSvg({ bg1, bg2, glyph, glyphColor = "#fff", glyphSize = 110 }) {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">` +
       `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
@@ -13,23 +15,26 @@ function buildAvatarSvg({ bg1, bg2, glyph, glyphColor = "#fff" }) {
         `<stop offset="100%" stop-color="${bg2}"/>` +
       `</linearGradient></defs>` +
       `<rect width="200" height="200" fill="url(#g)"/>` +
-      `<text x="100" y="125" text-anchor="middle" font-family="Inter, system-ui, sans-serif" ` +
-        `font-size="100" font-weight="800" fill="${glyphColor}">${glyph}</text>` +
+      `<text x="100" y="100" text-anchor="middle" dominant-baseline="central" ` +
+        `font-family="Inter, system-ui, sans-serif" ` +
+        `font-size="${glyphSize}" font-weight="800" fill="${glyphColor}">${glyph}</text>` +
     `</svg>`
   );
 }
 
+// Glyphs sao simbolos Unicode geometricos (nao emojis no padrao Unicode emoji
+// block) - renderizam como vetor monocromatico, sem variation-selector colorido.
 export const DEFAULT_AVATARS = [
-  { id: "av-purple",   label: "Roxo Ludex",  svg: buildAvatarSvg({ bg1: "#7c3aed", bg2: "#5b21b6", glyph: "L" }) },
-  { id: "av-pink",     label: "Rosa Neon",   svg: buildAvatarSvg({ bg1: "#ec4899", bg2: "#be185d", glyph: "P" }) },
-  { id: "av-blue",     label: "Azul Retro",  svg: buildAvatarSvg({ bg1: "#3b82f6", bg2: "#1d4ed8", glyph: "B" }) },
-  { id: "av-green",    label: "Verde 8-bit", svg: buildAvatarSvg({ bg1: "#22c55e", bg2: "#15803d", glyph: "G" }) },
-  { id: "av-red",      label: "Vermelho",    svg: buildAvatarSvg({ bg1: "#ef4444", bg2: "#b91c1c", glyph: "R" }) },
-  { id: "av-orange",   label: "Laranja",     svg: buildAvatarSvg({ bg1: "#f97316", bg2: "#c2410c", glyph: "O" }) },
-  { id: "av-yellow",   label: "Amarelo",     svg: buildAvatarSvg({ bg1: "#eab308", bg2: "#a16207", glyph: "Y", glyphColor: "#1a1a1a" }) },
-  { id: "av-cyan",     label: "Ciano",       svg: buildAvatarSvg({ bg1: "#06b6d4", bg2: "#0e7490", glyph: "C" }) },
-  { id: "av-slate",    label: "Cinza",       svg: buildAvatarSvg({ bg1: "#475569", bg2: "#1e293b", glyph: "X" }) },
-  { id: "av-rainbow",  label: "Multiverse",  svg: buildAvatarSvg({ bg1: "#7c3aed", bg2: "#ec4899", glyph: "M" }) },
+  { id: "av-purple",   label: "Roxo Ludex",   svg: buildAvatarSvg({ bg1: "#7c3aed", bg2: "#5b21b6", glyph: "L",  glyphSize: 130 }) },
+  { id: "av-pink",     label: "Estrela Rosa", svg: buildAvatarSvg({ bg1: "#ec4899", bg2: "#be185d", glyph: "★", glyphSize: 140 }) },
+  { id: "av-blue",     label: "Diamante",     svg: buildAvatarSvg({ bg1: "#3b82f6", bg2: "#1d4ed8", glyph: "◆", glyphSize: 140 }) },
+  { id: "av-green",    label: "Play",         svg: buildAvatarSvg({ bg1: "#22c55e", bg2: "#15803d", glyph: "▶", glyphSize: 110 }) },
+  { id: "av-red",      label: "Coracao",      svg: buildAvatarSvg({ bg1: "#ef4444", bg2: "#b91c1c", glyph: "♥", glyphSize: 130 }) },
+  { id: "av-orange",   label: "Alvo",         svg: buildAvatarSvg({ bg1: "#f97316", bg2: "#c2410c", glyph: "◉", glyphSize: 140 }) },
+  { id: "av-yellow",   label: "Estrela Ouro", svg: buildAvatarSvg({ bg1: "#eab308", bg2: "#a16207", glyph: "★", glyphSize: 140, glyphColor: "#1a1a1a" }) },
+  { id: "av-cyan",     label: "Power",        svg: buildAvatarSvg({ bg1: "#06b6d4", bg2: "#0e7490", glyph: "⏻", glyphSize: 120 }) },
+  { id: "av-slate",    label: "Quadrado",     svg: buildAvatarSvg({ bg1: "#475569", bg2: "#1e293b", glyph: "▣", glyphSize: 130 }) },
+  { id: "av-rainbow",  label: "Omega",        svg: buildAvatarSvg({ bg1: "#7c3aed", bg2: "#ec4899", glyph: "Ω", glyphSize: 130 }) },
 ];
 
 export function avatarUrl(av) {
