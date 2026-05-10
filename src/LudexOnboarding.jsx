@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import VirtualKeyboard from "./LudexOSK";
 
 // 10 avatares SVG procedurais (data URI) — sem assets externos.
 // Cada um tem cor/glyph diferente. Inicial do nome do user é desenhada por cima
@@ -20,20 +21,41 @@ function buildAvatarSvg({ bg1, bg2, glyph, glyphColor = "#fff" }) {
 
 export const DEFAULT_AVATARS = [
   { id: "av-purple",   label: "Roxo Ludex",  svg: buildAvatarSvg({ bg1: "#7c3aed", bg2: "#5b21b6", glyph: "L" }) },
-  { id: "av-pink",     label: "Rosa Neon",   svg: buildAvatarSvg({ bg1: "#ec4899", bg2: "#be185d", glyph: "★" }) },
-  { id: "av-blue",     label: "Azul Retro",  svg: buildAvatarSvg({ bg1: "#3b82f6", bg2: "#1d4ed8", glyph: "8" }) },
-  { id: "av-green",    label: "Verde 8-bit", svg: buildAvatarSvg({ bg1: "#22c55e", bg2: "#15803d", glyph: "▶" }) },
-  { id: "av-red",      label: "Vermelho",    svg: buildAvatarSvg({ bg1: "#ef4444", bg2: "#b91c1c", glyph: "♥" }) },
-  { id: "av-orange",   label: "Laranja Joy", svg: buildAvatarSvg({ bg1: "#f97316", bg2: "#c2410c", glyph: "◉" }) },
-  { id: "av-yellow",   label: "Estrela",     svg: buildAvatarSvg({ bg1: "#eab308", bg2: "#a16207", glyph: "★", glyphColor: "#1a1a1a" }) },
-  { id: "av-cyan",     label: "Power Ciano", svg: buildAvatarSvg({ bg1: "#06b6d4", bg2: "#0e7490", glyph: "⏻" }) },
-  { id: "av-slate",    label: "Cartucho",    svg: buildAvatarSvg({ bg1: "#475569", bg2: "#1e293b", glyph: "▣" }) },
-  { id: "av-rainbow",  label: "Multiverse",  svg: buildAvatarSvg({ bg1: "#7c3aed", bg2: "#ec4899", glyph: "Ω" }) },
+  { id: "av-pink",     label: "Rosa Neon",   svg: buildAvatarSvg({ bg1: "#ec4899", bg2: "#be185d", glyph: "P" }) },
+  { id: "av-blue",     label: "Azul Retro",  svg: buildAvatarSvg({ bg1: "#3b82f6", bg2: "#1d4ed8", glyph: "B" }) },
+  { id: "av-green",    label: "Verde 8-bit", svg: buildAvatarSvg({ bg1: "#22c55e", bg2: "#15803d", glyph: "G" }) },
+  { id: "av-red",      label: "Vermelho",    svg: buildAvatarSvg({ bg1: "#ef4444", bg2: "#b91c1c", glyph: "R" }) },
+  { id: "av-orange",   label: "Laranja",     svg: buildAvatarSvg({ bg1: "#f97316", bg2: "#c2410c", glyph: "O" }) },
+  { id: "av-yellow",   label: "Amarelo",     svg: buildAvatarSvg({ bg1: "#eab308", bg2: "#a16207", glyph: "Y", glyphColor: "#1a1a1a" }) },
+  { id: "av-cyan",     label: "Ciano",       svg: buildAvatarSvg({ bg1: "#06b6d4", bg2: "#0e7490", glyph: "C" }) },
+  { id: "av-slate",    label: "Cinza",       svg: buildAvatarSvg({ bg1: "#475569", bg2: "#1e293b", glyph: "X" }) },
+  { id: "av-rainbow",  label: "Multiverse",  svg: buildAvatarSvg({ bg1: "#7c3aed", bg2: "#ec4899", glyph: "M" }) },
 ];
 
 export function avatarUrl(av) {
   if (!av) return null;
   return `data:image/svg+xml;utf8,${encodeURIComponent(av.svg)}`;
+}
+
+/**
+ * Resolve a URL de exibicao do avatar do profile, na ordem:
+ *   1. Foto custom salva no disco (photo_path) -> file:// via convertFileSrc
+ *   2. Avatar default escolhido no onboarding (avatar_id) -> data URI SVG
+ *   3. null (caller deve fallback pra <UserIcon />)
+ *
+ * `convertFileSrc` precisa ser passado por dependency injection porque o helper
+ * vive em LudexOnboarding mas e usado em LudexLauncher (evita circular import).
+ */
+export function getProfileAvatarUrl(profile, convertFileSrc) {
+  if (!profile) return null;
+  if (profile.photo_path && convertFileSrc) {
+    return convertFileSrc(profile.photo_path);
+  }
+  if (profile.avatar_id) {
+    const av = DEFAULT_AVATARS.find((a) => a.id === profile.avatar_id);
+    if (av) return avatarUrl(av);
+  }
+  return null;
 }
 
 // Steps do tour. Cada step tem um seletor (data-tour) que aponta pro elemento
@@ -190,6 +212,7 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
   const [avatarId, setAvatarId] = useState(DEFAULT_AVATARS[0].id);
   const [customPhotoPath, setCustomPhotoPath] = useState(null);
   const [pickingPhoto, setPickingPhoto] = useState(false);
+  const [oskOpen, setOskOpen] = useState(false);
   const trimmed = name.trim();
   const canContinue = trimmed.length >= 2;
 
@@ -234,9 +257,22 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
           maxLength={28}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Seu nome ou apelido"
+          onFocus={() => setOskOpen(true)}
+          placeholder="Seu nome ou apelido (clique pra digitar com controle)"
+          readOnly={oskOpen}
         />
       </label>
+      {oskOpen && (
+        <VirtualKeyboard
+          label="Seu nome ou apelido"
+          value={name}
+          maxLength={28}
+          placeholder="Digite com controle ou teclado"
+          onChange={setName}
+          onSubmit={() => setOskOpen(false)}
+          onClose={() => setOskOpen(false)}
+        />
+      )}
 
       <div className="lx-firstrun-field">
         <span>Escolha um avatar</span>

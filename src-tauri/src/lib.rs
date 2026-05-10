@@ -424,8 +424,15 @@ fn resolve_emulators_root(custom: Option<&str>) -> PathBuf {
             if bundled.is_dir() { return bundled; }
         }
     }
-    let d_playbox = PathBuf::from("D:\\Playbox\\emulators");
-    if d_playbox.is_dir() { return d_playbox; }
+    // Autodetect: roda na ordem de prioridade. Primeiro acha = vence.
+    let candidates = [
+        PathBuf::from("D:\\Projetos do Claude\\Playbox\\emulators"),
+        PathBuf::from("D:\\Playbox\\emulators"),
+        PathBuf::from("C:\\Ludex\\emulators"),
+    ];
+    for c in candidates.iter() {
+        if c.is_dir() { return c.clone(); }
+    }
     if let Some(docs) = dirs::document_dir() {
         return docs.join("EMULADORES").join("ROMS EMULADORES");
     }
@@ -437,8 +444,14 @@ fn resolve_roms_root(custom: Option<&str>) -> PathBuf {
         let p = PathBuf::from(c);
         if p.is_dir() { return p; }
     }
-    let d_playbox = PathBuf::from("D:\\Playbox\\roms");
-    if d_playbox.is_dir() { return d_playbox; }
+    let candidates = [
+        PathBuf::from("D:\\Projetos do Claude\\Playbox\\roms"),
+        PathBuf::from("D:\\Playbox\\roms"),
+        PathBuf::from("C:\\Ludex\\roms"),
+    ];
+    for c in candidates.iter() {
+        if c.is_dir() { return c.clone(); }
+    }
     if let Some(docs) = dirs::document_dir() {
         return docs.join("EMULADORES").join("ROMS GAMES");
     }
@@ -1414,9 +1427,64 @@ fn wallpapers_dir() -> Option<PathBuf> {
     Some(dir)
 }
 
+/// Migra config.json do Playbox antigo (%AppData%\Playbox) pro Ludex
+/// (%AppData%\Ludex) na primeira vez que o Ludex roda. Tambem copia subpastas
+/// de profiles e wallpapers se existirem. Marca first_run_done = true porque
+/// pra um user de Playbox isso ja eh segunda execucao, nao primeira.
+fn try_migrate_playbox_config() -> Option<AppConfig> {
+    let base = dirs::data_dir()?;
+    let old_dir = base.join("Playbox");
+    let new_dir = base.join("Ludex");
+    let old_config = old_dir.join("config.json");
+    if !old_config.is_file() { return None; }
+    let new_config = new_dir.join("config.json");
+    if new_config.is_file() { return None; } // ja migrou ou ja existe
+
+    log::info!("Migrando config do Playbox: {} -> {}", old_config.display(), new_config.display());
+    let _ = std::fs::create_dir_all(&new_dir);
+
+    // Copia config + atualiza first_run_done
+    let data = std::fs::read_to_string(&old_config).ok()?;
+    let mut cfg: AppConfig = serde_json::from_str(&data).ok()?;
+    cfg.first_run_done = true;
+    let _ = std::fs::write(&new_config, serde_json::to_string_pretty(&cfg).ok()?);
+
+    // Copia profiles/ e wallpapers/ se existirem
+    for sub in &["profiles", "wallpapers", "covers", "screenshots", "details"] {
+        let src = old_dir.join(sub);
+        let dst = new_dir.join(sub);
+        if src.is_dir() && !dst.exists() {
+            copy_dir_recursive(&src, &dst).ok();
+        }
+    }
+    Some(cfg)
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else {
+            std::fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn load_config() -> AppConfig {
     if let Some(path) = config_path() {
+        // Tenta migrar do Playbox antigo se config nao existe ainda
+        if !path.is_file() {
+            if let Some(migrated) = try_migrate_playbox_config() {
+                return migrated;
+            }
+        }
         if let Ok(data) = std::fs::read_to_string(&path) {
             if let Ok(mut cfg) = serde_json::from_str::<AppConfig>(&data) {
                 // sanity: descarta last_played apontando pra ROM que nao existe mais

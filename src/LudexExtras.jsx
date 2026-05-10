@@ -1,6 +1,20 @@
 import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
+/* SVG icons inline — sem emoji em UI de producao. Stroke 1.6, 18x18 default. */
+const ic = (size = 18) => ({
+  width: size, height: size, viewBox: "0 0 24 24", fill: "none",
+  stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", strokeLinejoin: "round",
+});
+const FolderIcon  = (p) => <svg {...ic(p?.size)}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>;
+const GiftIcon    = (p) => <svg {...ic(p?.size)}><path d="M20 12v9H4v-9"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z"/></svg>;
+const ToolsIcon   = (p) => <svg {...ic(p?.size)}><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5 2.5-2.5Z"/></svg>;
+const GlobeIcon   = (p) => <svg {...ic(p?.size)}><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>;
+const GamepadIcon = (p) => <svg {...ic(p?.size)}><path d="M6 9h2M7 8v2M16 9h.01M18 11h.01M5 6h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3 4 4 0 0 1-3-1l-1-1H8l-1 1a4 4 0 0 1-3 1 3 3 0 0 1-3-3V9a3 3 0 0 1 3-3Z"/></svg>;
+const WarningIcon = (p) => <svg {...ic(p?.size)}><path d="M12 3 1 21h22L12 3Z"/><path d="M12 10v5M12 18v.01"/></svg>;
+const ExternalIcon = (p) => <svg {...ic(p?.size)}><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M20 14v6H4V4h6"/></svg>;
+const CloseIconLx  = (p) => <svg {...ic(p?.size)}><path d="M6 6l12 12M18 6 6 18"/></svg>;
+
 /**
  * Empty state mostrado quando o sistema atual não tem ROMs.
  * Botões: abrir pasta de ROMs, abrir pasta de DLCs, abrir pasta de Mods, ver sugestões.
@@ -41,23 +55,23 @@ export function EmptyStateSystem({ system, onOpenSuggestions, onOpenControls }) 
       </p>
       <div className="lx-empty-actions">
         <button className="lx-empty-btn lx-empty-btn-primary" onClick={() => openKind("roms")} disabled={busy}>
-          📁 Abrir pasta de ROMs
+          <FolderIcon /> Abrir pasta de ROMs
         </button>
         <button className="lx-empty-btn" onClick={() => openKind("dlc")} disabled={busy}>
-          🎁 Abrir pasta de DLCs
+          <GiftIcon /> Abrir pasta de DLCs
         </button>
         <button className="lx-empty-btn" onClick={() => openKind("mods")} disabled={busy}>
-          🛠️ Abrir pasta de Mods/Patches
+          <ToolsIcon /> Abrir pasta de Mods/Patches
         </button>
         <button className="lx-empty-btn" onClick={() => onOpenSuggestions && onOpenSuggestions(system)}>
-          🌐 Onde baixar
+          <GlobeIcon /> Onde baixar
         </button>
         <button className="lx-empty-btn" onClick={() => onOpenControls && onOpenControls(system)}>
-          🎮 Configurar controle
+          <GamepadIcon /> Configurar controle
         </button>
       </div>
       <p className="lx-empty-warn">
-        ⚠️ Use ROMs, DLCs e patches que você possui legalmente. Mods de tradução e patches de FPS/resolução podem corromper saves antigos — faça backup antes.
+        <WarningIcon size={14} /> Use ROMs, DLCs e patches que você possui legalmente. Mods de tradução e patches de FPS/resolução podem corromper saves antigos — faça backup antes.
       </p>
       {err && <p className="lx-empty-warn" style={{ color: "#fca5a5" }}>{err}</p>}
     </div>

@@ -7,7 +7,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { check as checkUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import "./LudexLauncher.css";
-import LudexOnboarding, { DEFAULT_AVATARS, avatarUrl } from "./LudexOnboarding";
+import LudexOnboarding, { DEFAULT_AVATARS, avatarUrl, getProfileAvatarUrl } from "./LudexOnboarding";
 import { EmptyStateSystem, SuggestionsModal, ControlsTipModal } from "./LudexExtras";
 
 // === Captura global de erros JS -> log do Rust ===
@@ -899,9 +899,10 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
               <div key={p.id} className={`pb-profile-card ${p.id === activeId ? "active" : ""} ${focusedIdx === i ? "focused" : ""}`}>
                 <button className="pb-profile-pick" onClick={() => { sfx.confirm(); setFocusedIdx(i); onSelect(p.id); }}>
                   <div className="pb-profile-avatar">
-                    {p.photo_path
-                      ? <img src={convertFileSrc(p.photo_path)} alt={p.name} />
-                      : <UserIcon />}
+                    {(() => {
+                      const src = getProfileAvatarUrl(p, convertFileSrc);
+                      return src ? <img src={src} alt={p.name} /> : <UserIcon />;
+                    })()}
                   </div>
                   <div className="pb-profile-name">{p.name}</div>
                 </button>
@@ -1189,9 +1190,10 @@ function SettingsPanel({
           {activeProfile ? (
             <button className="pb-active-profile" onClick={() => { sfx.open(); onOpenProfiles(); }}>
               <div className="pb-profile-avatar pb-profile-avatar-sm">
-                {activeProfile.photo_path
-                  ? <img src={convertFileSrc(activeProfile.photo_path)} alt="" />
-                  : <UserIcon />}
+                {(() => {
+                  const src = getProfileAvatarUrl(activeProfile, convertFileSrc);
+                  return src ? <img src={src} alt="" /> : <UserIcon />;
+                })()}
               </div>
               <span>{activeProfile.name}</span>
               <span className="pb-active-profile-action">Trocar</span>
@@ -1400,7 +1402,7 @@ function SettingsPanel({
         <div className="pb-settings-section">
           <h3>Onde baixar jogos / DLCs / mods</h3>
           <button className="pb-settings-btn" onClick={() => { sfx.click(); onOpenSuggestions && onOpenSuggestions(); }}>
-            🌐 Abrir guia de fontes
+            <PlusIcon /> Abrir guia de fontes
           </button>
           <p className="pb-settings-hint" style={{ marginTop: 6 }}>
             Lista de sites populares por categoria (ROMs, traduções PT-BR, mods de FPS/resolução, DLCs). Aviso legal e dicas pra evitar quebrar saves.
@@ -2932,6 +2934,9 @@ export default function LudexLauncher() {
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [suggestionsTab, setSuggestionsTab] = useState("roms");
   const [controlsTip, setControlsTip] = useState(null); // { system } | null
+  // Bottom-bar acessivel por D-pad direito ao final dos sistemas. -1 = inativo,
+  // 0 = botao Configuracoes, 1 = botao Sair. Quando >= 0, focusZone vira "util".
+  const [utilIdx, setUtilIdx] = useState(-1);
   const [romsRoot, setRomsRoot] = useState("");
   const [emulatorsRoot, setEmulatorsRoot] = useState("");
   // Menu de contexto: { x, y, system, game } | null
@@ -4204,14 +4209,27 @@ export default function LudexLauncher() {
       // Navegacao por zona (mesma logica do gamepad)
       if (e.key === "ArrowRight") {
         e.preventDefault(); sfx.nav();
-        if (focusZone === "systems") {
-          setSelectedSystemIdx((i) => Math.min(displayedSystems.length - 1, i + 1));
+        if (focusZone === "util") {
+          setUtilIdx((i) => Math.min(1, i + 1));
+        } else if (focusZone === "systems") {
+          if (selectedSystemIdx >= displayedSystems.length - 1) {
+            // Passa pra bottom bar (Configuracoes / Sair)
+            setFocusZone("util"); setUtilIdx(0);
+          } else {
+            setSelectedSystemIdx((i) => i + 1);
+          }
         } else if (visibleGames.length > 0) {
           setSelectedGameIdx((g) => Math.min(visibleGames.length - 1, g + 1));
         }
       } else if (e.key === "ArrowLeft") {
         e.preventDefault(); sfx.nav();
-        if (focusZone === "systems") {
+        if (focusZone === "util") {
+          if (utilIdx <= 0) {
+            setFocusZone("systems"); setUtilIdx(-1);
+          } else {
+            setUtilIdx((i) => i - 1);
+          }
+        } else if (focusZone === "systems") {
           setSelectedSystemIdx((i) => Math.max(0, i - 1));
         } else if (visibleGames.length > 0) {
           setSelectedGameIdx((g) => Math.max(0, g - 1));
@@ -4222,13 +4240,19 @@ export default function LudexLauncher() {
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         if (focusZone === "systems") { sfx.nav(); setFocusZone("games"); }
+        else if (focusZone === "util") { sfx.nav(); setFocusZone("systems"); setUtilIdx(-1); }
       } else if (e.key === "Enter") {
         e.preventDefault();
-        if (focusZone === "systems") { sfx.confirm(); setFocusZone("games"); }
+        if (focusZone === "util") {
+          sfx.confirm();
+          if (utilIdx === 0) { setSettingsOpen(true); }
+          else if (utilIdx === 1) { handleQuit(); }
+        } else if (focusZone === "systems") { sfx.confirm(); setFocusZone("games"); }
         else if (selectedGame) handleLaunch();
       } else if (e.key === "Backspace") {
         e.preventDefault();
-        if (focusZone === "games") { sfx.back(); setFocusZone("systems"); }
+        if (focusZone === "util") { sfx.back(); setFocusZone("systems"); setUtilIdx(-1); }
+        else if (focusZone === "games") { sfx.back(); setFocusZone("systems"); }
       }
     };
     window.addEventListener("keydown", onKey);
@@ -4261,9 +4285,10 @@ export default function LudexLauncher() {
           {activeProfile ? (
             <button className="pb-top-avatar" onClick={() => { sfx.open(); setProfilesOpen(true); }} title="Trocar perfil (P)">
               <div className="pb-profile-avatar pb-profile-avatar-sm">
-                {activeProfile.photo_path
-                  ? <img src={convertFileSrc(activeProfile.photo_path)} alt="" />
-                  : <UserIcon />}
+                {(() => {
+                  const src = getProfileAvatarUrl(activeProfile, convertFileSrc);
+                  return src ? <img src={src} alt="" /> : <UserIcon />;
+                })()}
               </div>
             </button>
           ) : (
@@ -4471,10 +4496,18 @@ export default function LudexLauncher() {
             );
           })}
           <div className="pb-sys-divider" />
-          <button className="pb-sys pb-sys-util" onClick={() => { sfx.open(); setSettingsOpen(true); }} title="Configuracoes (S)">
+          <button
+            className={`pb-sys pb-sys-util ${focusZone === "util" && utilIdx === 0 ? "active focused" : ""}`}
+            onClick={() => { sfx.open(); setSettingsOpen(true); }}
+            title="Configuracoes (S / Y no controle)"
+          >
             <span className="pb-sys-icon"><GearIcon /></span>
           </button>
-          <button className="pb-sys pb-sys-util pb-sys-power" onClick={() => { sfx.back(); handleQuit(); }} title="Sair">
+          <button
+            className={`pb-sys pb-sys-util pb-sys-power ${focusZone === "util" && utilIdx === 1 ? "active focused" : ""}`}
+            onClick={() => { sfx.back(); handleQuit(); }}
+            title="Sair"
+          >
             <span className="pb-sys-icon"><PowerIcon /></span>
           </button>
         </div>
