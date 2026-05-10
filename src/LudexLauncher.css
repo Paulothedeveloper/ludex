@@ -3888,8 +3888,8 @@
  * LUDEX SPLASH v2 — bg animado + PNG art + entrada com vida
  * ================================================================= */
 
-/* Override do bg estatico do .pb-splash quando .lx-splash-v2 esta presente */
-.pb-splash.lx-splash-v2 {
+/* Override do bg estatico do .pb-splash quando .lx-splash-v3 esta presente */
+.pb-splash.lx-splash-v3 {
   background: #04020c;
   animation: pb-splash-out 0.6s ease 3.3s forwards;
   overflow: hidden;
@@ -3955,58 +3955,58 @@
   animation: lxGrainShift 0.4s steps(8) infinite;
 }
 
-/* PNG dos 3 cards: cobre TELA INTEIRA com object-fit cover. Fundo roxo do
- * .lx-splash-bg fica visivel atraves dos cantos transparentes do PNG e da
- * leve dessaturacao por filter. Subtle Ken Burns: scale 1.05 -> 1.0 + opacity. */
-.lx-splash-art {
+/* === Constelacao de botoes de controle === */
+.lx-splash-const {
   position: absolute;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
-  object-fit: cover;
+  width: 100%;
+  height: 100%;
   z-index: 2;
   opacity: 0;
-  transform: scale(1.05);
-  filter: drop-shadow(0 0 80px rgba(124, 58, 237, 0.4));
-  animation: lxSplashArtIn 1600ms cubic-bezier(0.22, 1, 0.36, 1) 300ms forwards;
+  animation: lxFadeIn 1500ms ease 200ms forwards;
   pointer-events: none;
-  user-select: none;
 }
-
-/* Tinta roxa sobre o PNG pra integrar com o bg + reduzir contraste agressivo */
-.lx-splash-art-glow {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 80% 60% at 50% 50%, transparent 30%, rgba(10, 4, 32, 0.35) 100%),
-    linear-gradient(180deg, rgba(124, 58, 237, 0.15) 0%, transparent 30%, transparent 70%, rgba(20, 12, 38, 0.6) 100%);
-  z-index: 3;
+.lx-const-lines line {
   opacity: 0;
-  animation: lxFadeIn 1500ms ease 500ms forwards;
-  pointer-events: none;
-  mix-blend-mode: multiply;
+  animation: lxConstLineIn 800ms ease both;
+}
+.lx-const-points > g {
+  opacity: 0;
+  transform-origin: center;
+  animation: lxConstPointIn 600ms cubic-bezier(0.22, 1, 0.36, 1) both,
+             lxConstPulse 3.6s ease-in-out infinite;
+}
+.lx-const-glow {
+  opacity: 0.18;
+  filter: blur(6px);
 }
 
-/* "Chao" reflexivo — gradient escuro pra baixo, espaco pro logo respirar */
-.lx-splash-art-floor {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 40%;
-  background:
-    linear-gradient(to top, #04020c 0%, rgba(4, 2, 12, 0.85) 25%, rgba(20, 12, 38, 0.4) 60%, transparent 100%),
-    radial-gradient(ellipse 70% 80% at 50% 100%, rgba(124, 58, 237, 0.35), transparent 70%);
-  z-index: 4;
-  pointer-events: none;
+@keyframes lxConstLineIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes lxConstPointIn {
+  from { opacity: 0; transform: scale(0.4); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes lxConstPulse {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(196, 181, 253, 0.4)); }
+  50%      { filter: drop-shadow(0 0 12px rgba(196, 181, 253, 0.85)); }
 }
 
-/* Conteudo (logo + tagline + barra) em cima do tudo, ancorado embaixo */
-.lx-splash-content-v2 {
+/* Conteudo (logo + tagline + barra) ancorado embaixo, sobreposto a constelacao */
+.lx-splash-content-v3 {
   position: relative;
-  z-index: 3;
+  z-index: 5;
   margin-top: auto;
-  margin-bottom: 8vh;
+  margin-bottom: 9vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;  /* respiro entre logo / tagline / barra */
+}
+.lx-splash-content-v3 .pb-splash-tagline {
+  margin-top: 4px;
 }
 .lx-splash-logo-v2 {
   font-size: 58px;

@@ -739,30 +739,98 @@ function AchievementToast({ achievement, onDone }) {
 }
 
 function SplashScreen({ profileName }) {
+  // Constelacao de botoes de controle. Pontos representam A/B/X/Y, D-pad,
+  // sticks, ombros e start/select/home; linhas finas conectam num padrao
+  // de constelacao. Pulsa staggered, vibe astronomia + gaming.
+  // Coordenadas em viewBox 800x600.
+  const POINTS = [
+    // Botoes frontais (losango direita)
+    { id: "y",  x: 580, y: 200, label: "Y", color: "#fbbf24", r: 7 },
+    { id: "b",  x: 660, y: 280, label: "B", color: "#ef4444", r: 7 },
+    { id: "a",  x: 580, y: 360, label: "A", color: "#22c55e", r: 7 },
+    { id: "x",  x: 500, y: 280, label: "X", color: "#3b82f6", r: 7 },
+    // D-pad (losango esquerda)
+    { id: "du", x: 200, y: 200, r: 5 },
+    { id: "dr", x: 280, y: 280, r: 5 },
+    { id: "dd", x: 200, y: 360, r: 5 },
+    { id: "dl", x: 120, y: 280, r: 5 },
+    // Ombros
+    { id: "lb", x: 180, y: 110, r: 6 },
+    { id: "rb", x: 620, y: 110, r: 6 },
+    // Sticks analogicos
+    { id: "ls", x: 320, y: 440, r: 9 },
+    { id: "rs", x: 480, y: 440, r: 9 },
+    // Centro (select/home/start)
+    { id: "se", x: 360, y: 240, r: 4 },
+    { id: "ho", x: 400, y: 215, r: 5 },
+    { id: "st", x: 440, y: 240, r: 4 },
+  ];
+  const LINES = [
+    // losango ABXY
+    ["y","b"], ["b","a"], ["a","x"], ["x","y"],
+    // losango D-pad
+    ["du","dr"], ["dr","dd"], ["dd","dl"], ["dl","du"],
+    // ombros conectando
+    ["lb","du"], ["rb","y"], ["lb","rb"],
+    // sticks ligando aos D-pad/botoes
+    ["ls","dl"], ["ls","dd"], ["rs","a"], ["rs","b"],
+    // centro
+    ["se","ho"], ["ho","st"], ["se","st"],
+    // linhas longas conectando os clusters (constelacao)
+    ["du","ho"], ["y","ho"],
+  ];
+  const ptMap = Object.fromEntries(POINTS.map(p => [p.id, p]));
+
   return (
-    <div className="pb-splash lx-splash-v2">
-      {/* Background animado: gradient roxo/pink + 4 orbs flutuando */}
+    <div className="pb-splash lx-splash-v3">
+      {/* Background: gradient roxo profundo + 3 orbs grandes flutuando + grain */}
       <div className="lx-splash-bg">
         <span className="lx-splash-orb lx-splash-orb-a" />
         <span className="lx-splash-orb lx-splash-orb-b" />
         <span className="lx-splash-orb lx-splash-orb-c" />
-        <span className="lx-splash-orb lx-splash-orb-d" />
         <div className="lx-splash-grain" aria-hidden />
       </div>
 
-      {/* PNG: 3 cards lado-a-lado. Sobe + fade + tilt sutil. Fundo trabalhado
-       * pra disfarcar o fade-out inferior do PNG (gradient escurecendo embaixo). */}
-      <img
-        className="lx-splash-art"
-        src="/splash-art.png"
-        alt=""
+      {/* Constelacao SVG */}
+      <svg
+        className="lx-splash-const"
+        viewBox="0 0 800 600"
+        preserveAspectRatio="xMidYMid meet"
         aria-hidden
-        draggable="false"
-      />
-      <div className="lx-splash-art-glow" aria-hidden />
-      <div className="lx-splash-art-floor" aria-hidden />
+      >
+        <g className="lx-const-lines">
+          {LINES.map(([a, b], i) => {
+            const pa = ptMap[a]; const pb = ptMap[b];
+            return (
+              <line
+                key={`l-${i}`}
+                x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y}
+                stroke="rgba(196, 181, 253, 0.22)"
+                strokeWidth="1"
+                style={{ animationDelay: `${i * 90}ms` }}
+              />
+            );
+          })}
+        </g>
+        <g className="lx-const-points">
+          {POINTS.map((p, i) => (
+            <g key={p.id} style={{ animationDelay: `${i * 80}ms` }}>
+              <circle cx={p.x} cy={p.y} r={p.r * 2.6} className="lx-const-glow" fill={p.color || "#c4b5fd"} />
+              <circle cx={p.x} cy={p.y} r={p.r} fill={p.color || "#c4b5fd"} />
+              {p.label && (
+                <text
+                  x={p.x} y={p.y + 3} textAnchor="middle"
+                  fontSize="10" fontWeight="700"
+                  fill="#0a0420" pointerEvents="none"
+                >{p.label}</text>
+              )}
+            </g>
+          ))}
+        </g>
+      </svg>
 
-      <div className="pb-splash-content lx-splash-content-v2">
+      {/* Conteudo central: logo + tagline + barra. Mais respiro entre eles. */}
+      <div className="pb-splash-content lx-splash-content-v3">
         <div className="pb-splash-logo lx-splash-logo-v2">L U D E X</div>
         <div className="pb-splash-tagline">SUA BIBLIOTECA RETRO EM UM LUGAR SO</div>
         {profileName && <div className="pb-splash-welcome">Bem-vindo, {profileName}</div>}
