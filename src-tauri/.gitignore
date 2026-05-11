@@ -2,3 +2,7 @@
 # will have compiled files and executables
 /target/
 /gen/schemas
+
+# Gumroad license credentials — embedded no binario mas NUNCA no source
+# Ver src/secrets.rs.example pra setup.
+/src/secrets.rs

@@ -1377,6 +1377,14 @@ struct AppConfig {
     /// Marca que o usuario completou o onboarding+criacao de perfil. Default false em
     /// configs novas/legadas; setado pelo front com complete_first_run() apos o tour.
     first_run_done: bool,
+    /// Gumroad license key colada pelo user (formato XXXX-XXXX-XXXX-XXXX).
+    /// None = nao ativado, app fica trancado no LicenseGate.
+    license_key: Option<String>,
+    /// Timestamp Unix da ultima validacao bem-sucedida.
+    /// Usado pra grace period offline (30 dias sem internet ainda funciona).
+    license_validated_at: u64,
+    /// Cache local do uses count retornado pelo Gumroad. Soft-enforce 3 PCs.
+    license_uses: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1407,6 +1415,9 @@ impl Default for AppConfig {
             ra_username: None,
             ra_api_key: None,
             first_run_done: false,
+            license_key: None,
+            license_validated_at: 0,
+            license_uses: 0,
         }
     }
 }
@@ -2937,6 +2948,200 @@ fn get_play_stats() -> PlayStats {
 }
 
 // ============================================================
+// === GUMROAD LICENSE — activate / validate / deactivate =====
+// ============================================================
+// Doc: https://gumroad.com/api#license-keys
+// Endpoint principal: POST https://api.gumroad.com/v2/licenses/verify
+// Returns: { success, uses, purchase: { ... } }
+//
+// Credenciais Gumroad ficam em src/secrets.rs (gitignored). Ver
+// secrets.rs.example pra setup novo. Token eh READ-only-license: so verifica
+// licenses, nao da pra editar produto.
+
+mod secrets;
+use secrets::{GUMROAD_PRODUCT_ID, GUMROAD_ACCESS_TOKEN, GUMROAD_PERMALINK};
+/// Maximo de PCs (uses count) que uma license aceita. Soft-enforce no backend.
+const GUMROAD_MAX_USES: u32 = 3;
+/// Quantos dias de grace period offline antes de bloquear o app por falta de
+/// validacao online. 30 dias = user viaja sem internet sem perder acesso.
+const LICENSE_OFFLINE_GRACE_DAYS: u64 = 30;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LicenseInfo {
+    /// Validade booleana (true = pode usar o app, false = trancado)
+    valid: bool,
+    /// Mensagem amigavel pra mostrar no UI (sucesso ou erro)
+    message: String,
+    /// Quantos PCs ja foram ativados com essa key
+    uses: u32,
+    /// Limite de PCs (3 default)
+    max_uses: u32,
+    /// Email de quem comprou (mostrar nos Settings)
+    buyer_email: Option<String>,
+    /// Quando foi a ultima validacao com sucesso (timestamp Unix)
+    validated_at: u64,
+    /// Permalink pra abrir checkout caso valid=false
+    purchase_url: String,
+}
+
+fn license_purchase_url() -> String { GUMROAD_PERMALINK.to_string() }
+
+// `now_secs` ja esta definido la em cima (linha ~1148) — nao redefinir aqui.
+
+/// Chama POST /v2/licenses/verify do Gumroad.
+/// `increment_uses` = true so na primeira ativacao naquele PC.
+async fn gumroad_verify(key: &str, increment_uses: bool) -> Result<LicenseInfo, String> {
+    if GUMROAD_ACCESS_TOKEN == "PLACEHOLDER_ACCESS_TOKEN" {
+        return Err("Sistema de licenca nao configurado (build de desenvolvimento)".into());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent("Ludex/0.5 (license-validator)")
+        .build()
+        .map_err(|e| format!("http client: {}", e))?;
+    let mut form = std::collections::HashMap::new();
+    form.insert("product_id", GUMROAD_PRODUCT_ID.to_string());
+    form.insert("license_key", key.trim().to_string());
+    form.insert("increment_uses_count", if increment_uses { "true" } else { "false" }.to_string());
+    let resp = client.post("https://api.gumroad.com/v2/licenses/verify")
+        .bearer_auth(GUMROAD_ACCESS_TOKEN)
+        .form(&form)
+        .send().await
+        .map_err(|e| format!("gumroad request: {}", e))?;
+    let status = resp.status();
+    let body: serde_json::Value = resp.json().await
+        .map_err(|e| format!("gumroad parse: {}", e))?;
+    let success = body.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+    if !status.is_success() || !success {
+        let msg = body.get("message").and_then(|v| v.as_str()).unwrap_or("license invalida");
+        return Err(msg.to_string());
+    }
+    let uses = body.get("uses").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+    let buyer_email = body.pointer("/purchase/email")
+        .and_then(|v| v.as_str()).map(String::from);
+    if uses > GUMROAD_MAX_USES {
+        return Err(format!("Limite de {} PCs ja atingido com essa license. Desative em outro PC ou compre outra.", GUMROAD_MAX_USES));
+    }
+    Ok(LicenseInfo {
+        valid: true,
+        message: "Licenca ativa".into(),
+        uses,
+        max_uses: GUMROAD_MAX_USES,
+        buyer_email,
+        validated_at: now_secs(),
+        purchase_url: license_purchase_url(),
+    })
+}
+
+/// Ativa uma license key nova (cliente acabou de comprar e colou a key).
+/// increment_uses=true consome 1 slot dos 3 disponiveis.
+#[tauri::command]
+async fn license_activate(key: String) -> Result<LicenseInfo, String> {
+    let info = gumroad_verify(&key, true).await?;
+    // Persiste no config
+    let mut cfg = load_config();
+    cfg.license_key = Some(key.trim().to_string());
+    cfg.license_validated_at = info.validated_at;
+    cfg.license_uses = info.uses;
+    save_config_internal(cfg)?;
+    Ok(info)
+}
+
+/// Re-valida a license atual (chamada na startup + 1x/semana em background).
+/// increment_uses=false (nao consome slot).
+/// Se sem internet e dentro do grace period (30 dias), retorna valid=true cached.
+/// Se fora do grace period sem internet, retorna valid=false (app trancado).
+#[tauri::command]
+async fn license_validate() -> Result<LicenseInfo, String> {
+    let cfg = load_config();
+    let key = cfg.license_key.clone().ok_or("Nenhuma license cadastrada")?;
+    match gumroad_verify(&key, false).await {
+        Ok(info) => {
+            // Persiste validated_at + uses atualizados
+            let mut cfg = load_config();
+            cfg.license_validated_at = info.validated_at;
+            cfg.license_uses = info.uses;
+            save_config_internal(cfg).ok();
+            Ok(info)
+        }
+        Err(e) => {
+            // Falha na chamada: pode ser sem internet OU license revogada.
+            // Diferenca: se sem internet, retornamos cache valido se dentro do grace.
+            // Como nao da pra distinguir aqui, assume offline e usa grace period.
+            let age_days = now_secs().saturating_sub(cfg.license_validated_at) / 86400;
+            if cfg.license_validated_at > 0 && age_days < LICENSE_OFFLINE_GRACE_DAYS {
+                return Ok(LicenseInfo {
+                    valid: true,
+                    message: format!("Modo offline (validacao ha {} dias)", age_days),
+                    uses: cfg.license_uses,
+                    max_uses: GUMROAD_MAX_USES,
+                    buyer_email: None,
+                    validated_at: cfg.license_validated_at,
+                    purchase_url: license_purchase_url(),
+                });
+            }
+            Err(format!("Validacao falhou: {}", e))
+        }
+    }
+}
+
+/// Libera 1 slot dos 3 (chamado quando user clica "Desativar este PC").
+/// Endpoint: PUT /v2/licenses/decrement_uses_count.
+#[tauri::command]
+async fn license_deactivate() -> Result<(), String> {
+    if GUMROAD_ACCESS_TOKEN == "PLACEHOLDER_ACCESS_TOKEN" {
+        return Err("Sistema de licenca nao configurado".into());
+    }
+    let cfg = load_config();
+    let key = cfg.license_key.clone().ok_or("Nenhuma license cadastrada")?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build().map_err(|e| format!("http: {}", e))?;
+    let mut form = std::collections::HashMap::new();
+    form.insert("product_id", GUMROAD_PRODUCT_ID.to_string());
+    form.insert("license_key", key);
+    let resp = client.put("https://api.gumroad.com/v2/licenses/decrement_uses_count")
+        .bearer_auth(GUMROAD_ACCESS_TOKEN)
+        .form(&form)
+        .send().await.map_err(|e| format!("decrement: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("Gumroad retornou {}", resp.status()));
+    }
+    // Limpa local
+    let mut cfg = load_config();
+    cfg.license_key = None;
+    cfg.license_validated_at = 0;
+    cfg.license_uses = 0;
+    save_config_internal(cfg)?;
+    Ok(())
+}
+
+/// Retorna info local da license (sem chamar Gumroad). Usado no LicenseGate
+/// pra decidir se mostra a tela de input (sem license) ou a home (com).
+#[tauri::command]
+fn license_get_local_info() -> Option<LicenseInfo> {
+    let cfg = load_config();
+    let key = cfg.license_key?;
+    let age_days = now_secs().saturating_sub(cfg.license_validated_at) / 86400;
+    let valid = cfg.license_validated_at > 0 && age_days < LICENSE_OFFLINE_GRACE_DAYS;
+    Some(LicenseInfo {
+        valid,
+        message: if valid { "Licenca ativa (cache local)".into() }
+                 else { "Licenca expirada — precisa revalidar online".into() },
+        uses: cfg.license_uses,
+        max_uses: GUMROAD_MAX_USES,
+        buyer_email: None,
+        validated_at: cfg.license_validated_at,
+        purchase_url: license_purchase_url(),
+    })
+}
+
+#[tauri::command]
+fn license_purchase_link() -> String {
+    license_purchase_url()
+}
+
+// ============================================================
 // === RETROACHIEVEMENTS — login + summary + recent ach ======
 // ============================================================
 // Web API key gerada em https://retroachievements.org/controlpanel.php
@@ -3295,7 +3500,12 @@ pub fn run() {
             complete_first_run,
             get_system_folders,
             open_folder,
-            open_url
+            open_url,
+            license_activate,
+            license_validate,
+            license_deactivate,
+            license_get_local_info,
+            license_purchase_link
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

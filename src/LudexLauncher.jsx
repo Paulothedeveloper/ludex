@@ -8,6 +8,7 @@ import { check as checkUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import "./LudexLauncher.css";
 import LudexOnboarding, { DEFAULT_AVATARS, avatarUrl, getProfileAvatarUrl } from "./LudexOnboarding";
+import LudexLicenseGate from "./LudexLicenseGate";
 import {
   EmptyStateSystem, SuggestionsModal, ControlsTipModal,
   FolderIcon as LxFolderIcon,
@@ -758,6 +759,108 @@ function SearchOverlay({ systems, onPick, onClose, closing, modalGamepadRef }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Section "Licença" no Settings. Mostra info da license atual e botoes de
+ * gerenciamento (revalidar online + desativar este PC).
+ */
+function LicenseSettingsSection() {
+  const [info, setInfo] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  async function refresh() {
+    try {
+      const local = await invoke("license_get_local_info");
+      setInfo(local);
+    } catch (e) {
+      setInfo(null);
+    }
+  }
+  useEffect(() => { refresh(); }, []);
+
+  async function revalidate() {
+    setBusy(true); setMsg(null);
+    try {
+      const remote = await invoke("license_validate");
+      setInfo(remote);
+      setMsg({ kind: "ok", text: "Licença revalidada com sucesso" });
+    } catch (e) {
+      setMsg({ kind: "error", text: String(e) });
+    } finally { setBusy(false); }
+  }
+
+  async function deactivate() {
+    if (!confirm("Desativar este PC libera 1 slot da sua license. Você precisará colar a key de novo se quiser usar o Ludex aqui. Confirmar?")) return;
+    setBusy(true); setMsg(null);
+    try {
+      await invoke("license_deactivate");
+      setMsg({ kind: "ok", text: "PC desativado. Recarregando..." });
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (e) {
+      setMsg({ kind: "error", text: String(e) });
+    } finally { setBusy(false); }
+  }
+
+  if (!info) {
+    return (
+      <div className="pb-settings-section">
+        <h3>Licença</h3>
+        <p className="pb-settings-hint">Build de desenvolvimento — sistema de licença desabilitado.</p>
+      </div>
+    );
+  }
+
+  const ageDays = info.validated_at > 0
+    ? Math.floor((Date.now() / 1000 - info.validated_at) / 86400)
+    : "—";
+
+  return (
+    <div className="pb-settings-section">
+      <h3>Licença</h3>
+      <div className="pb-version-line">
+        <span className="pb-version-label">Status:</span>
+        <strong style={{ color: info.valid ? "#86efac" : "#fca5a5" }}>
+          {info.valid ? "Ativa" : "Expirada"}
+        </strong>
+      </div>
+      <div className="pb-version-line">
+        <span className="pb-version-label">PCs ativados:</span>
+        <strong>{info.uses} de {info.max_uses}</strong>
+      </div>
+      <div className="pb-version-line">
+        <span className="pb-version-label">Última validação:</span>
+        <strong>{ageDays === "—" ? "—" : `há ${ageDays} dias`}</strong>
+      </div>
+      {info.buyer_email && (
+        <div className="pb-version-line">
+          <span className="pb-version-label">Comprado por:</span>
+          <strong style={{ fontSize: 12 }}>{info.buyer_email}</strong>
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+        <button className="pb-settings-btn" onClick={revalidate} disabled={busy}>
+          {busy ? "..." : "Revalidar agora"}
+        </button>
+        <button
+          className="pb-settings-btn pb-settings-btn-danger"
+          onClick={deactivate}
+          disabled={busy}
+        >
+          Desativar este PC
+        </button>
+      </div>
+      {msg && (
+        <p className="pb-settings-hint" style={{ marginTop: 8, color: msg.kind === "error" ? "#fca5a5" : "#86efac" }}>
+          {msg.text}
+        </p>
+      )}
+      <p className="pb-settings-hint" style={{ marginTop: 6 }}>
+        License vitalícia, funciona em até {info.max_uses} PCs. Re-validação automática 1x por semana. Modo offline funciona até 30 dias sem internet.
+      </p>
     </div>
   );
 }
@@ -1545,6 +1648,8 @@ function SettingsPanel({
             </ul>
           </div>
         )}
+
+        <LicenseSettingsSection />
 
         <div className="pb-settings-section">
           <h3>Atualizações</h3>
@@ -3095,6 +3200,9 @@ export default function LudexLauncher() {
   const [welcomeBack, setWelcomeBack] = useState(false);
   const [systemEnter, setSystemEnter] = useState({ id: null, key: 0 });
   const [quitting, setQuitting] = useState(false);
+  // License gate — bloqueia o app antes de qualquer outra coisa se sem license valida
+  // null = ainda checando; true = licenciado, deixa entrar; false = sem license, mostra gate
+  const [licenseStatus, setLicenseStatus] = useState(null);
   // First-run onboarding + utilitarios novos do v0.4
   const [firstRunActive, setFirstRunActive] = useState(false);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -3328,6 +3436,48 @@ export default function LudexLauncher() {
       window.removeEventListener("keydown", unlock);
     };
   }, []);
+
+  // License check no startup. Roda ANTES do load_config completar pra evitar
+  // mostrar a home brevemente. Se license existe local, tenta re-validar online;
+  // se valido (ou cache no grace period), libera. Se nao, mostra LicenseGate.
+  // Em build de desenvolvimento (PLACEHOLDER token), pula gate (libera tudo).
+  useEffect(() => {
+    (async () => {
+      try {
+        const localInfo = await invoke("license_get_local_info");
+        if (!localInfo) { setLicenseStatus(false); return; }
+        if (localInfo.valid) { setLicenseStatus(true); return; }
+        // Tem license mas precisa re-validar
+        try {
+          const remote = await invoke("license_validate");
+          setLicenseStatus(!!remote?.valid);
+        } catch (e) {
+          // grace period esgotou e nao conseguiu validar
+          console.warn("license_validate falhou:", e);
+          setLicenseStatus(false);
+        }
+      } catch (e) {
+        // Build de dev (PLACEHOLDER): backend retorna erro = pula gate
+        if (String(e).includes("nao configurado")) {
+          console.info("License gate desabilitado (PLACEHOLDER token)");
+          setLicenseStatus(true);
+        } else {
+          setLicenseStatus(false);
+        }
+      }
+    })();
+  }, []);
+
+  // Re-validacao em background: 1x por semana enquanto app aberto
+  useEffect(() => {
+    if (licenseStatus !== true) return;
+    const id = setInterval(() => {
+      invoke("license_validate").then((info) => {
+        if (info && !info.valid) setLicenseStatus(false);
+      }).catch(() => {/* silent — grace period cuida */});
+    }, 7 * 24 * 60 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [licenseStatus]);
 
   // load config no startup
   useEffect(() => {
@@ -4431,6 +4581,15 @@ export default function LudexLauncher() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [splashDone, settingsOpen, profilesOpen, searchOpen, loading, displayedSystems, selected, selectedGame, handleLaunch, toggleFullscreen, toggleFavorite, launching, focusZone, visibleGames.length]);
+
+  // License gate: bloqueia o app antes de qualquer outra coisa
+  if (licenseStatus === null) {
+    // Ainda checando — render minimo (preto), evita flash
+    return <div style={{ position: "fixed", inset: 0, background: "#04020c" }} />;
+  }
+  if (licenseStatus === false) {
+    return <LudexLicenseGate onLicensed={() => setLicenseStatus(true)} />;
+  }
 
   return (
     <div className={`pb ${quitting ? "quitting" : ""}`} style={{ "--accent": accentColor }}>
