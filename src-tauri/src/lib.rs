@@ -1383,7 +1383,7 @@ struct AppConfig {
     /// Timestamp Unix da ultima validacao bem-sucedida.
     /// Usado pra grace period offline (30 dias sem internet ainda funciona).
     license_validated_at: u64,
-    /// Cache local do uses count retornado pelo Gumroad. Soft-enforce 3 PCs.
+    /// Cache local do uses count retornado pelo Gumroad. Soft-enforce 2 PCs.
     license_uses: u32,
 }
 
@@ -2961,7 +2961,7 @@ fn get_play_stats() -> PlayStats {
 mod secrets;
 use secrets::{GUMROAD_PRODUCT_ID, GUMROAD_ACCESS_TOKEN, GUMROAD_PERMALINK};
 /// Maximo de PCs (uses count) que uma license aceita. Soft-enforce no backend.
-const GUMROAD_MAX_USES: u32 = 3;
+const GUMROAD_MAX_USES: u32 = 2;
 /// Quantos dias de grace period offline antes de bloquear o app por falta de
 /// validacao online. 30 dias = user viaja sem internet sem perder acesso.
 const LICENSE_OFFLINE_GRACE_DAYS: u64 = 30;

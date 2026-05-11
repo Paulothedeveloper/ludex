@@ -95,7 +95,7 @@ export default function LudexLicenseGate({ onLicensed }) {
         </button>
 
         <p className="lx-licgate-foot">
-          Funciona em até 3 PCs · Acesso vitalício · Sem assinatura
+          Funciona em até 2 PCs · Acesso vitalício · Sem assinatura
         </p>
       </div>
 
