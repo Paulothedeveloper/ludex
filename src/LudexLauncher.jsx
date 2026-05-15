@@ -9,6 +9,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import "./LudexLauncher.css";
 import LudexOnboarding, { DEFAULT_AVATARS, avatarUrl, getProfileAvatarUrl } from "./LudexOnboarding";
 import LudexLicenseGate from "./LudexLicenseGate";
+import LudexAdminPanel from "./LudexAdminPanel";
 import {
   EmptyStateSystem, SuggestionsModal, ControlsTipModal,
   FolderIcon as LxFolderIcon,
@@ -771,6 +772,8 @@ function LicenseSettingsSection() {
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
 
   async function refresh() {
     try {
@@ -778,6 +781,13 @@ function LicenseSettingsSection() {
       setInfo(local);
     } catch (e) {
       setInfo(null);
+    }
+    // is_admin nao vem do cache local — precisa consultar Gumroad
+    try {
+      const adm = await invoke("admin_check_status");
+      setIsAdmin(!!adm);
+    } catch (_) {
+      setIsAdmin(false);
     }
   }
   useEffect(() => { refresh(); }, []);
@@ -852,7 +862,17 @@ function LicenseSettingsSection() {
         >
           Desativar este PC
         </button>
+        {isAdmin && (
+          <button
+            className="pb-settings-btn"
+            style={{ background: "linear-gradient(135deg, #c4b5fd 0%, #ec4899 100%)", color: "#0a0814", fontWeight: 700 }}
+            onClick={() => setShowAdmin(true)}
+          >
+            Painel Admin
+          </button>
+        )}
       </div>
+      {showAdmin && <LudexAdminPanel onClose={() => setShowAdmin(false)} />}
       {msg && (
         <p className="pb-settings-hint" style={{ marginTop: 8, color: msg.kind === "error" ? "#fca5a5" : "#86efac" }}>
           {msg.text}

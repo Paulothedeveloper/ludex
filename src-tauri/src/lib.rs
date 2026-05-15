@@ -1385,6 +1385,13 @@ struct AppConfig {
     license_validated_at: u64,
     /// Cache local do uses count retornado pelo Gumroad. Soft-enforce 2 PCs.
     license_uses: u32,
+    /// SHA256 do hardware (MachineGuid + MAC + CPU). Capturado na ativacao —
+    /// se mudar, app forca re-validacao online (anti config-copy entre PCs).
+    #[serde(default)]
+    license_fingerprint: Option<String>,
+    /// Timestamps Unix dos ultimos deactivates. Usado pra rate limit (max 5/dia).
+    #[serde(default)]
+    license_deactivate_log: Vec<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1418,6 +1425,8 @@ impl Default for AppConfig {
             license_key: None,
             license_validated_at: 0,
             license_uses: 0,
+            license_fingerprint: None,
+            license_deactivate_log: Vec::new(),
         }
     }
 }
@@ -2959,12 +2968,142 @@ fn get_play_stats() -> PlayStats {
 // licenses, nao da pra editar produto.
 
 mod secrets;
-use secrets::{GUMROAD_PRODUCT_ID, GUMROAD_ACCESS_TOKEN, GUMROAD_PERMALINK};
+use secrets::{GUMROAD_PRODUCT_ID, GUMROAD_ACCESS_TOKEN, GUMROAD_PERMALINK, ADMIN_EMAIL};
+use sha2::{Digest, Sha256};
+
 /// Maximo de PCs (uses count) que uma license aceita. Soft-enforce no backend.
 const GUMROAD_MAX_USES: u32 = 2;
 /// Quantos dias de grace period offline antes de bloquear o app por falta de
 /// validacao online. 30 dias = user viaja sem internet sem perder acesso.
 const LICENSE_OFFLINE_GRACE_DAYS: u64 = 30;
+/// Maximo de deactivates permitidos em 24h. Anti-share farm: se alguem fica
+/// trocando entre 3+ amigos, vai estourar esse limite rapido.
+const DEACTIVATE_RATE_LIMIT_PER_DAY: usize = 5;
+
+// === Hardware fingerprint ===================================================
+// Combina valores estaveis do PC (Windows MachineGuid + MAC primario + CPU
+// brand) num SHA256. Usado pra amarrar a license ao hardware: se o config.json
+// for copiado pra outro PC, o fingerprint nao bate e a license eh recusada.
+//
+// Tolerancia: se MachineGuid mudar (Win11 Reset, troca de placa-mae, etc), o
+// app nao bloqueia cego — chama license_validate online. Se Gumroad disser que
+// a key continua boa e uses < MAX, ele REGRAVA o fingerprint pro novo
+// hardware. Soft-enforce.
+
+#[cfg(windows)]
+fn read_machine_guid() -> Option<String> {
+    use winreg::enums::HKEY_LOCAL_MACHINE;
+    use winreg::RegKey;
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let key = hklm.open_subkey("SOFTWARE\\Microsoft\\Cryptography").ok()?;
+    key.get_value("MachineGuid").ok()
+}
+
+#[cfg(not(windows))]
+fn read_machine_guid() -> Option<String> { None }
+
+#[cfg(windows)]
+fn read_cpu_name() -> Option<String> {
+    use winreg::enums::HKEY_LOCAL_MACHINE;
+    use winreg::RegKey;
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let key = hklm.open_subkey("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0").ok()?;
+    key.get_value("ProcessorNameString").ok()
+}
+
+#[cfg(not(windows))]
+fn read_cpu_name() -> Option<String> { None }
+
+fn primary_mac() -> Option<String> {
+    mac_address::get_mac_address().ok().flatten().map(|m| m.to_string())
+}
+
+fn machine_fingerprint() -> String {
+    let guid = read_machine_guid().unwrap_or_else(|| "no-guid".into());
+    let mac  = primary_mac().unwrap_or_else(|| "no-mac".into());
+    let cpu  = read_cpu_name().unwrap_or_else(|| "no-cpu".into());
+    let combined = format!("{}|{}|{}", guid, mac, cpu);
+    let mut hasher = Sha256::new();
+    hasher.update(combined.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+// === Dual storage (config.json + registry HKCU) =============================
+// Espelha license_validated_at e license_uses no registry HKCU. Se um for
+// editado pra estender a validacao, o outro denuncia. Politica anti-tamper:
+// usa o MENOR validated_at dos dois (atacante consegue ESTENDER um, mas precisa
+// alterar OS DOIS pra avancar — o que eh trabalho real).
+
+#[cfg(windows)]
+fn registry_write_state(validated_at: u64, uses: u32, fingerprint: Option<&str>) {
+    use winreg::enums::*;
+    use winreg::RegKey;
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let (key, _) = match hkcu.create_subkey("Software\\Ludex\\license_state") {
+        Ok(v) => v, Err(_) => return,
+    };
+    let _ = key.set_value("validated_at", &validated_at);
+    let _ = key.set_value("uses", &uses);
+    if let Some(fp) = fingerprint {
+        let _ = key.set_value("fingerprint", &fp.to_string());
+    }
+}
+
+#[cfg(not(windows))]
+fn registry_write_state(_: u64, _: u32, _: Option<&str>) {}
+
+#[cfg(windows)]
+fn registry_read_state() -> Option<(u64, u32, Option<String>)> {
+    use winreg::enums::*;
+    use winreg::RegKey;
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let key = hkcu.open_subkey("Software\\Ludex\\license_state").ok()?;
+    let validated_at: u64 = key.get_value("validated_at").unwrap_or(0);
+    let uses: u32 = key.get_value("uses").unwrap_or(0);
+    let fingerprint: Option<String> = key.get_value("fingerprint").ok();
+    Some((validated_at, uses, fingerprint))
+}
+
+#[cfg(not(windows))]
+fn registry_read_state() -> Option<(u64, u32, Option<String>)> { None }
+
+/// Le o estado de license consensual entre config.json e registry HKCU.
+/// Politica anti-tamper: usa o MENOR validated_at — atacante teria que editar
+/// AMBOS pra estender o grace period.
+fn read_state_consensus(cfg: &AppConfig) -> (u64, u32, Option<String>) {
+    let cfg_va = cfg.license_validated_at;
+    let cfg_uses = cfg.license_uses;
+    let cfg_fp = cfg.license_fingerprint.clone();
+    match registry_read_state() {
+        Some((reg_va, reg_uses, reg_fp)) => {
+            // Usa o MENOR validated_at dos dois (anti-tamper).
+            let va = cfg_va.min(reg_va);
+            // Pra uses, usa o MAIOR (anti-bypass: se attacker zerar um, o outro denuncia).
+            let uses = cfg_uses.max(reg_uses);
+            // Fingerprint: se um esta vazio, usa o outro. Se diferentes, usa o do config (o registry pode ter ficado desatualizado).
+            let fp = cfg_fp.or(reg_fp);
+            (va, uses, fp)
+        }
+        None => (cfg_va, cfg_uses, cfg_fp),
+    }
+}
+
+/// Espelha o state em ambos os lugares.
+fn write_state_to_both(cfg: &mut AppConfig, validated_at: u64, uses: u32, fingerprint: Option<String>) {
+    cfg.license_validated_at = validated_at;
+    cfg.license_uses = uses;
+    if fingerprint.is_some() {
+        cfg.license_fingerprint = fingerprint.clone();
+    }
+    registry_write_state(validated_at, uses, fingerprint.as_deref());
+}
+
+/// Filtra o log de deactivates pra so timestamps nas ultimas 24h.
+fn prune_deactivate_log(log: &mut Vec<u64>) {
+    let now = now_secs();
+    let day_ago = now.saturating_sub(86400);
+    log.retain(|&t| t > day_ago);
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct LicenseInfo {
@@ -2974,7 +3113,7 @@ struct LicenseInfo {
     message: String,
     /// Quantos PCs ja foram ativados com essa key
     uses: u32,
-    /// Limite de PCs (3 default)
+    /// Limite de PCs (default GUMROAD_MAX_USES)
     max_uses: u32,
     /// Email de quem comprou (mostrar nos Settings)
     buyer_email: Option<String>,
@@ -2982,6 +3121,10 @@ struct LicenseInfo {
     validated_at: u64,
     /// Permalink pra abrir checkout caso valid=false
     purchase_url: String,
+    /// True se o email do comprador bate com ADMIN_EMAIL. Frontend usa pra
+    /// mostrar o botao "Painel Admin" no Settings. Sem bypass de seguranca.
+    #[serde(default)]
+    is_admin: bool,
 }
 
 fn license_purchase_url() -> String { GUMROAD_PERMALINK.to_string() }
@@ -3022,6 +3165,9 @@ async fn gumroad_verify(key: &str, increment_uses: bool) -> Result<LicenseInfo, 
     if uses > GUMROAD_MAX_USES {
         return Err(format!("Limite de {} PCs ja atingido com essa license. Desative em outro PC ou compre outra.", GUMROAD_MAX_USES));
     }
+    let is_admin = buyer_email.as_deref()
+        .map(|e| e.eq_ignore_ascii_case(ADMIN_EMAIL))
+        .unwrap_or(false);
     Ok(LicenseInfo {
         valid: true,
         message: "Licenca ativa".into(),
@@ -3030,19 +3176,20 @@ async fn gumroad_verify(key: &str, increment_uses: bool) -> Result<LicenseInfo, 
         buyer_email,
         validated_at: now_secs(),
         purchase_url: license_purchase_url(),
+        is_admin,
     })
 }
 
 /// Ativa uma license key nova (cliente acabou de comprar e colou a key).
-/// increment_uses=true consome 1 slot dos 3 disponiveis.
+/// increment_uses=true consome 1 slot dos 2 disponiveis. Tambem captura o
+/// hardware fingerprint atual e espelha o state no registry HKCU.
 #[tauri::command]
 async fn license_activate(key: String) -> Result<LicenseInfo, String> {
     let info = gumroad_verify(&key, true).await?;
-    // Persiste no config
+    let fingerprint = machine_fingerprint();
     let mut cfg = load_config();
     cfg.license_key = Some(key.trim().to_string());
-    cfg.license_validated_at = info.validated_at;
-    cfg.license_uses = info.uses;
+    write_state_to_both(&mut cfg, info.validated_at, info.uses, Some(fingerprint));
     save_config_internal(cfg)?;
     Ok(info)
 }
@@ -3055,29 +3202,41 @@ async fn license_activate(key: String) -> Result<LicenseInfo, String> {
 async fn license_validate() -> Result<LicenseInfo, String> {
     let cfg = load_config();
     let key = cfg.license_key.clone().ok_or("Nenhuma license cadastrada")?;
+    // Le state consensual (anti-tamper: usa o MENOR validated_at e o MAIOR uses entre config.json e HKCU)
+    let (consensus_va, consensus_uses, stored_fp) = read_state_consensus(&cfg);
+    let current_fp = machine_fingerprint();
+
     match gumroad_verify(&key, false).await {
         Ok(info) => {
-            // Persiste validated_at + uses atualizados
+            // Online + key boa. Verifica fingerprint. Se mudou, REGRAVA pro novo
+            // hardware — Gumroad ja confirmou que a license eh valida e dentro
+            // do limite. Soft-enforce (usuario legitimo trocou hardware).
             let mut cfg = load_config();
-            cfg.license_validated_at = info.validated_at;
-            cfg.license_uses = info.uses;
+            write_state_to_both(&mut cfg, info.validated_at, info.uses, Some(current_fp));
             save_config_internal(cfg).ok();
             Ok(info)
         }
         Err(e) => {
-            // Falha na chamada: pode ser sem internet OU license revogada.
-            // Diferenca: se sem internet, retornamos cache valido se dentro do grace.
-            // Como nao da pra distinguir aqui, assume offline e usa grace period.
-            let age_days = now_secs().saturating_sub(cfg.license_validated_at) / 86400;
-            if cfg.license_validated_at > 0 && age_days < LICENSE_OFFLINE_GRACE_DAYS {
+            // Offline (ou key revogada). Checa fingerprint antes de conceder grace
+            // period — se hardware nao bate com o que ativou, NAO concede offline.
+            if let Some(stored) = stored_fp {
+                if stored != current_fp {
+                    return Err(format!(
+                        "Hardware diferente do que ativou essa license. Reconecte na internet pra revalidar. Detalhes: {}", e
+                    ));
+                }
+            }
+            let age_days = now_secs().saturating_sub(consensus_va) / 86400;
+            if consensus_va > 0 && age_days < LICENSE_OFFLINE_GRACE_DAYS {
                 return Ok(LicenseInfo {
                     valid: true,
                     message: format!("Modo offline (validacao ha {} dias)", age_days),
-                    uses: cfg.license_uses,
+                    uses: consensus_uses,
                     max_uses: GUMROAD_MAX_USES,
                     buyer_email: None,
-                    validated_at: cfg.license_validated_at,
+                    validated_at: consensus_va,
                     purchase_url: license_purchase_url(),
+                    is_admin: false,
                 });
             }
             Err(format!("Validacao falhou: {}", e))
@@ -3085,15 +3244,26 @@ async fn license_validate() -> Result<LicenseInfo, String> {
     }
 }
 
-/// Libera 1 slot dos 3 (chamado quando user clica "Desativar este PC").
+/// Libera 1 slot dos 2 (chamado quando user clica "Desativar este PC").
 /// Endpoint: PUT /v2/licenses/decrement_uses_count.
+/// Rate limit: maximo 5 deactivates em 24h por PC. Anti-share farm.
 #[tauri::command]
 async fn license_deactivate() -> Result<(), String> {
     if GUMROAD_ACCESS_TOKEN == "PLACEHOLDER_ACCESS_TOKEN" {
         return Err("Sistema de licenca nao configurado".into());
     }
-    let cfg = load_config();
+    let mut cfg = load_config();
     let key = cfg.license_key.clone().ok_or("Nenhuma license cadastrada")?;
+
+    // Rate limit
+    prune_deactivate_log(&mut cfg.license_deactivate_log);
+    if cfg.license_deactivate_log.len() >= DEACTIVATE_RATE_LIMIT_PER_DAY {
+        return Err(format!(
+            "Limite de {} desativacoes por dia atingido. Tente novamente daqui algumas horas.",
+            DEACTIVATE_RATE_LIMIT_PER_DAY
+        ));
+    }
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build().map_err(|e| format!("http: {}", e))?;
@@ -3107,38 +3277,138 @@ async fn license_deactivate() -> Result<(), String> {
     if !resp.status().is_success() {
         return Err(format!("Gumroad retornou {}", resp.status()));
     }
-    // Limpa local
-    let mut cfg = load_config();
+
+    // Registra deactivate e limpa local
+    cfg.license_deactivate_log.push(now_secs());
     cfg.license_key = None;
-    cfg.license_validated_at = 0;
-    cfg.license_uses = 0;
+    cfg.license_fingerprint = None;
+    write_state_to_both(&mut cfg, 0, 0, None);
     save_config_internal(cfg)?;
     Ok(())
 }
 
 /// Retorna info local da license (sem chamar Gumroad). Usado no LicenseGate
 /// pra decidir se mostra a tela de input (sem license) ou a home (com).
+/// Usa state consensual entre config.json e HKCU.
 #[tauri::command]
 fn license_get_local_info() -> Option<LicenseInfo> {
     let cfg = load_config();
-    let key = cfg.license_key?;
-    let age_days = now_secs().saturating_sub(cfg.license_validated_at) / 86400;
-    let valid = cfg.license_validated_at > 0 && age_days < LICENSE_OFFLINE_GRACE_DAYS;
+    let _key = cfg.license_key.as_ref()?;
+    let (consensus_va, consensus_uses, stored_fp) = read_state_consensus(&cfg);
+    let age_days = now_secs().saturating_sub(consensus_va) / 86400;
+    let mut valid = consensus_va > 0 && age_days < LICENSE_OFFLINE_GRACE_DAYS;
+
+    // Anti-tamper: se fingerprint salvo nao bate com hardware atual, considera invalido
+    // (vai forcar license_validate online no startup).
+    if valid {
+        if let Some(fp) = &stored_fp {
+            if *fp != machine_fingerprint() {
+                valid = false;
+            }
+        }
+    }
+
     Some(LicenseInfo {
         valid,
         message: if valid { "Licenca ativa (cache local)".into() }
-                 else { "Licenca expirada — precisa revalidar online".into() },
-        uses: cfg.license_uses,
+                 else { "Licenca precisa revalidar online".into() },
+        uses: consensus_uses,
         max_uses: GUMROAD_MAX_USES,
         buyer_email: None,
-        validated_at: cfg.license_validated_at,
+        validated_at: consensus_va,
         purchase_url: license_purchase_url(),
+        is_admin: false, // is_admin so eh sabido apos chamar Gumroad
     })
 }
 
 #[tauri::command]
 fn license_purchase_link() -> String {
     license_purchase_url()
+}
+
+// ============================================================
+// === ADMIN COMMANDS — somente pra license cujo email = ADMIN_EMAIL =========
+// ============================================================
+// Cada command chama gumroad_verify pra confirmar que o caller eh admin antes
+// de retornar qualquer coisa. Isso impede um cliente normal de chamar
+// admin_list_sales via DevTools — ate o backend confirmar com o Gumroad que o
+// email bate, nada vaza.
+
+async fn ensure_admin() -> Result<(), String> {
+    let cfg = load_config();
+    let key = cfg.license_key.ok_or("Nenhuma license cadastrada")?;
+    let info = gumroad_verify(&key, false).await
+        .map_err(|e| format!("Falha ao validar admin: {}", e))?;
+    if !info.is_admin {
+        return Err("Acesso negado: essa license nao tem permissao de admin".into());
+    }
+    Ok(())
+}
+
+/// Lista vendas do produto via /v2/sales. Retorna JSON cru do Gumroad pra
+/// frontend formatar como quiser. Page comeca em 1; sem page = 1.
+#[tauri::command]
+async fn admin_list_sales(page: Option<u32>) -> Result<serde_json::Value, String> {
+    ensure_admin().await?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .user_agent("Ludex/0.6 (admin-panel)")
+        .build().map_err(|e| format!("http: {}", e))?;
+    let url = match page {
+        Some(p) if p > 1 => format!("https://api.gumroad.com/v2/sales?page={}", p),
+        _ => "https://api.gumroad.com/v2/sales".to_string(),
+    };
+    let resp = client.get(&url)
+        .bearer_auth(GUMROAD_ACCESS_TOKEN)
+        .send().await.map_err(|e| format!("sales request: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("Gumroad retornou {}", resp.status()));
+    }
+    let body: serde_json::Value = resp.json().await
+        .map_err(|e| format!("sales parse: {}", e))?;
+    Ok(body)
+}
+
+/// Decrementa o uses_count de QUALQUER license (nao precisa ser a do PC atual).
+/// Usado pra Paulo liberar 1 slot de um cliente que pediu suporte por email.
+#[tauri::command]
+async fn admin_force_deactivate(license_key: String) -> Result<(), String> {
+    ensure_admin().await?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build().map_err(|e| format!("http: {}", e))?;
+    let mut form = std::collections::HashMap::new();
+    form.insert("product_id", GUMROAD_PRODUCT_ID.to_string());
+    form.insert("license_key", license_key.trim().to_string());
+    let resp = client.put("https://api.gumroad.com/v2/licenses/decrement_uses_count")
+        .bearer_auth(GUMROAD_ACCESS_TOKEN)
+        .form(&form)
+        .send().await.map_err(|e| format!("decrement: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("Gumroad retornou {}", resp.status()));
+    }
+    Ok(())
+}
+
+/// Verifica se a license ativa atual eh admin (consultando Gumroad).
+/// Retorna false se nenhum license, ou se email nao bate. NAO eh source of
+/// truth — admin_list_sales / admin_force_deactivate revalidam por conta.
+#[tauri::command]
+async fn admin_check_status() -> Result<bool, String> {
+    let cfg = load_config();
+    let key = match cfg.license_key {
+        Some(k) => k,
+        None => return Ok(false),
+    };
+    let info = gumroad_verify(&key, false).await?;
+    Ok(info.is_admin)
+}
+
+/// Retorna a URL do dashboard Gumroad pra Paulo abrir no browser quando
+/// quiser refundar/banir uma sale (a API publica nao expoe disable_license).
+#[tauri::command]
+fn admin_dashboard_url() -> String {
+    "https://app.gumroad.com/dashboard".to_string()
 }
 
 // ============================================================
@@ -3505,7 +3775,11 @@ pub fn run() {
             license_validate,
             license_deactivate,
             license_get_local_info,
-            license_purchase_link
+            license_purchase_link,
+            admin_list_sales,
+            admin_force_deactivate,
+            admin_check_status,
+            admin_dashboard_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
