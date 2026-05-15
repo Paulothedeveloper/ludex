@@ -4918,7 +4918,7 @@
   background: linear-gradient(160deg, rgba(30, 22, 54, 0.95), rgba(18, 12, 36, 0.95));
   border: 1px solid rgba(196, 181, 253, 0.18);
   border-radius: 16px;
-  width: min(1200px, 95vw);
+  width: min(900px, 96vw);
   max-height: 92vh;
   overflow: hidden;
   display: flex; flex-direction: column;
@@ -4945,17 +4945,19 @@
 .lx-adminpanel-close:hover { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); }
 
 .lx-adminpanel-stats {
-  display: flex; gap: 12px; flex-wrap: wrap;
-  padding: 16px 26px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  padding: 16px 22px;
   border-bottom: 1px solid rgba(255,255,255,0.04);
 }
 .lx-stat-pill {
-  flex: 1 1 140px;
   padding: 10px 14px;
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.06);
   border-radius: 10px;
   display: flex; flex-direction: column;
+  min-width: 0;
 }
 .lx-stat-label {
   font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px;
@@ -4964,11 +4966,16 @@
 .lx-stat-pill strong { font-size: 17px; color: #fff; }
 
 .lx-adminpanel-toolbar {
-  display: flex; gap: 8px; padding: 14px 26px;
+  display: flex; gap: 8px; padding: 14px 22px;
   border-bottom: 1px solid rgba(255,255,255,0.04);
+  flex-wrap: wrap;
+}
+.lx-adminpanel-toolbar-actions {
+  display: flex; gap: 8px; flex: 0 0 auto;
 }
 .lx-adminpanel-search {
-  flex: 1;
+  flex: 1 1 200px;
+  min-width: 0;
   background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08);
   color: #fff; padding: 9px 14px; border-radius: 8px;
   font-size: 13px;
@@ -5000,27 +5007,111 @@
 .lx-adminpanel-msg-ok { color: #86efac; background: rgba(134, 239, 172, 0.06); }
 .lx-adminpanel-msg-error { color: #fca5a5; background: rgba(252, 165, 165, 0.06); }
 
-.lx-adminpanel-tablewrap { flex: 1; overflow: auto; padding: 0 26px; }
-.lx-adminpanel-table {
-  width: 100%; border-collapse: collapse; font-size: 12.5px;
+.lx-adminpanel-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.lx-adminpanel-table th {
-  text-align: left; padding: 10px 8px;
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
-  color: rgba(255,255,255,0.5); font-weight: 600;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  position: sticky; top: 0;
-  background: linear-gradient(160deg, rgba(30, 22, 54, 0.98), rgba(18, 12, 36, 0.98));
-  backdrop-filter: blur(8px);
+.lx-adminpanel-list::-webkit-scrollbar { width: 8px; }
+.lx-adminpanel-list::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
+.lx-adminpanel-list::-webkit-scrollbar-thumb {
+  background: rgba(196, 181, 253, 0.2); border-radius: 4px;
 }
-.lx-adminpanel-table td {
-  padding: 10px 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  color: rgba(255,255,255,0.85);
+.lx-adminpanel-list::-webkit-scrollbar-thumb:hover { background: rgba(196, 181, 253, 0.35); }
+
+.lx-adminpanel-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: rgba(255,255,255,0.45);
+  font-size: 13px;
 }
-.lx-adminpanel-table tr:hover td { background: rgba(255,255,255,0.02); }
-.lx-adminpanel-email { color: rgba(196, 181, 253, 0.9); font-size: 12px; }
-.lx-adminpanel-key { font-family: monospace; font-size: 11px; color: rgba(255,255,255,0.55); }
+.lx-adminpanel-empty-hint {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: rgba(255,255,255,0.3);
+  font-style: italic;
+}
+
+.lx-sale-card {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lx-sale-card:hover {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(196, 181, 253, 0.15);
+}
+.lx-sale-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.lx-sale-identity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.lx-sale-identity strong {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lx-sale-email {
+  color: rgba(196, 181, 253, 0.75);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lx-sale-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: rgba(255,255,255,0.6);
+}
+.lx-sale-meta b { color: rgba(255,255,255,0.85); font-weight: 600; }
+.lx-sale-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.lx-sale-key-label {
+  color: rgba(255,255,255,0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.lx-sale-key code {
+  background: rgba(0,0,0,0.3);
+  padding: 3px 8px;
+  border-radius: 4px;
+  color: rgba(196, 181, 253, 0.9);
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.lx-sale-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
 
 .lx-tag {
   display: inline-block; padding: 2px 8px; border-radius: 4px;

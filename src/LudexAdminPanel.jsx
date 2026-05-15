@@ -10,9 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
  * total / refund, manda Paulo pro dashboard Gumroad (a API publica nao expoe
  * disable_license).
  *
- * Nada aqui depende so do frontend — cada admin command chama ensure_admin()
- * no backend que consulta o Gumroad. Se alguem abrir esse componente com
- * DevTools sem ser admin, todos os commands respondem "Acesso negado".
+ * Layout de cards (nao tabela) pra funcionar bem em qualquer largura.
  */
 export default function LudexAdminPanel({ onClose }) {
   const [page, setPage] = useState(1);
@@ -20,7 +18,7 @@ export default function LudexAdminPanel({ onClose }) {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(true);
   const [search, setSearch] = useState("");
-  const [actioning, setActioning] = useState(null); // license_key sendo desativada
+  const [actioning, setActioning] = useState(null);
   const [actionMsg, setActionMsg] = useState(null);
 
   async function load(p = page) {
@@ -73,7 +71,6 @@ export default function LudexAdminPanel({ onClose }) {
     );
   }, [sales, search]);
 
-  // Stats agregados (do que veio nessa pagina, nao do total)
   const stats = useMemo(() => {
     let totalRevenue = 0;
     let refunded = 0;
@@ -92,14 +89,14 @@ export default function LudexAdminPanel({ onClose }) {
         <header className="lx-adminpanel-header">
           <div>
             <h2>Painel Admin · Ludex</h2>
-            <p className="lx-adminpanel-sub">Vendas via Gumroad · gerenciamento de licenças</p>
+            <p className="lx-adminpanel-sub">Vendas via Gumroad</p>
           </div>
           <button className="lx-adminpanel-close" onClick={onClose} aria-label="Fechar">×</button>
         </header>
 
         <div className="lx-adminpanel-stats">
           <div className="lx-stat-pill">
-            <span className="lx-stat-label">Vendas (esta página)</span>
+            <span className="lx-stat-label">Vendas (página)</span>
             <strong>{stats.total}</strong>
           </div>
           <div className="lx-stat-pill">
@@ -124,12 +121,14 @@ export default function LudexAdminPanel({ onClose }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <button className="lx-adminpanel-btn" onClick={() => load(page)} disabled={busy}>
-            {busy ? "Carregando..." : "Atualizar"}
-          </button>
-          <button className="lx-adminpanel-btn lx-adminpanel-btn-ghost" onClick={openDashboard}>
-            Dashboard Gumroad ↗
-          </button>
+          <div className="lx-adminpanel-toolbar-actions">
+            <button className="lx-adminpanel-btn" onClick={() => load(page)} disabled={busy}>
+              {busy ? "..." : "Atualizar"}
+            </button>
+            <button className="lx-adminpanel-btn lx-adminpanel-btn-ghost" onClick={openDashboard}>
+              Gumroad ↗
+            </button>
+          </div>
         </div>
 
         {actionMsg && (
@@ -140,70 +139,69 @@ export default function LudexAdminPanel({ onClose }) {
 
         {err && <p className="lx-adminpanel-msg lx-adminpanel-msg-error">{err}</p>}
 
-        <div className="lx-adminpanel-tablewrap">
-          <table className="lx-adminpanel-table">
-            <thead>
-              <tr>
-                <th>Comprador</th>
-                <th>Email</th>
-                <th>Data</th>
-                <th style={{ textAlign: "right" }}>Preço</th>
-                <th style={{ textAlign: "center" }}>PCs</th>
-                <th>License</th>
-                <th>Status</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {busy && filtered.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: "center", opacity: 0.6, padding: 24 }}>Carregando vendas...</td></tr>
+        <div className="lx-adminpanel-list">
+          {busy && filtered.length === 0 && (
+            <div className="lx-adminpanel-empty">Carregando vendas...</div>
+          )}
+          {!busy && filtered.length === 0 && (
+            <div className="lx-adminpanel-empty">
+              {search ? "Nenhuma venda bate com a busca." : "Nenhuma venda nessa página ainda."}
+              {!search && (
+                <p className="lx-adminpanel-empty-hint">
+                  Compras de teste do creator podem não aparecer aqui — só vendas reais de clientes externos.
+                </p>
               )}
-              {!busy && filtered.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: "center", opacity: 0.6, padding: 24 }}>
-                  {search ? "Nenhuma venda bate com a busca." : "Nenhuma venda nessa página."}
-                </td></tr>
-              )}
-              {filtered.map(s => {
-                const date = s.created_at ? new Date(s.created_at).toLocaleDateString("pt-BR") : "—";
-                const price = `R$ ${(Number(s.price || 0) / 100).toFixed(2)}`;
-                const uses = s.license_uses_count || 0;
-                const maxPC = 2;
-                const keyShort = s.license_key
-                  ? `${s.license_key.slice(0, 8)}...${s.license_key.slice(-4)}`
-                  : "—";
-                return (
-                  <tr key={s.id}>
-                    <td>{s.full_name || "—"}</td>
-                    <td className="lx-adminpanel-email">{s.email || "—"}</td>
-                    <td>{date}</td>
-                    <td style={{ textAlign: "right" }}>{price}</td>
-                    <td style={{ textAlign: "center", color: uses >= maxPC ? "#fca5a5" : undefined }}>
-                      {uses}/{maxPC}
-                    </td>
-                    <td className="lx-adminpanel-key" title={s.license_key}>{keyShort}</td>
-                    <td>
-                      {s.refunded ? <span className="lx-tag lx-tag-danger">Refund</span>
-                       : s.disputed ? <span className="lx-tag lx-tag-warn">Disputa</span>
-                       : uses > 0 ? <span className="lx-tag lx-tag-ok">Ativa</span>
-                       : <span className="lx-tag">Não ativada</span>}
-                    </td>
-                    <td>
-                      {s.license_key && uses > 0 && !s.refunded && (
-                        <button
-                          className="lx-adminpanel-btn-mini"
-                          onClick={() => forceDeactivate(s.license_key, s.email)}
-                          disabled={actioning === s.license_key}
-                          title="Decrementa o uses_count em 1 (libera 1 slot)"
-                        >
-                          {actioning === s.license_key ? "..." : "Liberar slot"}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+            </div>
+          )}
+          {filtered.map(s => {
+            const date = s.created_at ? new Date(s.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+            const price = `R$ ${(Number(s.price || 0) / 100).toFixed(2)}`;
+            const uses = s.license_uses_count || 0;
+            const maxPC = 2;
+            const status = s.refunded ? { label: "Refund", cls: "danger" }
+                       : s.disputed ? { label: "Disputa", cls: "warn" }
+                       : uses > 0 ? { label: "Ativa", cls: "ok" }
+                       : { label: "Não ativada", cls: "" };
+            return (
+              <div key={s.id} className="lx-sale-card">
+                <div className="lx-sale-header">
+                  <div className="lx-sale-identity">
+                    <strong>{s.full_name || s.email || "Sem nome"}</strong>
+                    {s.email && s.email !== s.full_name && (
+                      <span className="lx-sale-email">{s.email}</span>
+                    )}
+                  </div>
+                  <span className={`lx-tag lx-tag-${status.cls}`}>{status.label}</span>
+                </div>
+                <div className="lx-sale-meta">
+                  <span><b>{date}</b></span>
+                  <span>·</span>
+                  <span><b>{price}</b></span>
+                  <span>·</span>
+                  <span style={{ color: uses >= maxPC ? "#fca5a5" : undefined }}>
+                    <b>{uses}/{maxPC}</b> PCs
+                  </span>
+                </div>
+                {s.license_key && (
+                  <div className="lx-sale-key" title={s.license_key}>
+                    <span className="lx-sale-key-label">License:</span>
+                    <code>{s.license_key}</code>
+                  </div>
+                )}
+                {s.license_key && uses > 0 && !s.refunded && (
+                  <div className="lx-sale-actions">
+                    <button
+                      className="lx-adminpanel-btn-mini"
+                      onClick={() => forceDeactivate(s.license_key, s.email)}
+                      disabled={actioning === s.license_key}
+                    >
+                      {actioning === s.license_key ? "Liberando..." : "Liberar 1 slot"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div className="lx-adminpanel-pager">
@@ -225,9 +223,8 @@ export default function LudexAdminPanel({ onClose }) {
         </div>
 
         <p className="lx-adminpanel-foot">
-          Pra <strong>refund</strong> ou <strong>banir</strong> uma sale por completo, use o
-          <button className="lx-adminpanel-link" onClick={openDashboard}> Dashboard Gumroad</button>
-          (a API pública não expõe disable_license).
+          Pra <strong>refund</strong> ou <strong>banir</strong>, abra o
+          <button className="lx-adminpanel-link" onClick={openDashboard}>Dashboard Gumroad</button>.
         </p>
       </div>
     </div>
