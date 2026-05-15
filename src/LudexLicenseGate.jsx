@@ -7,11 +7,14 @@ import VirtualKeyboard from "./LudexOSK";
  * tem license valida. Renderiza:
  * - Logo Ludex
  * - Input pra colar license key (com OSK pra controle)
- * - Botao "Ativar"
+ * - Botao "Colar" (clipboard) e "Ativar"
  * - Link "Comprar agora" abrindo o Gumroad no browser
  *
  * onLicensed() eh chamado quando ativacao deu certo (config persistido no
  * backend ja). LudexLauncher entao deixa o app continuar pro splash/onboarding.
+ *
+ * Importante: input NAO eh readOnly mesmo com OSK aberto, pra permitir que o
+ * user de teclado fisico cole com Ctrl+V. OSK so eh visual auxiliar.
  */
 export default function LudexLicenseGate({ onLicensed }) {
   const [key, setKey] = useState("");
@@ -48,6 +51,19 @@ export default function LudexLicenseGate({ onLicensed }) {
     }
   }
 
+  async function pasteFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && text.trim()) {
+        setKey(text.trim().toUpperCase());
+        setErr(null);
+        setOskOpen(false);
+      }
+    } catch (e) {
+      setErr("Nao consegui ler o clipboard. Cola manualmente com Ctrl+V no campo.");
+    }
+  }
+
   return (
     <div className="lx-licgate-root">
       <div className="lx-licgate-bg" />
@@ -66,7 +82,6 @@ export default function LudexLicenseGate({ onLicensed }) {
             value={key}
             onChange={(e) => setKey(e.target.value.toUpperCase())}
             onFocus={() => setOskOpen(true)}
-            readOnly={oskOpen}
             maxLength={64}
             autoFocus
             spellCheck={false}
@@ -75,13 +90,24 @@ export default function LudexLicenseGate({ onLicensed }) {
 
         {err && <p className="lx-licgate-err">{err}</p>}
 
-        <button
-          className="lx-licgate-btn lx-licgate-btn-primary"
-          onClick={activate}
-          disabled={busy || !key.trim()}
-        >
-          {busy ? "Validando..." : "Ativar Ludex"}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="lx-licgate-btn lx-licgate-btn-ghost"
+            onClick={pasteFromClipboard}
+            type="button"
+            style={{ flex: "0 0 auto", minWidth: 96 }}
+          >
+            Colar
+          </button>
+          <button
+            className="lx-licgate-btn lx-licgate-btn-primary"
+            onClick={activate}
+            disabled={busy || !key.trim()}
+            style={{ flex: 1 }}
+          >
+            {busy ? "Validando..." : "Ativar Ludex"}
+          </button>
+        </div>
 
         <div className="lx-licgate-divider" />
 
