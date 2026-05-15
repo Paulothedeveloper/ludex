@@ -81,9 +81,8 @@ export default function LudexLicenseGate({ onLicensed }) {
             placeholder="XXXX-XXXX-XXXX-XXXX"
             value={key}
             onChange={(e) => setKey(e.target.value.toUpperCase())}
-            onFocus={() => setOskOpen(true)}
+            onClick={() => setOskOpen(true)}
             maxLength={64}
-            autoFocus
             spellCheck={false}
           />
         </label>

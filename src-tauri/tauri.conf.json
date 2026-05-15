@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Ludex",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "identifier": "gg.ludex.app",
   "build": {
     "frontendDist": "../dist",
