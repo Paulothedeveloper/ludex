@@ -3232,12 +3232,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  font-size: 12px;
-  font-weight: 900;
+  width: 20px;
+  height: 20px;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 50%;
+  flex-shrink: 0;
+}
+.pb-category-icon svg {
+  width: 12px;
+  height: 12px;
+  display: block;
 }
 .pb-category.active .pb-category-icon {
   background: rgba(255, 255, 255, 0.2);
@@ -3300,6 +3304,14 @@
   outline: 0 solid transparent;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   flex-shrink: 0;  /* nao deixa achatar com scroll */
+  /* v0.7.6: stagger entrance animation. animationDelay vem inline via React.
+     Toda vez que selectedCategoryId muda, React faz remount (key inclui cat id)
+     e a animacao roda do zero — inclusive em "TODOS" */
+  animation: pb-sys-enter 360ms cubic-bezier(0.2, 0.85, 0.3, 1) both;
+}
+@keyframes pb-sys-enter {
+  from { opacity: 0; transform: translateY(10px) scale(0.86); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 .pb-sys-icon {
   display: flex;
@@ -3341,10 +3353,11 @@
 /* ---------- Hints — pill flutuante acima da barra de sistemas ---------- */
 /* Posicionado acima pra nao colar na barra de sistemas (que cresce com 16+ sistemas) */
 .pb-hints {
-  /* v0.7.5: movido pro top-right (perto da topbar) pra nao sobrepor a barra
-     de categorias. Antes ficava em bottom:96px que conflitava. */
+  /* v0.7.7: posicionada ABAIXO da top bar (~58px alto) e ACIMA do banner
+     "Continuar onde parou" / game grid. Nao sobrepoe atalhos da topbar
+     (busca, settings, clock) nem as categorias do rodape. */
   position: absolute;
-  top: 16px;
+  top: 70px;
   right: 20px;
   display: flex;
   align-items: center;

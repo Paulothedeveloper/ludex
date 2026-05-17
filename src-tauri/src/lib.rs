@@ -3947,6 +3947,89 @@ async fn android_demo_admin_unlock(license_key: String) -> Result<bool, String> 
 }
 
 // ============================================================
+// === ANDROID AUTO-UPDATER basico (v0.7.5+) ===================
+// Tauri updater oficial nao suporta Android. Implementacao simples:
+// 1. Fetch latest.json do GitHub releases
+// 2. Compara versao
+// 3. Retorna URL do APK pra frontend abrir no browser/downloader
+// ============================================================
+
+const ANDROID_LATEST_JSON: &str = "https://github.com/EllaeMyApp/ludex/releases/latest/download/latest-android.json";
+const ANDROID_LATEST_FALLBACK: &str = "https://api.github.com/repos/EllaeMyApp/ludex/releases/latest";
+
+#[derive(Serialize)]
+struct AndroidUpdateInfo {
+    available: bool,
+    current_version: String,
+    latest_version: String,
+    apk_url: Option<String>,
+    notes: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct GhRelease {
+    tag_name: String,
+    body: Option<String>,
+    assets: Vec<GhAsset>,
+}
+
+#[derive(Deserialize)]
+struct GhAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+/// Checa se ha versao mais nova do APK Android no GitHub Releases.
+/// Frontend pode abrir o apk_url no browser pra download manual.
+#[tauri::command]
+async fn android_check_update() -> Result<AndroidUpdateInfo, String> {
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent("Ludex-Android-Updater")
+        .build()
+        .map_err(|e| format!("client: {}", e))?;
+    let resp = client.get(ANDROID_LATEST_FALLBACK)
+        .send().await
+        .map_err(|e| format!("github: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("github status: {}", resp.status()));
+    }
+    let release: GhRelease = resp.json().await
+        .map_err(|e| format!("parse: {}", e))?;
+    let latest = release.tag_name.trim_start_matches('v').to_string();
+    let apk_asset = release.assets.iter()
+        .find(|a| a.name.ends_with(".apk"))
+        .map(|a| a.browser_download_url.clone());
+
+    // Comparacao semver simples (so funciona com versoes X.Y.Z)
+    let available = version_is_newer(&latest, &current);
+
+    Ok(AndroidUpdateInfo {
+        available,
+        current_version: current,
+        latest_version: latest,
+        apk_url: apk_asset,
+        notes: release.body,
+    })
+}
+
+fn version_is_newer(latest: &str, current: &str) -> bool {
+    let parse = |v: &str| -> Vec<u32> {
+        v.split('.').take(3).map(|p| p.parse().unwrap_or(0)).collect()
+    };
+    let l = parse(latest);
+    let c = parse(current);
+    for i in 0..l.len().max(c.len()) {
+        let lp = l.get(i).copied().unwrap_or(0);
+        let cp = c.get(i).copied().unwrap_or(0);
+        if lp > cp { return true; }
+        if lp < cp { return false; }
+    }
+    false
+}
+
+// ============================================================
 // === RETROACHIEVEMENTS — login + summary + recent ach ======
 // ============================================================
 // Web API key gerada em https://retroachievements.org/controlpanel.php
@@ -4323,7 +4406,8 @@ pub fn run() {
             admin_check_status,
             admin_dashboard_url,
             android_demo_status,
-            android_demo_admin_unlock
+            android_demo_admin_unlock,
+            android_check_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

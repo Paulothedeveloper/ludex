@@ -73,17 +73,48 @@ const IS_MOBILE = IS_ANDROID || (typeof navigator !== "undefined" && /iPhone|iPa
 
 // Categorias pros sistemas — agrupa por fabricante/familia.
 // Cada sistema vai em UMA categoria. Switch + handhelds Nintendo continuam em Nintendo.
+// icon: id pra CategoryIcon component renderizar SVG (sem emojis, regra Paulo).
 const SYSTEM_CATEGORIES = [
-  { id: "all",       name: "TODOS",       icon: "🎮", systems: null /* = mostra tudo */ },
-  { id: "nintendo",  name: "NINTENDO",    icon: "N",  systems: ["switch","wiiu","3ds","wii","gc","n64","gba","ds","gb","gbc","snes","nes","vb"] },
-  { id: "sony",      name: "SONY",        icon: "PS", systems: ["ps3","ps4","ps2","ps1","psp","vita"] },
-  { id: "sega",      name: "SEGA",        icon: "S",  systems: ["dreamcast","saturn","md","sms","gg","segacd"] },
-  { id: "microsoft", name: "MICROSOFT",   icon: "X",  systems: ["xbox","xbox360"] },
-  { id: "atari",     name: "ATARI",       icon: "A",  systems: ["a2600","lynx","jaguar"] },
-  { id: "arcade",    name: "ARCADE",      icon: "★",  systems: ["arcade"] },
-  { id: "handheld",  name: "PORTATEIS",   icon: "H",  systems: ["ws","ngpc"] },
-  { id: "outros",    name: "OUTROS",      icon: "+",  systems: ["tg16","threedo","msx","c64","zx","amiga","retro"] },
+  { id: "all",       name: "TODOS",       systems: null /* = mostra tudo */ },
+  { id: "nintendo",  name: "NINTENDO",    systems: ["switch","wiiu","3ds","wii","gc","n64","gba","ds","gb","gbc","snes","nes","vb"] },
+  { id: "sony",      name: "SONY",        systems: ["ps3","ps4","ps2","ps1","psp","vita"] },
+  { id: "sega",      name: "SEGA",        systems: ["dreamcast","saturn","md","sms","gg","segacd"] },
+  { id: "microsoft", name: "MICROSOFT",   systems: ["xbox","xbox360"] },
+  { id: "atari",     name: "ATARI",       systems: ["a2600","lynx","jaguar"] },
+  { id: "arcade",    name: "ARCADE",      systems: ["arcade"] },
+  { id: "handheld",  name: "PORTATEIS",   systems: ["ws","ngpc"] },
+  { id: "outros",    name: "OUTROS",      systems: ["tg16","threedo","msx","c64","zx","amiga","retro"] },
 ];
+
+function CategoryIcon({ id }) {
+  const f = "currentColor";
+  switch (id) {
+    case "all":
+      // Grade 2x2 = "todos os sistemas"
+      return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="3" y="3" width="8" height="8" rx="1.5" /><rect x="13" y="3" width="8" height="8" rx="1.5" /><rect x="3" y="13" width="8" height="8" rx="1.5" /><rect x="13" y="13" width="8" height="8" rx="1.5" /></svg>);
+    case "nintendo":
+      return (<svg viewBox="0 0 24 24" aria-hidden><text x="12" y="18" textAnchor="middle" fill={f} fontSize="16" fontWeight="900" fontFamily="system-ui">N</text></svg>);
+    case "sony":
+      return (<svg viewBox="0 0 24 24" aria-hidden><text x="12" y="17" textAnchor="middle" fill={f} fontSize="11" fontWeight="900" fontStyle="italic" fontFamily="Impact, system-ui">PS</text></svg>);
+    case "sega":
+      return (<svg viewBox="0 0 24 24" aria-hidden><text x="12" y="18" textAnchor="middle" fill={f} fontSize="16" fontWeight="900" fontFamily="system-ui">S</text></svg>);
+    case "microsoft":
+      // X estilizado (Xbox)
+      return (<svg viewBox="0 0 24 24" fill="none" stroke={f} strokeWidth="3" strokeLinecap="round" aria-hidden><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>);
+    case "atari":
+      return (<svg viewBox="0 0 24 24" aria-hidden><text x="12" y="18" textAnchor="middle" fill={f} fontSize="16" fontWeight="900" fontFamily="system-ui">A</text></svg>);
+    case "arcade":
+      // Joystick (representa arcade)
+      return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="8" y="14" width="8" height="3" rx="1" /><rect x="11" y="6" width="2" height="9" /><circle cx="12" cy="6" r="2.5" /><rect x="6" y="17" width="12" height="2" rx="1" opacity="0.5" /></svg>);
+    case "handheld":
+      // Console portatil (silhueta simples)
+      return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="6" y="3" width="12" height="18" rx="2.5" /><rect x="8.5" y="5.5" width="7" height="6" rx="0.5" fill="#1c1c1c" /><circle cx="10" cy="16" r="1" fill="#1c1c1c" /><circle cx="14" cy="16" r="1" fill="#1c1c1c" /><circle cx="10" cy="19" r="1" fill="#1c1c1c" /><circle cx="14" cy="19" r="1" fill="#1c1c1c" /></svg>);
+    case "outros":
+      // Plus stylized
+      return (<svg viewBox="0 0 24 24" fill="none" stroke={f} strokeWidth="3" strokeLinecap="round" aria-hidden><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>);
+    default: return null;
+  }
+}
 
 function systemMatchesCategory(systemId, categoryId) {
   if (categoryId === "all") return true;
@@ -3544,7 +3575,15 @@ function AndroidDemoExpired({ demo, onUnlock }) {
   return (
     <div className="pb-demo-expired">
       <div className="pb-demo-expired-card">
-        <div className="pb-demo-expired-icon">⏱️</div>
+        <div className="pb-demo-expired-icon">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <circle cx="32" cy="36" r="22" />
+            <line x1="32" y1="36" x2="32" y2="22" />
+            <line x1="32" y1="36" x2="42" y2="36" />
+            <line x1="26" y1="6" x2="38" y2="6" />
+            <line x1="32" y1="6" x2="32" y2="14" />
+          </svg>
+        </div>
         <h1>Demo expirou</h1>
         <p className="pb-demo-expired-sub">
           Voce usou {demo.demo_days_total} dias da versao Android gratuita.
@@ -5209,7 +5248,16 @@ export default function LudexLauncher() {
             <span className="pb-search-pill-label">Buscar jogo</span>
             <kbd className="pb-search-pill-kbd">/</kbd>
           </button>
-          <button className="pb-icon-btn" onClick={pickRandomGame} title="Surpresa! (R) — escolhe jogo aleatorio">🎲</button>
+          <button className="pb-icon-btn" onClick={pickRandomGame} title="Surpresa! (R) — escolhe jogo aleatorio">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="3" y="3" width="18" height="18" rx="2.5" />
+              <circle cx="8" cy="8" r="1.4" fill="currentColor" />
+              <circle cx="16" cy="8" r="1.4" fill="currentColor" />
+              <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+              <circle cx="8" cy="16" r="1.4" fill="currentColor" />
+              <circle cx="16" cy="16" r="1.4" fill="currentColor" />
+            </svg>
+          </button>
           <button className="pb-icon-btn" data-tour="settings" onClick={() => { sfx.confirm(); setSettingsOpen(true); }} title="Configuracoes (S)"><GearIcon /></button>
           {gamepadConnected && <span className="pb-gamepad-indicator" title="Controle conectado"><GamepadIcon /></span>}
           <span className="pb-clock">{time}</span>
@@ -5378,7 +5426,7 @@ export default function LudexLauncher() {
               onClick={() => { sfx.switchSys(); setSelectedCategoryId(cat.id); }}
               title={cat.name}
             >
-              <span className="pb-category-icon">{cat.icon}</span>
+              <span className="pb-category-icon"><CategoryIcon id={cat.id} /></span>
               <span className="pb-category-name">{cat.name}</span>
             </button>
           ))}
@@ -5393,9 +5441,9 @@ export default function LudexLauncher() {
             const isFav = sys.id === "_favorites";
             return (
               <button
-                key={sys.id}
+                key={`${selectedCategoryId}-${sys.id}`}  // forca re-mount na troca de categoria pra rodar a animacao de entrada
                 className={`pb-sys ${isActive ? (focusZone === "systems" ? "active focused" : "active") : ""} ${isEmpty ? "empty" : ""} ${isFav ? "pb-sys-favorites" : ""}`}
-                style={{ "--sys-color": sys.color }}
+                style={{ "--sys-color": sys.color, animationDelay: `${i * 26}ms` }}
                 onClick={() => setSelectedSystemIdx(i)}
                 title={`${sys.name}${sys.games.length ? ` · ${sys.games.length} jogos` : ""}`}
               >
