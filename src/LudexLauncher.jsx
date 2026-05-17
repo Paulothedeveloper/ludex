@@ -3643,6 +3643,7 @@ export default function LudexLauncher() {
   const [scanError, setScanError] = useState(null);
   const [selectedSystemIdx, setSelectedSystemIdx] = useState(0);
   const [selectedCategoryId, setSelectedCategoryId] = useState("all");
+  const [systemPickerOpen, setSystemPickerOpen] = useState(false);  // mobile bottom sheet
   // focusZone: "games" (default, navega jogos) | "systems" (navega barra de sistemas)
   // D-pad DOWN em games -> systems. D-pad UP em systems -> games. A em systems -> entra (volta pra games).
   const [focusZone, setFocusZone] = useState("games");
@@ -5127,6 +5128,266 @@ export default function LudexLauncher() {
   }
   if (licenseStatus === false) {
     return <LudexLicenseGate onLicensed={() => setLicenseStatus(true)} />;
+  }
+
+  // ANDROID: layout mobile dedicado (touch-first, sem hints/topbar desktop).
+  // Reusa todo state via closure — todos os modais (settings, preview, detail)
+  // continuam disponiveis pela closure tambem.
+  if (IS_ANDROID) {
+    return (
+      <div className="lx-mobile">
+        {!splashDone && <SplashScreen profileName={activeProfile?.name} />}
+
+        {/* Header mobile compacto */}
+        <header className="lx-mobile-header">
+          <button
+            className="lx-mobile-btn-icon"
+            onClick={() => { sfx.open(); setSystemPickerOpen(true); }}
+            aria-label="Trocar sistema"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
+              <line x1="4" y1="6" x2="20" y2="6" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="18" x2="20" y2="18" />
+            </svg>
+          </button>
+
+          <div className="lx-mobile-title-wrap">
+            <div className="lx-mobile-brand">LUDEX</div>
+            {selected && (
+              <button
+                className="lx-mobile-system-chip"
+                style={{ "--sys-color": selected.color }}
+                onClick={() => { sfx.open(); setSystemPickerOpen(true); }}
+              >
+                <span className="lx-mobile-system-icon"><SystemIcon id={selected.id} /></span>
+                <span className="lx-mobile-system-name">{selected.name}</span>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {androidDemo && !androidDemo.is_admin_unlocked && androidDemo.days_left > 0 && (
+            <div className={`lx-mobile-demo ${androidDemo.days_left <= 2 ? "warn" : ""}`}>
+              {androidDemo.days_left}d
+            </div>
+          )}
+
+          <button
+            className="lx-mobile-btn-icon"
+            onClick={() => { sfx.confirm(); setSettingsOpen(true); }}
+            aria-label="Configuracoes"
+          >
+            <GearIcon />
+          </button>
+        </header>
+
+        {/* Busca compacta */}
+        <div className="lx-mobile-search">
+          <button
+            className="lx-mobile-search-btn"
+            onClick={() => { sfx.confirm(); setSearchOpen(true); }}
+          >
+            <SearchIcon />
+            <span>Buscar jogo</span>
+          </button>
+        </div>
+
+        {/* Grid de jogos */}
+        <main className="lx-mobile-main">
+          {loading && <div className="lx-mobile-msg">Carregando...</div>}
+          {scanError && (
+            <div className="lx-mobile-msg lx-mobile-msg-error">
+              <strong>Falha no scan</strong>
+              <span>{scanError}</span>
+            </div>
+          )}
+
+          {!loading && !scanError && selected && visibleGames.length === 0 && (
+            <div className="lx-mobile-empty">
+              <h2>Sem jogos de {selected.name} ainda</h2>
+              <p>
+                Coloque suas ROMs em <code>/storage/emulated/0/Ludex/roms/{selected.folder_name}/</code> e
+                volte aqui — o Ludex detecta automaticamente.
+              </p>
+            </div>
+          )}
+
+          {!loading && visibleGames.length > 0 && (
+            <div className="lx-mobile-grid">
+              {visibleGames.map((g, i) => {
+                const cover = covers[g.path];
+                const hasCover = typeof cover === "string" && cover.length > 0;
+                const isFav = favoriteSet.has(g.path);
+                return (
+                  <button
+                    key={g.path}
+                    className={`lx-mobile-card ${hasCover ? "has-cover" : ""}`}
+                    style={{ "--card-color": selected.color, animationDelay: `${i * 30}ms` }}
+                    onClick={() => { sfx.click(); setSelectedGameIdx(i); openPreviewPopup(selected, g); }}
+                  >
+                    {hasCover ? (
+                      <img className="lx-mobile-card-cover" src={cover} alt={g.name} loading="lazy" />
+                    ) : (
+                      <div className="lx-mobile-card-fallback" style={{ background: selected.color }}>
+                        <div className="lx-mobile-card-icon"><SystemIcon id={selected.id} /></div>
+                        <div className="lx-mobile-card-title">{g.name}</div>
+                      </div>
+                    )}
+                    {isFav && <span className="lx-mobile-card-fav"><StarIcon filled /></span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </main>
+
+        {/* Bottom sheet: system picker (categorias + sistemas) */}
+        {systemPickerOpen && (
+          <div className="lx-mobile-sheet-backdrop" onClick={() => setSystemPickerOpen(false)}>
+            <div className="lx-mobile-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="lx-mobile-sheet-handle" />
+              <div className="lx-mobile-sheet-header">
+                <h3>Sistemas</h3>
+                <button className="lx-mobile-btn-icon" onClick={() => setSystemPickerOpen(false)}>
+                  <CloseIcon />
+                </button>
+              </div>
+              <div className="lx-mobile-sheet-cats">
+                {SYSTEM_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.id}
+                    className={`lx-mobile-cat ${selectedCategoryId === cat.id ? "active" : ""}`}
+                    onClick={() => { sfx.switchSys(); setSelectedCategoryId(cat.id); }}
+                  >
+                    <CategoryIcon id={cat.id} />
+                    <span>{cat.name}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="lx-mobile-sheet-systems">
+                {displayedSystems.map((sys, i) => {
+                  const isActive = i === selectedSystemIdx;
+                  return (
+                    <button
+                      key={`${selectedCategoryId}-${sys.id}`}
+                      className={`lx-mobile-sheet-sys ${isActive ? "active" : ""}`}
+                      style={{ "--sys-color": sys.color }}
+                      onClick={() => {
+                        sfx.confirm();
+                        setSelectedSystemIdx(i);
+                        setSystemPickerOpen(false);
+                      }}
+                    >
+                      <span className="lx-mobile-sheet-sys-icon"><SystemIcon id={sys.id} /></span>
+                      <span className="lx-mobile-sheet-sys-name">{sys.name}</span>
+                      <span className="lx-mobile-sheet-sys-count">
+                        {sys.games.length > 0 ? `${sys.games.length} jogos` : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reuso dos modais existentes (preview, detail, settings, etc) */}
+        {previewPopup && (
+          <GamePreviewPopup
+            closing={previewClosing}
+            system={previewPopup.system}
+            game={previewPopup.game}
+            playTimeSec={(activeProfile?.play_time?.[`${previewPopup.system.id}::${previewPopup.game.path}`]) || 0}
+            isFavorite={favoriteSet.has(previewPopup.game.path)}
+            onClose={closePreviewPopup}
+            onLaunch={() => { closePreviewPopup(); setTimeout(() => handleLaunch(), MODAL_EXIT_MS); }}
+            onOpenDetails={() => { const p = previewPopup; closePreviewPopup(); setTimeout(() => openDetailPanel(p.system, p.game), MODAL_EXIT_MS); }}
+            modalGamepadRef={modalGamepadRef}
+            detailsCache={detailsCacheRef}
+          />
+        )}
+
+        {detailPanel && (
+          <GameDetailPanel
+            closing={detailClosing}
+            system={detailPanel.system}
+            game={detailPanel.game}
+            playTimeSec={(activeProfile?.play_time?.[`${detailPanel.system.id}::${detailPanel.game.path}`]) || 0}
+            isFavorite={favoriteSet.has(detailPanel.game.path)}
+            gameMeta={gameMetaMap[`${detailPanel.system.id}::${detailPanel.game.path}`]}
+            onClose={closeDetailPanel}
+            onLaunch={() => { closeDetailPanel(); setTimeout(() => handleLaunch(), MODAL_EXIT_MS); }}
+            onPickCover={() => pickCustomCover(detailPanel.system.id, detailPanel.game)}
+            onResyncCover={() => resyncSingleCover(detailPanel.system.id, detailPanel.game)}
+            onOpenLocation={() => openGameLocation(detailPanel.game)}
+            onToggleFavorite={() => toggleFavorite()}
+            onSetRating={(rating) => setGameRating(detailPanel.system.id, detailPanel.game.path, rating)}
+            onSetStatus={(status) => setGameStatus(detailPanel.system.id, detailPanel.game.path, status)}
+            onSetNotes={(notes) => setGameNotes(detailPanel.system.id, detailPanel.game.path, notes)}
+          />
+        )}
+
+        {settingsOpen && (
+          <SettingsPanel
+            closing={settingsClosing}
+            onClose={closeSettings}
+            modalGamepadRef={modalGamepadRef}
+            systems={systems}
+            romsRoot={romsRoot}
+            emulatorsRoot={emulatorsRoot}
+            onToggleFullscreen={toggleFullscreen}
+            onQuit={handleQuit}
+            isFullscreen={isFullscreen}
+            config={config}
+            onSetTheme={(id) => { sfx.confirm(); setTheme(id); }}
+            onSetCustomTheme={setCustomTheme}
+            onPickWallpaper={pickWallpaper}
+            onClearWallpaper={clearWallpaper}
+            onSyncCovers={syncCovers}
+            syncStatus={syncStatus}
+            onRescan={rescanRoms}
+            rescanBusy={rescanBusy}
+            onOpenProfiles={() => { closeSettings(); setTimeout(() => setProfilesOpen(true), MODAL_EXIT_MS); }}
+            activeProfile={activeProfile}
+            onSetupSwitchKeys={setupSwitchKeys}
+            switchKeysStatus={switchKeysStatus}
+            onToggleSavesIsolation={toggleSavesIsolation}
+            savesStatus={savesStatus}
+            onToggleMusic={toggleMusic}
+            onSetMusicVolume={setMusicVolume}
+            onShowLogs={() => { closeSettings(); setTimeout(() => setLogsOpen(true), MODAL_EXIT_MS); }}
+            onShowHealth={() => { closeSettings(); setTimeout(() => setHealthOpen(true), MODAL_EXIT_MS); }}
+            onOpenSuggestions={() => { closeSettings(); setTimeout(() => { setSuggestionsTab("roms"); setSuggestionsOpen(true); }, MODAL_EXIT_MS); }}
+          />
+        )}
+
+        {searchOpen && (
+          <SearchPanel
+            closing={searchClosing}
+            onClose={closeSearch}
+            systems={systems}
+            covers={covers}
+            modalGamepadRef={modalGamepadRef}
+            onPick={({ system, game }) => {
+              closeSearch();
+              const sysIdx = displayedSystems.findIndex(s => s.id === system.id);
+              if (sysIdx >= 0) setSelectedSystemIdx(sysIdx);
+              setTimeout(() => openPreviewPopup(system, game), MODAL_EXIT_MS);
+            }}
+          />
+        )}
+
+        {launching && (
+          <div className="lx-mobile-launching">
+            <div className="lx-mobile-spinner" />
+            <div>{launchMsg?.text || "Iniciando..."}</div>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
