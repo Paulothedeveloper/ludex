@@ -244,19 +244,48 @@ export default function LudexMobile() {
     }
   }, []);
 
-  // ============ PICKER DE PASTA ROMS (SAF Android) ============
+  // ============ PICKER DE PASTA ROMS ============
+  // tauri-plugin-dialog NAO suporta directory picker em Android.
+  // Em Android: abre modal com lista de pastas comuns + input custom.
+  // Em Desktop: usa openDialog nativo.
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const pickRomsFolder = useCallback(async () => {
+    // Desktop tenta o picker nativo primeiro
     try {
       const selected = await openDialog({ directory: true, multiple: false });
-      if (!selected || typeof selected !== "string") return;
-      // Persiste no AppConfig + rescan
-      await invoke("set_paths_config", { emulatorsRoot: null, romsRoot: selected });
-      const sys = await invoke("scan_roms", { romsRoot: selected });
+      if (selected && typeof selected === "string") {
+        await invoke("set_paths_config", { emulatorsRoot: null, romsRoot: selected });
+        const sys = await invoke("scan_roms", { romsRoot: selected });
+        setSystems((sys || []).filter((s) => ANDROID_SUPPORTED.has(s.id)));
+        return;
+      }
+    } catch (e) {
+      // Android: openDialog falha -> abre modal com lista de pastas comuns
+      if (String(e).includes("not implemented") || String(e).includes("Folder picker")) {
+        setFolderPickerOpen(true);
+        return;
+      }
+      console.error("pickRomsFolder", e);
+      alert(`Falha: ${e}`);
+    }
+  }, []);
+
+  const setRomsFolder = useCallback(async (path) => {
+    if (!path) return;
+    try {
+      await invoke("set_paths_config", { emulatorsRoot: null, romsRoot: path });
+      const sys = await invoke("scan_roms", { romsRoot: path });
       const filtered = (sys || []).filter((s) => ANDROID_SUPPORTED.has(s.id));
       setSystems(filtered);
+      setFolderPickerOpen(false);
+      // Refresh config local
+      try {
+        const c = await invoke("load_config");
+        if (c) setConfig(c);
+      } catch {}
     } catch (e) {
-      console.error("pickRomsFolder", e);
-      alert(`Falha ao escolher pasta: ${e}`);
+      console.error("setRomsFolder", e);
+      alert(`Falha: ${e}`);
     }
   }, []);
 
@@ -339,6 +368,14 @@ export default function LudexMobile() {
           />
         )}
       </main>
+
+      {/* Folder picker modal (Android nao tem SAF nativo no Tauri ainda) */}
+      {folderPickerOpen && (
+        <FolderPickerModal
+          onClose={() => setFolderPickerOpen(false)}
+          onPick={(path) => setRomsFolder(path)}
+        />
+      )}
 
       {/* Bottom tab bar (estilo iOS/Android nativo) */}
       <nav className="lmx-tabs">
@@ -858,6 +895,77 @@ function GameDetailScreen({ system, game, coverSrc, onClose, onLaunch }) {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// === FOLDER PICKER MODAL (Android, sem SAF nativo no Tauri) =
+// ============================================================
+const COMMON_ANDROID_FOLDERS = [
+  { path: "/storage/emulated/0/Download", label: "Download", hint: "Pasta padrao de downloads" },
+  { path: "/storage/emulated/0/Ludex/roms", label: "Ludex/roms", hint: "Pasta padrao do Ludex" },
+  { path: "/storage/emulated/0/RetroArch/roms", label: "RetroArch/roms", hint: "Se ja usa RetroArch" },
+  { path: "/storage/emulated/0/Roms", label: "Roms", hint: "Pasta generica de ROMs" },
+  { path: "/storage/emulated/0/Games", label: "Games", hint: "Pasta de jogos" },
+  { path: "/storage/emulated/0/Documents/ROMs", label: "Documents/ROMs", hint: "Em Documents" },
+];
+
+function FolderPickerModal({ onClose, onPick }) {
+  const [custom, setCustom] = useState("");
+
+  return (
+    <div className="lmx-sheet-backdrop" onClick={onClose}>
+      <div className="lmx-folder-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="lmx-sheet-handle" />
+        <div className="lmx-sheet-header">
+          <h3>Onde estao suas ROMs?</h3>
+          <button className="lmx-back-btn" onClick={onClose} aria-label="Fechar"><IconClose /></button>
+        </div>
+        <p className="lmx-folder-hint">
+          Escolha uma pasta comum ou digite o caminho exato no seu celular.
+          O Ludex varre as subpastas automaticamente.
+        </p>
+
+        <div className="lmx-folder-list">
+          {COMMON_ANDROID_FOLDERS.map((f) => (
+            <button
+              key={f.path}
+              className="lmx-folder-item"
+              onClick={() => onPick(f.path)}
+            >
+              <div className="lmx-folder-item-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                </svg>
+              </div>
+              <div className="lmx-folder-item-text">
+                <div className="lmx-folder-item-label">{f.label}</div>
+                <div className="lmx-folder-item-path">{f.path}</div>
+                <div className="lmx-folder-item-hint">{f.hint}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="lmx-folder-custom">
+          <label className="lmx-folder-custom-label">Caminho custom:</label>
+          <input
+            type="text"
+            placeholder="/storage/emulated/0/MinhaPasta"
+            value={custom}
+            onChange={(e) => setCustom(e.target.value)}
+            className="lmx-folder-custom-input"
+          />
+          <button
+            className="lmx-settings-btn primary"
+            disabled={!custom.trim()}
+            onClick={() => onPick(custom.trim())}
+          >
+            Usar este caminho
+          </button>
+        </div>
       </div>
     </div>
   );
