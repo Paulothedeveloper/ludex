@@ -3814,37 +3814,121 @@ struct AndroidDemoStatus {
     is_admin_unlocked: bool,
     installed_at: u64,
     demo_days_total: u64,
+    /// True se detectamos manipulacao do relogio (clock < installed_at).
+    /// Quando true, expired tambem e true.
+    clock_tampered: bool,
 }
 
-/// Retorna estado da demo Android. No primeiro launch, registra installed_at.
-/// Em desktop (Windows/Linux/macOS): sempre retorna unlocked (demo nao aplica).
+#[derive(Debug, Serialize, Deserialize)]
+struct DemoAnchor {
+    installed_at: u64,
+    fingerprint: String,
+    /// Maior timestamp ja visto pra detectar rollback do relogio.
+    /// Atualizado a cada launch com max(self, now).
+    last_seen_at: u64,
+}
+
+/// Path do anchor file em /sdcard/Ludex/.demo_anchor.json (Android).
+/// Fica fora do app dir — sobrevive a desinstalar/reinstalar do APK.
+#[cfg(target_os = "android")]
+fn demo_anchor_path() -> std::path::PathBuf {
+    std::path::PathBuf::from("/storage/emulated/0/Ludex/.demo_anchor.json")
+}
+
+#[cfg(target_os = "android")]
+fn read_demo_anchor() -> Option<DemoAnchor> {
+    let path = demo_anchor_path();
+    let content = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+#[cfg(target_os = "android")]
+fn write_demo_anchor(anchor: &DemoAnchor) {
+    let path = demo_anchor_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(data) = serde_json::to_string_pretty(anchor) {
+        let _ = std::fs::write(&path, data);
+    }
+}
+
+/// Retorna estado da demo Android. ANTI-CHEAT v0.7.5+:
+/// - Salva anchor em 2 lugares: config.json (app dir) + /sdcard/Ludex/.demo_anchor.json
+/// - Sobrevive a uninstall/reinstall (anchor file fica em /sdcard fora do app dir)
+/// - Detecta clock rollback (se now < last_seen_at, user voltou o relogio = expira)
+/// - Usa min(installed_at) entre todos os lugares — mais antigo vence
+/// - Fingerprint do device pra detectar copy entre devices
+/// Em desktop: sempre retorna unlocked.
 #[tauri::command]
 fn android_demo_status() -> AndroidDemoStatus {
-    let mut cfg = load_config();
-    // Em desktop, sempre libera
-    if cfg!(not(target_os = "android")) {
+    let cfg = load_config();
+
+    // Desktop: sempre libera
+    #[cfg(not(target_os = "android"))]
+    {
         return AndroidDemoStatus {
             expired: false,
             days_left: 9999,
             is_admin_unlocked: true,
             installed_at: cfg.android_installed_at,
             demo_days_total: ANDROID_DEMO_DAYS,
+            clock_tampered: false,
         };
     }
-    // Android: primeira vez ever — registra installed_at
-    if cfg.android_installed_at == 0 {
-        cfg.android_installed_at = now_secs();
-        let _ = save_config(cfg.clone());
-    }
-    let now = now_secs();
-    let elapsed_days = ((now.saturating_sub(cfg.android_installed_at)) / 86400) as i64;
-    let days_left = ANDROID_DEMO_DAYS as i64 - elapsed_days;
-    AndroidDemoStatus {
-        expired: !cfg.android_admin_unlock && days_left <= 0,
-        days_left,
-        is_admin_unlocked: cfg.android_admin_unlock,
-        installed_at: cfg.android_installed_at,
-        demo_days_total: ANDROID_DEMO_DAYS,
+
+    #[cfg(target_os = "android")]
+    {
+        let now = now_secs();
+        let fp = machine_fingerprint();
+
+        // 1. Le anchor do arquivo /sdcard (sobrevive a uninstall)
+        let file_anchor = read_demo_anchor();
+
+        // 2. Combina installed_at: usa MENOR valor entre config e file (mais antigo vence)
+        let mut installed_at = match (cfg.android_installed_at, file_anchor.as_ref()) {
+            (0, None) => now,           // primeira vez ever
+            (0, Some(a)) => a.installed_at,
+            (c, None) => c,
+            (c, Some(a)) => c.min(a.installed_at),
+        };
+        // Sanity: se o installed_at e no FUTURO, alguem mexeu no clock pra tras DEPOIS
+        // de instalar. Trata como "instalou agora" mas marca clock_tampered.
+        let clock_tampered_install = installed_at > now;
+        if clock_tampered_install {
+            installed_at = now;
+        }
+
+        // 3. last_seen tracking: maior timestamp ja registrado
+        let last_seen_recorded = file_anchor.as_ref().map(|a| a.last_seen_at).unwrap_or(0);
+        let clock_tampered_lastseen = last_seen_recorded > 0 && now < last_seen_recorded;
+        let new_last_seen = last_seen_recorded.max(now);
+
+        // 4. Salva atualizado em AMBOS lugares
+        let mut cfg_new = cfg.clone();
+        cfg_new.android_installed_at = installed_at;
+        let _ = save_config(cfg_new.clone());
+        write_demo_anchor(&DemoAnchor {
+            installed_at,
+            fingerprint: fp,
+            last_seen_at: new_last_seen,
+        });
+
+        // 5. Determina expiracao
+        let clock_tampered = clock_tampered_install || clock_tampered_lastseen;
+        let elapsed_days = (now.saturating_sub(installed_at) / 86400) as i64;
+        let days_left = ANDROID_DEMO_DAYS as i64 - elapsed_days;
+        let expired = !cfg.android_admin_unlock
+            && (days_left <= 0 || clock_tampered);
+
+        AndroidDemoStatus {
+            expired,
+            days_left,
+            is_admin_unlocked: cfg.android_admin_unlock,
+            installed_at,
+            demo_days_total: ANDROID_DEMO_DAYS,
+            clock_tampered,
+        }
     }
 }
 

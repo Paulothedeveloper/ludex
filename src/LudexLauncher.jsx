@@ -3936,8 +3936,28 @@ export default function LudexLauncher() {
         if (c) setConfig(c);
         // First-run: ativa onboarding se nao tem profile ativo E nao tem first_run_done.
         // Configs migradas do Playbox (que ja tem profile) sao tratadas como done.
+        // Em Android: skip onboarding completo (UX desktop com tour de controle nao serve mobile).
         const hasProfile = (c?.profiles || []).length > 0 && !!c?.active_profile_id;
-        if (!hasProfile && !c?.first_run_done) {
+        if (IS_ANDROID) {
+          // Auto-cria profile default no primeiro launch em Android (skip tour completo)
+          if (!hasProfile) {
+            const defaultId = `p${Math.random().toString(36).slice(2, 10)}`;
+            const newProfile = {
+              id: defaultId,
+              name: "Player",
+              avatar_id: "controller",
+              photo_path: null,
+              created_at: Math.floor(Date.now() / 1000),
+            };
+            setConfig((prev) => ({
+              ...(c || prev),
+              profiles: [newProfile],
+              active_profile_id: defaultId,
+              first_run_done: true,
+            }));
+            try { await invoke("complete_first_run"); } catch (e) { console.warn("complete_first_run", e); }
+          }
+        } else if (!hasProfile && !c?.first_run_done) {
           setFirstRunActive(true);
         } else if ((c?.profiles || []).length === 0) {
           setProfilesOpen(true);
@@ -5403,7 +5423,7 @@ export default function LudexLauncher() {
         </div>
       </nav>
 
-      <div className="pb-hints">
+      {!IS_ANDROID && <div className="pb-hints">
         {previewPopup ? (
           <>
             <span className="pb-hint-key">A</span> Jogar
@@ -5433,7 +5453,7 @@ export default function LudexLauncher() {
         )}
         <span className="pb-hint-divider" />
         <span className="pb-hint-key">F2</span> Diagnostico
-      </div>
+      </div>}
 
       {gamepadDebug && <GamepadDebugOverlay onClose={() => setGamepadDebug(false)} />}
 
@@ -5683,8 +5703,8 @@ export default function LudexLauncher() {
       />
 
       {/* First-run onboarding: tour spotlight + criacao de perfil. Fica em
-       * cima de tudo (z-index 9000) ate o user concluir. */}
-      {firstRunActive && splashDone && (
+       * cima de tudo (z-index 9000) ate o user concluir. Skip em Android. */}
+      {firstRunActive && splashDone && !IS_ANDROID && (
         <LudexOnboarding onComplete={handleFirstRunComplete} />
       )}
     </div>

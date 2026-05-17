@@ -3255,38 +3255,58 @@
 }
 .pb-systems-list {
   display: flex;
-  gap: 8px;
+  gap: 5px;
   align-items: center;
   background: rgba(0, 0, 0, 0.25);
-  padding: 8px;
+  padding: 6px;
   border-radius: 14px;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  /* v0.7.5: scroll horizontal quando passar do limite (categoria "TODOS"
+     com 36 sistemas estoura largura). Wheel/touch funciona naturalmente.
+     Scrollbar custom discreta. */
+  max-width: calc(100vw - 220px);  /* deixa espaco pros hints na direita */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scroll-behavior: smooth;
 }
+.pb-systems-list::-webkit-scrollbar {
+  height: 4px;
+}
+.pb-systems-list::-webkit-scrollbar-track { background: transparent; }
+.pb-systems-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+.pb-systems-list::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
 .pb-sys {
   --sys-color: #555;
   position: relative;
-  width: 42px;
-  height: 42px;
+  /* v0.7.5: 42 -> 36 pra caber mais sistemas em tela */
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--sys-color);
   border: none;
-  border-radius: 8px;
+  border-radius: 7px;
   color: #fff;
   font-family: inherit;
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease, outline 0.15s ease;
   outline: 0 solid transparent;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;  /* nao deixa achatar com scroll */
 }
 .pb-sys-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   color: #fff;
 }
 .pb-sys-icon svg { width: 100%; height: 100%; }
@@ -3321,23 +3341,26 @@
 /* ---------- Hints — pill flutuante acima da barra de sistemas ---------- */
 /* Posicionado acima pra nao colar na barra de sistemas (que cresce com 16+ sistemas) */
 .pb-hints {
+  /* v0.7.5: movido pro top-right (perto da topbar) pra nao sobrepor a barra
+     de categorias. Antes ficava em bottom:96px que conflitava. */
   position: absolute;
-  bottom: 96px;
-  right: 24px;
+  top: 16px;
+  right: 20px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
-  background: rgba(0, 0, 0, 0.4);
+  padding: 5px 12px;
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   color: var(--theme-muted);
   letter-spacing: 0.04em;
-  z-index: 3;
+  z-index: 4;
   pointer-events: none;
+  opacity: 0.82;
 }
 .pb-hint-key {
   display: inline-flex;
@@ -5813,4 +5836,126 @@
   background: rgba(239, 68, 68, 0.18);
   border-color: rgba(239, 68, 68, 0.4);
   color: #fca5a5;
+}
+
+/* =================================================================
+ * MOBILE LAYOUT v0.7.5+ — refinamentos pra Android portrait
+ * Aplica em portrait (Android principal) ou tela estreita desktop
+ * ================================================================= */
+@media (max-aspect-ratio: 4/5), (max-width: 600px) {
+  /* TOPBAR: compactar tudo ao maximo */
+  .pb-top {
+    padding: 8px 10px !important;
+    flex-wrap: nowrap;
+    gap: 8px;
+    min-height: 48px;
+  }
+  .pb-top-left {
+    flex: 1;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  /* Esconde sistema name + actions enormes (ROMs/DLCs/Mods/Sites/Controle)
+     na topbar — usuario acessa via menu de Settings em mobile */
+  .lx-top-sys-actions { display: none !important; }
+  .pb-top-system { display: none !important; }
+  /* Search pill: so icone */
+  .pb-search-pill-label { display: none !important; }
+  .pb-search-pill-kbd { display: none !important; }
+  .pb-search-pill {
+    padding: 8px !important;
+    min-width: 36px;
+  }
+  /* Clock: removido (status bar do Android ja mostra) */
+  .pb-clock { display: none !important; }
+  /* Gamepad indicator: so visivel se gamepad conectado (mantem) */
+
+  /* Demo pill: mais compacto */
+  .pb-android-demo-pill {
+    padding: 3px 8px;
+    margin-left: 4px;
+    font-size: 9px;
+  }
+
+  /* MAIN STAGE: padding menor pra game grid ocupar mais espaco */
+  .pb-stage {
+    padding: 8px !important;
+  }
+
+  /* GAME CARDS: 2 colunas fixas */
+  .pb-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px;
+    padding: 0;
+  }
+
+  /* EMPTY STATE quando sistema nao tem ROMs: compactar */
+  .pb-empty {
+    padding: 16px !important;
+    text-align: left;
+  }
+  .pb-empty h2 { font-size: 18px !important; margin-bottom: 8px; }
+  .pb-empty p { font-size: 13px !important; line-height: 1.5; margin-bottom: 12px; }
+  .pb-empty-actions {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .pb-empty-actions button,
+  .pb-empty-actions a {
+    width: 100% !important;
+    justify-content: flex-start !important;
+    padding: 11px 14px !important;
+    font-size: 13px !important;
+  }
+
+  /* CATEGORIES: scroll horizontal, sem texto na inactive */
+  .pb-categories {
+    padding: 4px 8px 0 !important;
+  }
+  .pb-category {
+    padding: 6px 10px !important;
+  }
+  /* Mostra texto da categoria ATIVA + icone das outras */
+  .pb-category:not(.active) .pb-category-name {
+    display: none !important;
+  }
+  .pb-category.active .pb-category-name {
+    font-size: 11px !important;
+  }
+
+  /* SYSTEMS BAR: ainda mais compacto */
+  .pb-systems {
+    padding: 4px 8px 12px !important;
+    justify-content: flex-start;
+  }
+  .pb-systems-list {
+    max-width: 100vw !important;
+  }
+  .pb-sys {
+    width: 40px !important;
+    height: 40px !important;
+  }
+  .pb-sys-util {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  /* HINTS DE CONTROLE: 100% off em mobile portrait */
+  .pb-hints { display: none !important; }
+
+  /* SAFE AREA bottom pra navigation gesture do Android */
+  .pb-systems {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* Force Android specificamente (env IS_ANDROID adiciona <html data-android="true">) */
+html[data-android="true"] {
+  /* Garante portrait + sem zoom acidental */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+html[data-android="true"] body {
+  overscroll-behavior: contain;
 }
