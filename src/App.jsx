@@ -1,6 +1,12 @@
 import React from "react";
 import { invoke } from "@tauri-apps/api/core";
 import LudexLauncher from "./LudexLauncher";
+import LudexMobile from "./LudexMobile";
+import "./LudexMobile.css";
+
+// Detecta Android: renderiza app mobile dedicado (LudexMobile).
+// Desktop: renderiza LudexLauncher (UI antiga).
+const IS_ANDROID = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent || "");
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -61,7 +67,7 @@ class ErrorBoundary extends React.Component {
 export default function App() {
   return (
     <ErrorBoundary>
-      <LudexLauncher />
+      {IS_ANDROID ? <LudexMobile /> : <LudexLauncher />}
     </ErrorBoundary>
   );
 }
