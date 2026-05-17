@@ -256,6 +256,29 @@ const PLATFORM_JINGLES = {
   gbc:        () => { playTone(587.33, 0.08, "square", 0.04, 0.00); playTone(880.00, 0.10, "square", 0.04, 0.08); playTone(1108.73, 0.18, "square", 0.04, 0.18); }, // D-A-C# (boot color)
   md:         () => { playTone(440.00, 0.12, "sawtooth", 0.05, 0.00); playTone(330.00, 0.20, "sawtooth", 0.05, 0.12); }, // A-E (Sega-ish)
   retro:      () => { playTone(880, 0.04, "square", 0.04, 0.00); playTone(1318, 0.06, "square", 0.04, 0.04); playTone(1760, 0.12, "square", 0.04, 0.10); }, // arpejo chiptune
+  // ===== Novos sistemas v0.7.0 =====
+  dreamcast:  () => { playNote(523.25, 0.10, 0.05); playNote(659.25, 0.10, 0.05, 0.08); playNote(739.99, 0.10, 0.05, 0.16); playNote(987.77, 0.22, 0.06, 0.24); }, // C-E-F#-B (DC boot)
+  psp:        () => { playNote(392.00, 0.10, 0.05); playNote(523.25, 0.10, 0.05, 0.08); playNote(659.25, 0.22, 0.06, 0.16); }, // G-C-E (PSP startup wave)
+  ds:         () => { playTone(880.00, 0.06, "triangle", 0.05, 0.00); playTone(1318.51, 0.06, "triangle", 0.05, 0.06); playTone(1760.00, 0.14, "triangle", 0.05, 0.12); }, // chip duplo (2 telas)
+  saturn:     () => { playNote(349.23, 0.12, 0.06); playNote(440.00, 0.12, 0.05, 0.10); playNote(523.25, 0.22, 0.06, 0.20); }, // F-A-C (Sega-ish)
+  sms:        () => { playTone(440.00, 0.10, "sawtooth", 0.05, 0.00); playTone(587.33, 0.18, "sawtooth", 0.05, 0.10); }, // A-D (Sega 8-bit)
+  gg:         () => { playTone(659.25, 0.08, "square", 0.04, 0.00); playTone(523.25, 0.10, "square", 0.04, 0.08); }, // E-C
+  segacd:     () => { playNote(349.23, 0.14, 0.06); playNote(523.25, 0.20, 0.06, 0.12); }, // F-C (CD wave)
+  arcade:     () => { playTone(1318.51, 0.04, "square", 0.05, 0.00); playTone(1760.00, 0.04, "square", 0.05, 0.04); playTone(2093.00, 0.10, "square", 0.05, 0.08); }, // arpejo arcade alto
+  tg16:       () => { playTone(523.25, 0.10, "square", 0.05, 0.00); playTone(659.25, 0.16, "square", 0.05, 0.10); }, // C-E (PC Engine)
+  a2600:      () => { playTone(220.00, 0.18, "square", 0.06, 0.00); playTone(165.00, 0.18, "square", 0.06, 0.10); }, // A-E (Atari low)
+  lynx:       () => { playTone(659.25, 0.08, "triangle", 0.05, 0.00); playTone(523.25, 0.10, "triangle", 0.05, 0.08); }, // E-C
+  ws:         () => { playTone(440.00, 0.08, "square", 0.04, 0.00); playTone(587.33, 0.10, "square", 0.04, 0.08); }, // A-D (WS beep)
+  vb:         () => { playTone(523.25, 0.12, "sawtooth", 0.05, 0.00); playTone(392.00, 0.18, "sawtooth", 0.05, 0.10); }, // C-G (VB red)
+  ngpc:       () => { playTone(659.25, 0.06, "triangle", 0.04, 0.00); playTone(880.00, 0.10, "triangle", 0.04, 0.06); }, // E-A
+  msx:        () => { playTone(523.25, 0.06, "square", 0.04, 0.00); playTone(659.25, 0.06, "square", 0.04, 0.06); playTone(783.99, 0.10, "square", 0.04, 0.12); }, // C-E-G
+  c64:        () => { playTone(261.63, 0.10, "sawtooth", 0.06, 0.00); playTone(196.00, 0.14, "sawtooth", 0.06, 0.10); }, // C-G (SID-ish)
+  zx:         () => { playTone(880.00, 0.04, "square", 0.04, 0.00); playTone(1318.51, 0.06, "square", 0.04, 0.04); }, // beep curto Spectrum
+  amiga:      () => { playNote(440.00, 0.10, 0.05); playNote(659.25, 0.10, 0.05, 0.08); playNote(880.00, 0.18, 0.06, 0.16); }, // A-E-A
+  threedo:    () => { playNote(392.00, 0.12, 0.05); playNote(523.25, 0.12, 0.05, 0.10); playNote(659.25, 0.22, 0.06, 0.20); }, // G-C-E (3DO startup)
+  jaguar:     () => { playTone(165.00, 0.20, "sawtooth", 0.07, 0.00); playTone(220.00, 0.20, "sawtooth", 0.05, 0.10); }, // E-A grave (Jaguar growl)
+  xbox360:    () => { playTone(329.63, 0.18, "sine", 0.06, 0.00); playTone(246.94, 0.18, "sine", 0.05, 0.10); playTone(196.00, 0.24, "sine", 0.05, 0.18); }, // E-B-G (Xbox 360 startup)
+  vita:       () => { playNote(329.63, 0.10, 0.05); playNote(440.00, 0.10, 0.05, 0.08); playNote(523.25, 0.10, 0.05, 0.16); playNote(659.25, 0.20, 0.06, 0.24); }, // E-A-C-E (PS Vita wave)
   _favorites: () => { playNote(880.00, 0.08, 0.05); playNote(1108.73, 0.16, 0.06, 0.06); }, // A-C#
 };
 
@@ -548,6 +571,58 @@ function SystemIcon({ id }) {
       return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="20" width="52" height="24" rx="4" fill={fill} /><rect x="10" y="24" width="44" height="6" fill="#1c1c1c" /><circle cx="14" cy="38" r="2" fill="#1c1c1c" /><circle cx="20" cy="38" r="2" fill="#1c1c1c" /><circle cx="50" cy="38" r="2" fill="#1c1c1c" /><text x="32" y="40" textAnchor="middle" fill="#1c1c1c" fontSize="7" fontWeight="700" fontFamily="system-ui">MD</text></svg>);
     case "retro":
       return (<svg viewBox="0 0 64 64" aria-hidden><rect x="28" y="10" width="8" height="22" rx="3" fill={fill} /><circle cx="32" cy="12" r="6" fill={fill} /><ellipse cx="32" cy="44" rx="20" ry="14" fill={fill} /><circle cx="22" cy="44" r="3" fill="#1c1c1c" /><circle cx="32" cy="44" r="3" fill="#1c1c1c" /><circle cx="42" cy="44" r="3" fill="#1c1c1c" /></svg>);
+    // ===== Novos sistemas v0.7.0 =====
+    case "dreamcast":
+      return (<svg viewBox="0 0 64 64" aria-hidden><circle cx="32" cy="32" r="22" fill="none" stroke={fill} strokeWidth="3" /><path d="M24 22 Q32 14 40 22 Q44 32 38 40 Q30 44 24 38 Q20 30 24 22 Z" fill={fill} /><text x="32" y="56" textAnchor="middle" fill={fill} fontSize="7" fontWeight="800" fontFamily="system-ui">DC</text></svg>);
+    case "psp":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="4" y="18" width="56" height="28" rx="4" fill={fill} /><rect x="18" y="22" width="28" height="20" rx="1" fill="#1c1c1c" /><circle cx="11" cy="28" r="2" fill="#1c1c1c" /><rect x="9" y="27" width="4" height="2" fill={fill} /><rect x="10" y="26" width="2" height="4" fill={fill} /><circle cx="50" cy="26" r="1.6" fill="#1c1c1c" /><circle cx="54" cy="30" r="1.6" fill="#1c1c1c" /><circle cx="54" cy="38" r="1.6" fill="#1c1c1c" /><circle cx="50" cy="42" r="1.6" fill="#1c1c1c" /><text x="32" y="58" textAnchor="middle" fill={fill} fontSize="7" fontWeight="800" fontFamily="system-ui">PSP</text></svg>);
+    case "ds":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="10" y="6" width="44" height="22" rx="3" fill={fill} /><rect x="14" y="10" width="36" height="14" rx="1" fill="#1c1c1c" /><rect x="10" y="32" width="44" height="26" rx="3" fill={fill} /><rect x="14" y="36" width="36" height="16" rx="1" fill="#1c1c1c" /><circle cx="22" cy="44" r="1.5" fill={fill} /><text x="32" y="56" textAnchor="middle" fill={fill} fontSize="6" fontWeight="700" fontFamily="system-ui">DS</text></svg>);
+    case "saturn":
+      return (<svg viewBox="0 0 64 64" aria-hidden><circle cx="32" cy="32" r="20" fill={fill} /><ellipse cx="32" cy="32" rx="28" ry="6" fill="none" stroke={fill} strokeWidth="2.4" opacity="0.7" /><circle cx="32" cy="32" r="6" fill="#1c1c1c" /></svg>);
+    case "sms":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="14" width="52" height="36" rx="3" fill={fill} /><rect x="10" y="20" width="44" height="14" fill="#1c1c1c" /><circle cx="22" cy="42" r="3" fill="#1c1c1c" /><circle cx="42" cy="42" r="3" fill="#1c1c1c" /><text x="32" y="29" textAnchor="middle" fill={fill} fontSize="6" fontWeight="700" fontFamily="system-ui">MASTER</text></svg>);
+    case "gg":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="14" width="52" height="36" rx="8" fill={fill} /><rect x="22" y="20" width="20" height="14" rx="1" fill="#1c1c1c" /><circle cx="13" cy="32" r="2.5" fill="#1c1c1c" /><rect x="11" y="30" width="5" height="1.6" fill={fill} /><rect x="12" y="29" width="2" height="6" fill={fill} /><circle cx="48" cy="29" r="1.6" fill="#1c1c1c" /><circle cx="54" cy="33" r="1.6" fill="#1c1c1c" /></svg>);
+    case "segacd":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="20" width="52" height="24" rx="4" fill={fill} /><circle cx="20" cy="32" r="9" fill="none" stroke="#1c1c1c" strokeWidth="2" /><circle cx="20" cy="32" r="2.5" fill="#1c1c1c" /><text x="42" y="36" textAnchor="middle" fill="#1c1c1c" fontSize="9" fontWeight="800" fontFamily="system-ui">CD</text></svg>);
+    case "arcade":
+      return (<svg viewBox="0 0 64 64" aria-hidden><path d="M16 6 L48 6 L52 14 L52 50 L46 58 L18 58 L12 50 L12 14 Z" fill={fill} /><rect x="18" y="14" width="28" height="20" rx="1" fill="#1c1c1c" /><circle cx="24" cy="42" r="3" fill="#1c1c1c" /><circle cx="34" cy="42" r="3" fill="#1c1c1c" /><circle cx="40" cy="48" r="2" fill="#1c1c1c" /></svg>);
+    case "tg16":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="20" width="52" height="22" rx="3" fill={fill} /><rect x="10" y="24" width="44" height="6" fill="#1c1c1c" /><text x="32" y="40" textAnchor="middle" fill="#1c1c1c" fontSize="8" fontWeight="800" fontFamily="system-ui">PCE</text></svg>);
+    case "a2600":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="14" width="52" height="36" rx="3" fill={fill} /><rect x="10" y="18" width="44" height="12" fill="#1c1c1c" /><text x="32" y="27" textAnchor="middle" fill={fill} fontSize="6" fontWeight="800" fontFamily="system-ui">ATARI</text><rect x="14" y="36" width="36" height="3" fill="#1c1c1c" /><rect x="14" y="42" width="14" height="4" rx="1" fill="#1c1c1c" /><rect x="36" y="42" width="14" height="4" rx="1" fill="#1c1c1c" /></svg>);
+    case "lynx":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="4" y="20" width="56" height="24" rx="6" fill={fill} /><rect x="20" y="24" width="24" height="16" rx="1" fill="#1c1c1c" /><circle cx="11" cy="32" r="2" fill="#1c1c1c" /><circle cx="52" cy="29" r="1.6" fill="#1c1c1c" /><circle cx="56" cy="33" r="1.6" fill="#1c1c1c" /></svg>);
+    case "ws":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="12" y="8" width="40" height="48" rx="6" fill={fill} /><rect x="18" y="14" width="28" height="20" rx="1" fill="#1c1c1c" /><circle cx="22" cy="42" r="2" fill="#1c1c1c" /><circle cx="22" cy="48" r="2" fill="#1c1c1c" /><circle cx="42" cy="44" r="2" fill="#1c1c1c" /><circle cx="42" cy="50" r="2" fill="#1c1c1c" /></svg>);
+    case "vb":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="8" y="22" width="48" height="20" rx="6" fill={fill} /><circle cx="22" cy="32" r="6" fill="#1c1c1c" /><circle cx="42" cy="32" r="6" fill="#1c1c1c" /><rect x="28" y="30" width="8" height="4" fill={fill} /></svg>);
+    case "ngpc":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="14" y="6" width="36" height="52" rx="6" fill={fill} /><rect x="20" y="12" width="24" height="20" rx="2" fill="#1c1c1c" /><circle cx="24" cy="42" r="2" fill="#1c1c1c" /><rect x="22" y="40" width="4" height="1.6" fill={fill} /><rect x="23" y="39" width="2" height="6" fill={fill} /><circle cx="40" cy="44" r="2.5" fill="#1c1c1c" /></svg>);
+    case "msx":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="22" width="52" height="20" rx="2" fill={fill} /><rect x="10" y="26" width="44" height="12" fill="#1c1c1c" /><text x="32" y="36" textAnchor="middle" fill={fill} fontSize="8" fontWeight="800" fontFamily="system-ui">MSX</text></svg>);
+    case "c64":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="18" width="52" height="28" rx="3" fill={fill} /><rect x="10" y="22" width="44" height="14" fill="#1c1c1c" /><circle cx="14" cy="40" r="1.4" fill="#1c1c1c" /><circle cx="20" cy="40" r="1.4" fill="#1c1c1c" /><circle cx="26" cy="40" r="1.4" fill="#1c1c1c" /><circle cx="32" cy="40" r="1.4" fill="#1c1c1c" /><circle cx="38" cy="40" r="1.4" fill="#1c1c1c" /><circle cx="44" cy="40" r="1.4" fill="#1c1c1c" /><circle cx="50" cy="40" r="1.4" fill="#1c1c1c" /><text x="32" y="32" textAnchor="middle" fill={fill} fontSize="8" fontWeight="800" fontFamily="system-ui">C64</text></svg>);
+    case "zx":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="6" y="14" width="52" height="34" rx="3" fill={fill} /><rect x="10" y="18" width="44" height="20" fill="#1c1c1c" /><rect x="10" y="40" width="6" height="3" fill="#dc2626" /><rect x="18" y="40" width="6" height="3" fill="#f59e0b" /><rect x="26" y="40" width="6" height="3" fill="#fbbf24" /><rect x="34" y="40" width="6" height="3" fill="#22c55e" /><rect x="42" y="40" width="6" height="3" fill="#3b82f6" /><rect x="50" y="40" width="6" height="3" fill="#7c3aed" /></svg>);
+    case "amiga":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="4" y="22" width="56" height="22" rx="2" fill={fill} /><rect x="8" y="26" width="48" height="14" fill="#1c1c1c" /><text x="32" y="36" textAnchor="middle" fill={fill} fontSize="8" fontWeight="800" fontFamily="system-ui">AMIGA</text></svg>);
+    case "threedo":
+      return (<svg viewBox="0 0 64 64" aria-hidden><circle cx="32" cy="32" r="22" fill={fill} /><text x="32" y="40" textAnchor="middle" fill="#1c1c1c" fontSize="20" fontWeight="900" fontFamily="system-ui">3DO</text></svg>);
+    case "jaguar":
+      return (<svg viewBox="0 0 64 64" aria-hidden><polygon points="32 8 56 22 56 42 32 56 8 42 8 22" fill={fill} /><text x="32" y="38" textAnchor="middle" fill="#1c1c1c" fontSize="10" fontWeight="900" fontFamily="system-ui">JAG</text></svg>);
+    case "xbox360":
+      return (
+        <svg viewBox="0 0 64 64" aria-hidden>
+          <circle cx="32" cy="32" r="26" fill={fill} />
+          <path d="M16 14 Q32 32 48 14" stroke="#1c1c1c" strokeWidth="5" fill="none" strokeLinecap="round" />
+          <path d="M16 50 Q32 32 48 50" stroke="#1c1c1c" strokeWidth="5" fill="none" strokeLinecap="round" />
+          <text x="32" y="60" textAnchor="middle" fill={fill} fontSize="7" fontWeight="800" fontFamily="system-ui">360</text>
+        </svg>
+      );
+    case "vita":
+      return (<svg viewBox="0 0 64 64" aria-hidden><rect x="4" y="16" width="56" height="32" rx="4" fill={fill} /><rect x="16" y="20" width="32" height="24" rx="1" fill="#1c1c1c" /><circle cx="11" cy="26" r="2" fill="#1c1c1c" /><rect x="9" y="25" width="4" height="2" fill={fill} /><rect x="10" y="24" width="2" height="4" fill={fill} /><circle cx="51" cy="24" r="1.4" fill="#1c1c1c" /><circle cx="55" cy="28" r="1.4" fill="#1c1c1c" /><circle cx="55" cy="36" r="1.4" fill="#1c1c1c" /><circle cx="51" cy="40" r="1.4" fill="#1c1c1c" /><text x="32" y="60" textAnchor="middle" fill={fill} fontSize="7" fontWeight="800" fontFamily="system-ui">VITA</text></svg>);
     default: return null;
   }
 }

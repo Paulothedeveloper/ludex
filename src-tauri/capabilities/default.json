@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
+  "description": "enables the default permissions (desktop + mobile shared)",
   "windows": [
     "main"
   ],
@@ -13,7 +13,6 @@
     "core:window:allow-close",
     "dialog:default",
     "dialog:allow-open",
-    "updater:default",
     "process:default",
     "process:allow-restart"
   ]

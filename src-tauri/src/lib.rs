@@ -1,6 +1,7 @@
 mod libretro;
 use libretro::LibretroCore;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use discord_rich_presence::{
     activity::{Activity, Assets, Timestamps},
     DiscordIpc, DiscordIpcClient,
@@ -13,12 +14,21 @@ use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 use walkdir::WalkDir;
 
+// =============================================================================
+// Discord Rich Presence — SO desktop (Windows/Linux/macOS).
+// Em Android/iOS, os tauri::commands existem como no-op pra frontend continuar
+// chamando sem crash. Mobile nao tem Discord client local pra fazer IPC.
+// =============================================================================
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 static DISCORD_CLIENT: OnceLock<StdMutex<Option<DiscordIpcClient>>> = OnceLock::new();
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn discord_slot() -> &'static StdMutex<Option<DiscordIpcClient>> {
     DISCORD_CLIENT.get_or_init(|| StdMutex::new(None))
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn discord_connect_internal() -> Result<(), String> {
     let cfg = load_config();
     let app_id = match cfg.discord_app_id {
@@ -35,6 +45,7 @@ fn discord_connect_internal() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn discord_connect() -> Result<bool, String> {
     match discord_connect_internal() {
@@ -46,6 +57,7 @@ fn discord_connect() -> Result<bool, String> {
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn discord_set_app_id(app_id: Option<String>) -> Result<bool, String> {
     let mut cfg = load_config();
@@ -54,6 +66,7 @@ fn discord_set_app_id(app_id: Option<String>) -> Result<bool, String> {
     Ok(discord_connect_internal().is_ok())
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn discord_set_activity(game_name: String, system_name: String) -> Result<(), String> {
     // tenta conectar se nao conectou ainda
@@ -88,6 +101,7 @@ fn discord_set_activity(game_name: String, system_name: String) -> Result<(), St
     Ok(())
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn discord_clear_activity() -> Result<(), String> {
     let mut slot = discord_slot().lock().unwrap();
@@ -96,6 +110,20 @@ fn discord_clear_activity() -> Result<(), String> {
     }
     Ok(())
 }
+
+// Stubs no-op pro Android/iOS — frontend pode chamar sem crash
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+fn discord_connect() -> Result<bool, String> { Ok(false) }
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+fn discord_set_app_id(_app_id: Option<String>) -> Result<bool, String> { Ok(false) }
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+fn discord_set_activity(_game_name: String, _system_name: String) -> Result<(), String> { Ok(()) }
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+fn discord_clear_activity() -> Result<(), String> { Ok(()) }
 
 /// Info do jogo rodando atualmente. PID e metadata; o ownership do Child fica
 /// na thread que faz wait() e registra a sessao quando termina.
@@ -184,6 +212,7 @@ fn register_session_end(info: &RunningGameInfo, duration_sec: u64) {
 
 fn restore_launcher_window() {
     if let Some(handle) = APP_HANDLE.get() {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if let Some(window) = handle.get_webview_window("main") {
             let _ = window.unminimize();
             let _ = window.show();
@@ -213,6 +242,7 @@ struct EmulatorConfig {
 /// Sistemas que retornam string vazia rodam via emulador externo (caminho original).
 fn libretro_core_for(system_id: &str) -> &'static str {
     match system_id {
+        // ja existiam (v0.6.7-)
         "snes" => "snes9x_libretro.dll",
         "gba"  => "mgba_libretro.dll",
         "nes"  => "nestopia_libretro.dll",
@@ -221,6 +251,28 @@ fn libretro_core_for(system_id: &str) -> &'static str {
         "md"   => "genesis_plus_gx_libretro.dll",
         "n64"  => "mupen64plus_next_libretro.dll",
         "ps1"  => "swanstation_libretro.dll",
+        // novos em v0.7.0
+        "dreamcast" => "flycast_libretro.dll",
+        "psp"       => "ppsspp_libretro.dll",
+        "ds"        => "melonds_libretro.dll",
+        "saturn"    => "mednafen_saturn_libretro.dll",
+        // Sega extras reusam o core do MD (cobre SMS/GG/SegaCD/SG-1000)
+        "sms"       => "genesis_plus_gx_libretro.dll",
+        "gg"        => "genesis_plus_gx_libretro.dll",
+        "segacd"    => "genesis_plus_gx_libretro.dll",
+        "arcade"    => "mame_libretro.dll",
+        "tg16"      => "mednafen_pce_libretro.dll",
+        "a2600"     => "stella_libretro.dll",
+        "lynx"      => "beetle_lynx_libretro.dll",
+        "ws"        => "beetle_wswan_libretro.dll",
+        "vb"        => "beetle_vb_libretro.dll",
+        "ngpc"      => "beetle_ngp_libretro.dll",
+        "msx"       => "bluemsx_libretro.dll",
+        "c64"       => "vice_x64_libretro.dll",
+        "zx"        => "fuse_libretro.dll",
+        "amiga"     => "puae_libretro.dll",
+        "threedo"   => "opera_libretro.dll",
+        "jaguar"    => "virtualjaguar_libretro.dll",
         _ => "",
     }
 }
@@ -347,6 +399,26 @@ const EMULATORS: &[EmulatorConfig] = &[
         igdb_platform: 11,
     },
     EmulatorConfig {
+        id: "xbox360",
+        name: "XBOX 360",
+        color: "#5ec01a",
+        folder_name: "XBOX360",
+        emulator_rel: "XBOX360\\xenia.exe",
+        extensions: &["iso", "xex", "zar"],
+        launch_args: &[],
+        igdb_platform: 12,
+    },
+    EmulatorConfig {
+        id: "vita",
+        name: "PS VITA",
+        color: "#003791",
+        folder_name: "VITA",
+        emulator_rel: "VITA\\Vita3K.exe",
+        extensions: &["vpk", "self", "elf"],
+        launch_args: &[],
+        igdb_platform: 46,
+    },
+    EmulatorConfig {
         id: "snes",
         name: "SUPER NINTENDO",
         color: "#7d2d8a",
@@ -395,6 +467,209 @@ const EMULATORS: &[EmulatorConfig] = &[
         extensions: &["md", "gen", "smd", "bin", "sg"],
         launch_args: &[],
         igdb_platform: 29,
+    },
+    // ========================================
+    // === NOVOS sistemas embedded (v0.7.0) ===
+    // ========================================
+    EmulatorConfig {
+        id: "dreamcast",
+        name: "DREAMCAST",
+        color: "#ff6600",
+        folder_name: "DREAMCAST",
+        emulator_rel: "",  // libretro embarcado (flycast)
+        extensions: &["cdi", "gdi", "chd", "cue", "m3u"],
+        launch_args: &[],
+        igdb_platform: 23,
+    },
+    EmulatorConfig {
+        id: "psp",
+        name: "PSP",
+        color: "#003791",
+        folder_name: "PSP",
+        emulator_rel: "",  // libretro embarcado (ppsspp)
+        extensions: &["iso", "cso", "pbp", "elf"],
+        launch_args: &[],
+        igdb_platform: 38,
+    },
+    EmulatorConfig {
+        id: "ds",
+        name: "NINTENDO DS",
+        color: "#dc2626",
+        folder_name: "DS",
+        emulator_rel: "",  // libretro embarcado (melonds)
+        extensions: &["nds"],
+        launch_args: &[],
+        igdb_platform: 20,
+    },
+    EmulatorConfig {
+        id: "saturn",
+        name: "SATURN",
+        color: "#7c3aed",
+        folder_name: "SATURN",
+        emulator_rel: "",  // libretro embarcado (mednafen_saturn)
+        extensions: &["cue", "chd", "mds", "ccd", "m3u", "iso"],
+        launch_args: &[],
+        igdb_platform: 32,
+    },
+    EmulatorConfig {
+        id: "sms",
+        name: "MASTER SYSTEM",
+        color: "#dc2626",
+        folder_name: "MASTERSYSTEM",
+        emulator_rel: "",  // libretro embarcado (genesis_plus_gx)
+        extensions: &["sms", "zip"],
+        launch_args: &[],
+        igdb_platform: 64,
+    },
+    EmulatorConfig {
+        id: "gg",
+        name: "GAME GEAR",
+        color: "#27272a",
+        folder_name: "GAMEGEAR",
+        emulator_rel: "",  // libretro embarcado (genesis_plus_gx)
+        extensions: &["gg", "zip"],
+        launch_args: &[],
+        igdb_platform: 35,
+    },
+    EmulatorConfig {
+        id: "segacd",
+        name: "SEGA CD",
+        color: "#b91c1c",
+        folder_name: "SEGACD",
+        emulator_rel: "",  // libretro embarcado (genesis_plus_gx)
+        extensions: &["cue", "iso", "chd", "m3u", "bin"],
+        launch_args: &[],
+        igdb_platform: 78,
+    },
+    EmulatorConfig {
+        id: "arcade",
+        name: "ARCADE",
+        color: "#fbbf24",
+        folder_name: "ARCADE",
+        emulator_rel: "",  // libretro embarcado (mame)
+        extensions: &["zip", "7z", "chd"],
+        launch_args: &[],
+        igdb_platform: 52,
+    },
+    EmulatorConfig {
+        id: "tg16",
+        name: "TURBOGRAFX-16",
+        color: "#dc2626",
+        folder_name: "TG16",
+        emulator_rel: "",  // libretro embarcado (mednafen_pce)
+        extensions: &["pce", "sgx", "cue", "ccd", "chd", "zip"],
+        launch_args: &[],
+        igdb_platform: 86,
+    },
+    EmulatorConfig {
+        id: "a2600",
+        name: "ATARI 2600",
+        color: "#dc2626",
+        folder_name: "ATARI2600",
+        emulator_rel: "",  // libretro embarcado (stella)
+        extensions: &["a26", "bin", "rom"],
+        launch_args: &[],
+        igdb_platform: 59,
+    },
+    EmulatorConfig {
+        id: "lynx",
+        name: "ATARI LYNX",
+        color: "#8b5cf6",
+        folder_name: "LYNX",
+        emulator_rel: "",  // libretro embarcado (beetle_lynx)
+        extensions: &["lnx", "lyx", "zip"],
+        launch_args: &[],
+        igdb_platform: 61,
+    },
+    EmulatorConfig {
+        id: "ws",
+        name: "WONDERSWAN",
+        color: "#27272a",
+        folder_name: "WONDERSWAN",
+        emulator_rel: "",  // libretro embarcado (beetle_wswan)
+        extensions: &["ws", "wsc"],
+        launch_args: &[],
+        igdb_platform: 57,
+    },
+    EmulatorConfig {
+        id: "vb",
+        name: "VIRTUAL BOY",
+        color: "#dc2626",
+        folder_name: "VIRTUALBOY",
+        emulator_rel: "",  // libretro embarcado (beetle_vb)
+        extensions: &["vb", "vboy", "bin"],
+        launch_args: &[],
+        igdb_platform: 87,
+    },
+    EmulatorConfig {
+        id: "ngpc",
+        name: "NEO GEO POCKET",
+        color: "#f97316",
+        folder_name: "NGPC",
+        emulator_rel: "",  // libretro embarcado (beetle_ngp)
+        extensions: &["ngp", "ngc", "zip"],
+        launch_args: &[],
+        igdb_platform: 119,
+    },
+    EmulatorConfig {
+        id: "msx",
+        name: "MSX",
+        color: "#0078d4",
+        folder_name: "MSX",
+        emulator_rel: "",  // libretro embarcado (bluemsx)
+        extensions: &["rom", "mx1", "mx2", "dsk", "ri", "cas"],
+        launch_args: &[],
+        igdb_platform: 27,
+    },
+    EmulatorConfig {
+        id: "c64",
+        name: "COMMODORE 64",
+        color: "#a16207",
+        folder_name: "C64",
+        emulator_rel: "",  // libretro embarcado (vice_x64)
+        extensions: &["d64", "t64", "prg", "x64", "crt"],
+        launch_args: &[],
+        igdb_platform: 15,
+    },
+    EmulatorConfig {
+        id: "zx",
+        name: "ZX SPECTRUM",
+        color: "#27272a",
+        folder_name: "ZXSPECTRUM",
+        emulator_rel: "",  // libretro embarcado (fuse)
+        extensions: &["tap", "tzx", "z80", "sna", "scl", "trd"],
+        launch_args: &[],
+        igdb_platform: 26,
+    },
+    EmulatorConfig {
+        id: "amiga",
+        name: "AMIGA",
+        color: "#dc2626",
+        folder_name: "AMIGA",
+        emulator_rel: "",  // libretro embarcado (puae)
+        extensions: &["adf", "ipf", "dms", "adz", "hdf"],
+        launch_args: &[],
+        igdb_platform: 16,
+    },
+    EmulatorConfig {
+        id: "threedo",
+        name: "3DO",
+        color: "#0ea5e9",
+        folder_name: "3DO",
+        emulator_rel: "",  // libretro embarcado (opera)
+        extensions: &["iso", "cue", "chd"],
+        launch_args: &[],
+        igdb_platform: 50,
+    },
+    EmulatorConfig {
+        id: "jaguar",
+        name: "ATARI JAGUAR",
+        color: "#27272a",
+        folder_name: "JAGUAR",
+        emulator_rel: "",  // libretro embarcado (virtualjaguar)
+        extensions: &["j64", "jag", "rom"],
+        launch_args: &[],
+        igdb_platform: 62,
     },
     EmulatorConfig {
         id: "retro",
@@ -1720,12 +1995,19 @@ const SAVE_TEMPLATES: &[(&str, &str, &str)] = &[
     ("project64",   "Project64",         "C:\\Users\\paulo\\OneDrive\\Documents\\EMULADORES\\ROMS EMULADORES\\N64\\Save"),
 ];
 
+#[cfg(windows)]
 fn is_junction(path: &Path) -> bool {
     use std::os::windows::fs::MetadataExt;
     if let Ok(meta) = std::fs::symlink_metadata(path) {
         // FILE_ATTRIBUTE_REPARSE_POINT = 0x400
         return meta.file_attributes() & 0x400 != 0;
     }
+    false
+}
+
+#[cfg(not(windows))]
+fn is_junction(_path: &Path) -> bool {
+    // Junctions sao conceito Windows-NTFS. Em Linux/Android/macOS: usa symlinks (read_link funciona).
     false
 }
 
@@ -2506,7 +2788,19 @@ fn delete_game_to_trash(system_id: String, game_name: String, game_path: String)
     } else {
         p
     };
-    trash::delete(&target).map_err(|e| format!("Lixeira: {}", e))?;
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        trash::delete(&target).map_err(|e| format!("Lixeira: {}", e))?;
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        // Mobile: nao tem lixeira do SO, deleta direto
+        if target.is_dir() {
+            std::fs::remove_dir_all(&target).map_err(|e| format!("Remove dir: {}", e))?;
+        } else {
+            std::fs::remove_file(&target).map_err(|e| format!("Remove file: {}", e))?;
+        }
+    }
     // Tambem remove a capa em cache pra nao ficar fantasma
     let _ = clear_single_cover(system_id, game_name);
     Ok(())
@@ -2761,6 +3055,8 @@ fn clear_game_details(system_id: String, game_name: String) -> Result<(), String
 
 /// Background thread que polla o controle nativamente (XInput) e mata o emulador
 /// rodando quando o usuario aperta Select+Start juntos. Standard RetroArch combo.
+/// SO desktop — em Android usamos Android Gamepad API direto via input events.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn spawn_gamepad_hotkey_listener() {
     std::thread::spawn(|| {
         let mut gilrs = match gilrs::Gilrs::new() {
@@ -2820,7 +3116,6 @@ fn spawn_gamepad_hotkey_listener() {
     });
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 // ============================================================
 // === GAME PERSONAL METADATA — rating, status, notes ========
 // ============================================================
@@ -3042,8 +3337,25 @@ fn read_cpu_name() -> Option<String> {
 #[cfg(not(windows))]
 fn read_cpu_name() -> Option<String> { None }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn primary_mac() -> Option<String> {
     mac_address::get_mac_address().ok().flatten().map(|m| m.to_string())
+}
+
+// Android: usa ANDROID_ID (64-bit hex unico por device/user) via System.getString.
+// Como nao temos acesso direto a JNI aqui, deixamos fallback baseado em hostname.
+// O ideal seria usar tauri-android com plugin de identidade, mas pra primeiro build
+// um id estavel-por-instalacao basta (Android nao tem MAC publico desde API 23 anyway).
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn primary_mac() -> Option<String> {
+    // Tenta /etc/machine-id (existe em Android via libc fallback as vezes) ou hostname
+    std::fs::read_to_string("/etc/machine-id").ok().map(|s| s.trim().to_string())
+        .or_else(|| hostname_fallback())
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn hostname_fallback() -> Option<String> {
+    std::env::var("HOSTNAME").ok().filter(|s| !s.is_empty())
 }
 
 fn machine_fingerprint() -> String {
@@ -3712,11 +4024,15 @@ fn system_health_check() -> Vec<SystemHealth> {
     out
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+    // Updater so existe em desktop. Em Android/iOS o usuario atualiza via loja/sideload manual.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    builder
         .setup(|app| {
             // Plugin de log sempre ativo (release tambem) — antes so debug, sem arquivo de log em prod
             app.handle().plugin(
@@ -3730,11 +4046,14 @@ pub fn run() {
                     .build(),
             )?;
             let _ = APP_HANDLE.set(app.handle().clone());
-            spawn_gamepad_hotkey_listener();
-            // Tenta conectar Discord no startup (sem-op se nao tem app_id ou Discord nao esta rodando)
-            std::thread::spawn(|| {
-                let _ = discord_connect_internal();
-            });
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                spawn_gamepad_hotkey_listener();
+                // Tenta conectar Discord no startup (sem-op se nao tem app_id ou Discord nao esta rodando)
+                std::thread::spawn(|| {
+                    let _ = discord_connect_internal();
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
