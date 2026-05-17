@@ -15,6 +15,7 @@
  */
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 // ============================================================
 // === ICONES SVG (sem emojis, regra Paulo) ===================
@@ -243,6 +244,22 @@ export default function LudexMobile() {
     }
   }, []);
 
+  // ============ PICKER DE PASTA ROMS (SAF Android) ============
+  const pickRomsFolder = useCallback(async () => {
+    try {
+      const selected = await openDialog({ directory: true, multiple: false });
+      if (!selected || typeof selected !== "string") return;
+      // Persiste no AppConfig + rescan
+      await invoke("set_paths_config", { emulatorsRoot: null, romsRoot: selected });
+      const sys = await invoke("scan_roms", { romsRoot: selected });
+      const filtered = (sys || []).filter((s) => ANDROID_SUPPORTED.has(s.id));
+      setSystems(filtered);
+    } catch (e) {
+      console.error("pickRomsFolder", e);
+      alert(`Falha ao escolher pasta: ${e}`);
+    }
+  }, []);
+
   // ============ DEMO EXPIRED (bloqueia) ============
   if (androidDemo?.expired && !androidDemo?.is_admin_unlocked) {
     return <DemoExpiredScreen demo={androidDemo} onUnlock={setAndroidDemo} />;
@@ -269,6 +286,7 @@ export default function LudexMobile() {
         covers={covers}
         onBack={() => setOpenSystem(null)}
         onPickGame={(game) => setOpenGame({ system: openSystem, game })}
+        onPickFolder={pickRomsFolder}
       />
     );
   }
@@ -293,6 +311,7 @@ export default function LudexMobile() {
             loading={loading}
             onPickSystem={(sys) => setOpenSystem(sys)}
             onPickGame={(system, game) => setOpenGame({ system, game })}
+            onPickFolder={pickRomsFolder}
           />
         )}
         {activeTab === "systems" && (
@@ -315,6 +334,8 @@ export default function LudexMobile() {
             activeProfile={activeProfile}
             androidDemo={androidDemo}
             onAdminUnlock={setAndroidDemo}
+            onPickFolder={pickRomsFolder}
+            currentRomsRoot={config?.roms_root}
           />
         )}
       </main>
@@ -346,7 +367,7 @@ function TabBtn({ icon, label, active, onClick }) {
 // === HOME TAB ===============================================
 // Hero (perfil + DEMO) + Recentes + Carrossel por sistema
 // ============================================================
-function HomeTab({ systems, covers, activeProfile, androidDemo, loading, onPickSystem, onPickGame }) {
+function HomeTab({ systems, covers, activeProfile, androidDemo, loading, onPickSystem, onPickGame, onPickFolder }) {
   const nonEmptySystems = systems.filter((s) => s.games.length > 0);
   const topSystems = nonEmptySystems.slice(0, 6);
 
@@ -390,11 +411,13 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, onPickS
           <div className="lmx-empty-icon"><IconGrid /></div>
           <h2>Nenhum jogo ainda</h2>
           <p>
-            Coloque suas ROMs em <br />
-            <code>/storage/emulated/0/Ludex/roms/&lt;sistema&gt;/</code>
-            <br />
-            e volte aqui.
+            Escolha a pasta no seu celular onde tem as ROMs.
+            Pode ser <code>/Download</code>, <code>/Ludex/roms</code>,
+            ou qualquer outra que voce ja tenha jogos.
           </p>
+          <button className="lmx-settings-btn primary" onClick={onPickFolder} style={{ maxWidth: 280, margin: "16px auto 0" }}>
+            Escolher pasta de ROMs
+          </button>
         </div>
       )}
 
@@ -588,7 +611,7 @@ function SearchTab({ systems, covers, search, setSearch, onPickGame }) {
 // ============================================================
 // === SETTINGS TAB ===========================================
 // ============================================================
-function SettingsTab({ activeProfile, androidDemo, onAdminUnlock }) {
+function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, currentRomsRoot }) {
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [keyInput, setKeyInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -678,14 +701,28 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock }) {
       )}
 
       <section className="lmx-settings-card">
-        <div className="lmx-settings-label">Pastas</div>
+        <div className="lmx-settings-label">Pasta de ROMs</div>
         <div className="lmx-settings-paths">
-          <div><strong>ROMs:</strong> <code>/storage/emulated/0/Ludex/roms/</code></div>
+          <code>{currentRomsRoot || "(padrao: /storage/emulated/0/Ludex/roms/)"}</code>
+        </div>
+        <button className="lmx-settings-btn primary" onClick={onPickFolder}>
+          Escolher pasta no celular
+        </button>
+        <p className="lmx-settings-hint">
+          Apos escolher, o Ludex varre subpastas automaticamente. Cada sistema
+          aparece quando voce tem ROMs com extensao reconhecida (snes, gba, gb, iso, etc).
+        </p>
+      </section>
+
+      <section className="lmx-settings-card">
+        <div className="lmx-settings-label">BIOS e Saves</div>
+        <div className="lmx-settings-paths">
           <div><strong>BIOS:</strong> <code>/storage/emulated/0/Ludex/system/</code></div>
           <div><strong>Saves:</strong> <code>/storage/emulated/0/Ludex/saves-libretro/</code></div>
         </div>
         <p className="lmx-settings-hint">
-          Crie as pastas acima e coloque suas ROMs/BIOS la. O Ludex detecta automaticamente.
+          Saturn/PSP/PS1/Dreamcast precisam BIOS na pasta acima. Saves
+          ficam la tambem (sao gerados conforme voce joga).
         </p>
       </section>
 
@@ -703,7 +740,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock }) {
 // ============================================================
 // === SYSTEM SCREEN (grid de jogos do sistema selecionado) ===
 // ============================================================
-function SystemScreen({ system, covers, onBack, onPickGame }) {
+function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder }) {
   return (
     <div className="lmx-systemview">
       <header className="lmx-page-header has-back">
@@ -721,9 +758,14 @@ function SystemScreen({ system, covers, onBack, onPickGame }) {
           <div className="lmx-empty-icon"><IconGrid /></div>
           <h2>Sem jogos de {system.name}</h2>
           <p>
-            Coloque ROMs em <br />
-            <code>/storage/emulated/0/Ludex/roms/{system.folder_name}/</code>
+            Escolha onde estao suas ROMs de {system.name} no celular.
+            Pode ser qualquer pasta -- o Ludex vai detectar pela extensao.
           </p>
+          {onPickFolder && (
+            <button className="lmx-settings-btn primary" onClick={onPickFolder} style={{ maxWidth: 280, margin: "16px auto 0" }}>
+              Escolher pasta de ROMs
+            </button>
+          )}
         </div>
       ) : (
         <div className="lmx-systemview-grid">
