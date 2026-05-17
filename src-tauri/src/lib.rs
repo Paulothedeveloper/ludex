@@ -742,20 +742,39 @@ fn resolve_roms_root(custom: Option<&str>) -> PathBuf {
         let p = PathBuf::from(c);
         if p.is_dir() { return p; }
     }
-    let candidates = [
-        PathBuf::from("D:\\Projetos do Claude\\Ludex\\roms"),
-        PathBuf::from("D:\\Projetos do Claude\\Playbox\\roms"),
-        PathBuf::from("D:\\Ludex\\roms"),
-        PathBuf::from("D:\\Playbox\\roms"),
-        PathBuf::from("C:\\Ludex\\roms"),
-    ];
-    for c in candidates.iter() {
-        if c.is_dir() { return c.clone(); }
+    // Android: default em /storage/emulated/0/Ludex/roms/ (acessivel sem SAF)
+    #[cfg(target_os = "android")]
+    {
+        let candidates = [
+            PathBuf::from("/storage/emulated/0/Ludex/roms"),
+            PathBuf::from("/storage/emulated/0/Download/Ludex"),
+            PathBuf::from("/storage/emulated/0/RetroArch/roms"),
+        ];
+        for c in candidates.iter() {
+            if c.is_dir() { return c.clone(); }
+        }
+        // Cria a pasta default se nao existe (precisa permissao MANAGE_EXTERNAL_STORAGE)
+        let default = PathBuf::from("/storage/emulated/0/Ludex/roms");
+        let _ = std::fs::create_dir_all(&default);
+        return default;
     }
-    if let Some(docs) = dirs::document_dir() {
-        return docs.join("EMULADORES").join("ROMS GAMES");
+    #[cfg(not(target_os = "android"))]
+    {
+        let candidates = [
+            PathBuf::from("D:\\Projetos do Claude\\Ludex\\roms"),
+            PathBuf::from("D:\\Projetos do Claude\\Playbox\\roms"),
+            PathBuf::from("D:\\Ludex\\roms"),
+            PathBuf::from("D:\\Playbox\\roms"),
+            PathBuf::from("C:\\Ludex\\roms"),
+        ];
+        for c in candidates.iter() {
+            if c.is_dir() { return c.clone(); }
+        }
+        if let Some(docs) = dirs::document_dir() {
+            return docs.join("EMULADORES").join("ROMS GAMES");
+        }
+        PathBuf::from("EMULADORES").join("ROMS GAMES")
     }
-    PathBuf::from("EMULADORES").join("ROMS GAMES")
 }
 
 fn current_emulators_root() -> PathBuf {
@@ -1703,6 +1722,12 @@ struct AppConfig {
     /// Timestamps Unix dos ultimos deactivates. Usado pra rate limit (max 5/dia).
     #[serde(default)]
     license_deactivate_log: Vec<u64>,
+    /// v0.7.4 (Android demo): timestamp do primeiro launch no APK. 0 = nunca usado.
+    #[serde(default)]
+    android_installed_at: u64,
+    /// v0.7.4 (Android demo): unlock permanente via license admin (paulo). Default false.
+    #[serde(default)]
+    android_admin_unlock: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1738,6 +1763,8 @@ impl Default for AppConfig {
             license_uses: 0,
             license_fingerprint: None,
             license_deactivate_log: Vec::new(),
+            android_installed_at: 0,
+            android_admin_unlock: false,
         }
     }
 }
@@ -3772,6 +3799,70 @@ fn admin_dashboard_url() -> String {
 }
 
 // ============================================================
+// === ANDROID DEMO TIME LIMIT (v0.7.4+) ======================
+// APK e distribuido gratis no GitHub, mas com tempo limite de
+// uso. Apos N dias, app trava com tela "demo expirou". Admin
+// (Paulo, via license key dele) tem unlock permanente.
+// ============================================================
+
+const ANDROID_DEMO_DAYS: u64 = 7;
+
+#[derive(Serialize, Clone)]
+struct AndroidDemoStatus {
+    expired: bool,
+    days_left: i64,       // negativo se expirado
+    is_admin_unlocked: bool,
+    installed_at: u64,
+    demo_days_total: u64,
+}
+
+/// Retorna estado da demo Android. No primeiro launch, registra installed_at.
+/// Em desktop (Windows/Linux/macOS): sempre retorna unlocked (demo nao aplica).
+#[tauri::command]
+fn android_demo_status() -> AndroidDemoStatus {
+    let mut cfg = load_config();
+    // Em desktop, sempre libera
+    if cfg!(not(target_os = "android")) {
+        return AndroidDemoStatus {
+            expired: false,
+            days_left: 9999,
+            is_admin_unlocked: true,
+            installed_at: cfg.android_installed_at,
+            demo_days_total: ANDROID_DEMO_DAYS,
+        };
+    }
+    // Android: primeira vez ever — registra installed_at
+    if cfg.android_installed_at == 0 {
+        cfg.android_installed_at = now_secs();
+        let _ = save_config(cfg.clone());
+    }
+    let now = now_secs();
+    let elapsed_days = ((now.saturating_sub(cfg.android_installed_at)) / 86400) as i64;
+    let days_left = ANDROID_DEMO_DAYS as i64 - elapsed_days;
+    AndroidDemoStatus {
+        expired: !cfg.android_admin_unlock && days_left <= 0,
+        days_left,
+        is_admin_unlocked: cfg.android_admin_unlock,
+        installed_at: cfg.android_installed_at,
+        demo_days_total: ANDROID_DEMO_DAYS,
+    }
+}
+
+/// Tenta destravar APK permanentemente usando uma license key admin.
+/// Valida com Gumroad e checa se email == ADMIN_EMAIL. Apenas Paulo libera.
+#[tauri::command]
+async fn android_demo_admin_unlock(license_key: String) -> Result<bool, String> {
+    let info = gumroad_verify(&license_key, false).await?;
+    if !info.is_admin {
+        return Err("Essa license nao e admin. APK ficara em modo demo (7 dias).".to_string());
+    }
+    let mut cfg = load_config();
+    cfg.android_admin_unlock = true;
+    save_config(cfg)?;
+    Ok(true)
+}
+
+// ============================================================
 // === RETROACHIEVEMENTS — login + summary + recent ach ======
 // ============================================================
 // Web API key gerada em https://retroachievements.org/controlpanel.php
@@ -4146,7 +4237,9 @@ pub fn run() {
             admin_list_sales,
             admin_force_deactivate,
             admin_check_status,
-            admin_dashboard_url
+            admin_dashboard_url,
+            android_demo_status,
+            android_demo_admin_unlock
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

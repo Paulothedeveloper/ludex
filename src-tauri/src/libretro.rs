@@ -120,6 +120,11 @@ static STATE: OnceLock<Arc<StdMutex<LibretroState>>> = OnceLock::new();
 
 pub fn state() -> Arc<StdMutex<LibretroState>> {
     STATE.get_or_init(|| {
+        // Android: BIOS e save em /storage/emulated/0/Ludex/ (user-accessible).
+        // Desktop: em %APPDATA%/Ludex/ ou ~/.local/share/Ludex/ (dirs::data_dir).
+        #[cfg(target_os = "android")]
+        let dir_base = std::path::PathBuf::from("/storage/emulated/0/Ludex");
+        #[cfg(not(target_os = "android"))]
         let dir_base = dirs::data_dir()
             .map(|d| d.join("Ludex"))
             .unwrap_or_else(|| std::path::PathBuf::from("."));

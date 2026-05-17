@@ -3510,6 +3510,94 @@ function DeleteConfirmModal({ game, system, onCancel, onConfirm }) {
   );
 }
 
+/**
+ * Tela mostrada quando a demo Android expirou (apos 7 dias de uso).
+ * Tem botao "Tenho license admin" pra Paulo destravar uso permanente.
+ * Usuario comum NAO consegue destravar (only admin email vale).
+ */
+function AndroidDemoExpired({ demo, onUnlock }) {
+  const [showKeyInput, setShowKeyInput] = useState(false);
+  const [keyInput, setKeyInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  async function tryUnlock() {
+    const k = keyInput.trim();
+    if (!k) return;
+    setBusy(true); setMsg(null);
+    try {
+      const ok = await invoke("android_demo_admin_unlock", { licenseKey: k });
+      if (ok) {
+        const newDemo = await invoke("android_demo_status");
+        setMsg({ kind: "ok", text: "Destravado! Carregando..." });
+        setTimeout(() => onUnlock(newDemo), 800);
+      } else {
+        setMsg({ kind: "error", text: "License nao destravou (nao e admin)" });
+      }
+    } catch (e) {
+      setMsg({ kind: "error", text: String(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="pb-demo-expired">
+      <div className="pb-demo-expired-card">
+        <div className="pb-demo-expired-icon">⏱️</div>
+        <h1>Demo expirou</h1>
+        <p className="pb-demo-expired-sub">
+          Voce usou {demo.demo_days_total} dias da versao Android gratuita.
+        </p>
+        <p className="pb-demo-expired-pitch">
+          Pra continuar sem limite, compra a versao <strong>Windows</strong> com mais features
+          (auto-update, todos os sistemas embedded, license vitalicia, etc).
+        </p>
+
+        <a
+          className="pb-demo-expired-btn pb-demo-expired-btn-primary"
+          href="https://pauloadriel98.gumroad.com/l/ludex"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Comprar Windows (R$ 49,90)
+        </a>
+
+        {!showKeyInput ? (
+          <button
+            className="pb-demo-expired-btn pb-demo-expired-btn-ghost"
+            onClick={() => setShowKeyInput(true)}
+          >
+            Sou admin / tenho license
+          </button>
+        ) : (
+          <div className="pb-demo-expired-input-wrap">
+            <input
+              className="pb-demo-expired-input"
+              type="text"
+              placeholder="Cole sua license key"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              autoFocus
+              disabled={busy}
+            />
+            <button
+              className="pb-demo-expired-btn pb-demo-expired-btn-primary"
+              onClick={tryUnlock}
+              disabled={busy || !keyInput.trim()}
+            >
+              {busy ? "Verificando..." : "Destravar"}
+            </button>
+            {msg && (
+              <p className={`pb-demo-expired-msg pb-demo-expired-msg-${msg.kind}`}>{msg.text}</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function LudexLauncher() {
   const [systems, setSystems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -3537,6 +3625,7 @@ export default function LudexLauncher() {
   // License gate — bloqueia o app antes de qualquer outra coisa se sem license valida
   // null = ainda checando; true = licenciado, deixa entrar; false = sem license, mostra gate
   const [licenseStatus, setLicenseStatus] = useState(null);
+  const [androidDemo, setAndroidDemo] = useState(null);  // { expired, days_left, is_admin_unlocked, ... }
   // First-run onboarding + utilitarios novos do v0.4
   const [firstRunActive, setFirstRunActive] = useState(false);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -3782,11 +3871,24 @@ export default function LudexLauncher() {
   // mostrar a home brevemente. Se license existe local, tenta re-validar online;
   // se valido (ou cache no grace period), libera. Se nao, mostra LicenseGate.
   // Em build de desenvolvimento (PLACEHOLDER token), pula gate (libera tudo).
-  // Em Android (APK): pula license gate por enquanto (Paulo, 2026-05-17).
+  // Em Android (APK): pula license gate (Paulo, 2026-05-17) MAS aplica demo time limit (7 dias).
   useEffect(() => {
     if (IS_ANDROID) {
-      console.info("License gate desativado (Android APK)");
-      setLicenseStatus(true);
+      (async () => {
+        try {
+          const demo = await invoke("android_demo_status");
+          setAndroidDemo(demo);
+          if (demo.expired) {
+            // Demo expirou - bloqueia entrada
+            setLicenseStatus(false);
+          } else {
+            setLicenseStatus(true);
+          }
+        } catch (e) {
+          console.warn("android_demo_status falhou:", e);
+          setLicenseStatus(true);  // fallback: nao bloqueia
+        }
+      })();
       return;
     }
     (async () => {
@@ -4960,6 +5062,10 @@ export default function LudexLauncher() {
     // Ainda checando — render minimo (preto), evita flash
     return <div style={{ position: "fixed", inset: 0, background: "#04020c" }} />;
   }
+  // Android: demo expirada bloqueia com tela propria (em vez do LudexLicenseGate desktop)
+  if (IS_ANDROID && androidDemo?.expired) {
+    return <AndroidDemoExpired demo={androidDemo} onUnlock={(newDemo) => { setAndroidDemo(newDemo); setLicenseStatus(true); }} />;
+  }
   if (licenseStatus === false) {
     return <LudexLicenseGate onLicensed={() => setLicenseStatus(true)} />;
   }
@@ -5007,6 +5113,12 @@ export default function LudexLauncher() {
                 <SystemIcon id={selected.id} />
               </span>
               <span className="pb-top-system-name">{selected.name}</span>
+            </div>
+          )}
+          {/* Demo Android: contador de dias restantes */}
+          {IS_ANDROID && androidDemo && !androidDemo.is_admin_unlocked && androidDemo.days_left > 0 && (
+            <div className={`pb-android-demo-pill ${androidDemo.days_left <= 2 ? "warn" : ""}`} title="Demo gratuita Android">
+              DEMO · {androidDemo.days_left} dia{androidDemo.days_left === 1 ? "" : "s"}
             </div>
           )}
           {selected && (

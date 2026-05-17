@@ -5684,3 +5684,133 @@
     align-items: flex-end;
   }
 }
+
+/* =================================================================
+ * ANDROID DEMO EXPIRED screen (v0.7.4+)
+ * Bloqueia entrada quando demo de 7 dias expira no APK
+ * ================================================================= */
+.pb-demo-expired {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #1a0a2e 0%, #0a0220 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 9999;
+}
+.pb-demo-expired-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: 32px 24px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+.pb-demo-expired-icon {
+  font-size: 56px;
+  line-height: 1;
+  margin-bottom: 14px;
+}
+.pb-demo-expired h1 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+.pb-demo-expired-sub {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 14px;
+  margin: 0 0 16px;
+}
+.pb-demo-expired-pitch {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 22px;
+}
+.pb-demo-expired-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 13px 20px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  text-decoration: none;
+  text-align: center;
+  transition: background 0.15s, transform 0.1s;
+  box-sizing: border-box;
+}
+.pb-demo-expired-btn:active { transform: scale(0.98); }
+.pb-demo-expired-btn-primary {
+  background: linear-gradient(135deg, #7c3aed, #ec4899);
+  color: #fff;
+  border-color: transparent;
+}
+.pb-demo-expired-btn-primary:hover { filter: brightness(1.1); }
+.pb-demo-expired-btn-ghost {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  border-color: rgba(255, 255, 255, 0.12);
+  font-weight: 500;
+  font-size: 12px;
+}
+.pb-demo-expired-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+.pb-demo-expired-input-wrap {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pb-demo-expired-input {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.pb-demo-expired-input:focus {
+  border-color: rgba(124, 58, 237, 0.6);
+}
+.pb-demo-expired-msg {
+  margin: 4px 0 0;
+  font-size: 12px;
+  text-align: center;
+}
+.pb-demo-expired-msg-ok { color: #86efac; }
+.pb-demo-expired-msg-error { color: #fca5a5; }
+
+/* Demo Android counter pill (no top bar) */
+.pb-android-demo-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  margin-left: 12px;
+  background: rgba(124, 58, 237, 0.18);
+  border: 1px solid rgba(124, 58, 237, 0.4);
+  border-radius: 999px;
+  color: #c4b5fd;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.pb-android-demo-pill.warn {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
