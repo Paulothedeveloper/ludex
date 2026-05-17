@@ -1447,30 +1447,28 @@ fn token_cache() -> &'static Mutex<Option<CachedToken>> {
     TOKEN_CACHE.get_or_init(|| Mutex::new(None))
 }
 
-fn covers_dir() -> Option<PathBuf> {
-    let base = dirs::data_dir()?;
-    let dir = base.join("Ludex").join("covers");
+// v0.8.7: definidas DEPOIS de ludex_base_dir, mas pra evitar forward refs
+// vou usar dirs::data_dir aqui ainda — mas com fallback Android.
+
+fn _ludex_data_subdir(name: &str) -> Option<PathBuf> {
+    #[cfg(target_os = "android")]
+    let base = PathBuf::from("/storage/emulated/0/Ludex");
+    #[cfg(not(target_os = "android"))]
+    let base = dirs::data_dir()?.join("Ludex");
+    let dir = base.join(name);
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir)
 }
 
-fn screenshots_dir() -> Option<PathBuf> {
-    let base = dirs::data_dir()?;
-    let dir = base.join("Ludex").join("screenshots");
-    std::fs::create_dir_all(&dir).ok()?;
-    Some(dir)
-}
-
-fn details_dir() -> Option<PathBuf> {
-    let base = dirs::data_dir()?;
-    let dir = base.join("Ludex").join("details");
-    std::fs::create_dir_all(&dir).ok()?;
-    Some(dir)
-}
+fn covers_dir() -> Option<PathBuf> { _ludex_data_subdir("covers") }
+fn screenshots_dir() -> Option<PathBuf> { _ludex_data_subdir("screenshots") }
+fn details_dir() -> Option<PathBuf> { _ludex_data_subdir("details") }
 
 fn token_path() -> Option<PathBuf> {
-    let base = dirs::data_dir()?;
-    let dir = base.join("Ludex");
+    #[cfg(target_os = "android")]
+    let dir = PathBuf::from("/storage/emulated/0/Ludex");
+    #[cfg(not(target_os = "android"))]
+    let dir = dirs::data_dir()?.join("Ludex");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir.join("igdb_token.json"))
 }
@@ -1769,26 +1767,36 @@ impl Default for AppConfig {
     }
 }
 
+/// Diretorio base do Ludex (config + profiles + caches).
+/// Android: /storage/emulated/0/Ludex/ (acessivel sem SAF, sobrevive ao APK).
+/// Desktop: %APPDATA%/Ludex/ ou ~/.local/share/Ludex/ via dirs::data_dir.
+fn ludex_base_dir() -> Option<PathBuf> {
+    #[cfg(target_os = "android")]
+    {
+        let p = PathBuf::from("/storage/emulated/0/Ludex");
+        std::fs::create_dir_all(&p).ok()?;
+        return Some(p);
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let base = dirs::data_dir()?;
+        let dir = base.join("Ludex");
+        std::fs::create_dir_all(&dir).ok()?;
+        Some(dir)
+    }
+}
+
 fn config_path() -> Option<PathBuf> {
-    let base = dirs::data_dir()?;
-    let dir = base.join("Ludex");
-    std::fs::create_dir_all(&dir).ok()?;
-    Some(dir.join("config.json"))
+    Some(ludex_base_dir()?.join("config.json"))
 }
 
 fn profiles_dir() -> Option<PathBuf> {
-    let base = dirs::data_dir()?;
-    let dir = base.join("Ludex").join("profiles");
+    let dir = ludex_base_dir()?.join("profiles");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir)
 }
 
-fn wallpapers_dir() -> Option<PathBuf> {
-    let base = dirs::data_dir()?;
-    let dir = base.join("Ludex").join("wallpapers");
-    std::fs::create_dir_all(&dir).ok()?;
-    Some(dir)
-}
+fn wallpapers_dir() -> Option<PathBuf> { _ludex_data_subdir("wallpapers") }
 
 /// Migra config.json do Playbox antigo (%AppData%\Playbox) pro Ludex
 /// (%AppData%\Ludex) na primeira vez que o Ludex roda. Tambem copia subpastas
