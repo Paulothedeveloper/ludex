@@ -238,47 +238,63 @@ struct EmulatorConfig {
     igdb_platform: u32,
 }
 
-/// Mapeia sistema -> nome do .dll do core libretro embarcado.
+// Extensao do core libretro por plataforma. v0.7.3+: suporte Android (.so ARM64).
+#[cfg(target_os = "windows")]
+const CORE_EXT: &str = ".dll";
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const CORE_EXT: &str = ".so";
+#[cfg(target_os = "macos")]
+const CORE_EXT: &str = ".dylib";
+
+/// Mapeia sistema -> nome base do core libretro embarcado (sem extensao).
 /// Sistemas que retornam string vazia rodam via emulador externo (caminho original).
-fn libretro_core_for(system_id: &str) -> &'static str {
-    match system_id {
+/// Em Android, PS2 nao tem core .so (pcsx2 libretro nao tem build ARM) — fica vazio.
+fn libretro_core_for(system_id: &str) -> String {
+    let base: &str = match system_id {
         // ja existiam (v0.6.7-)
-        "snes" => "snes9x_libretro.dll",
-        "gba"  => "mgba_libretro.dll",
-        "nes"  => "nestopia_libretro.dll",
-        "gb"   => "gambatte_libretro.dll",
-        "gbc"  => "gambatte_libretro.dll",
-        "md"   => "genesis_plus_gx_libretro.dll",
-        "n64"  => "mupen64plus_next_libretro.dll",
-        "ps1"  => "swanstation_libretro.dll",
+        "snes" => "snes9x_libretro",
+        "gba"  => "mgba_libretro",
+        "nes"  => "nestopia_libretro",
+        "gb"   => "gambatte_libretro",
+        "gbc"  => "gambatte_libretro",
+        "md"   => "genesis_plus_gx_libretro",
+        "n64"  => "mupen64plus_next_libretro",
+        "ps1"  => "swanstation_libretro",
         // migrados externo -> embedded em v0.7.1
-        "wii"  => "dolphin_libretro.dll",
-        "gc"   => "dolphin_libretro.dll",
-        "ps2"  => "pcsx2_libretro.dll",
+        "wii"  => "dolphin_libretro",
+        "gc"   => "dolphin_libretro",
+        "ps2"  => {
+            // PS2 (PCSX2 libretro) nao tem build ARM Android — desativa em Android
+            #[cfg(target_os = "android")]
+            { return String::new(); }
+            #[cfg(not(target_os = "android"))]
+            "pcsx2_libretro"
+        }
         // novos em v0.7.0
-        "dreamcast" => "flycast_libretro.dll",
-        "psp"       => "ppsspp_libretro.dll",
-        "ds"        => "melonds_libretro.dll",
-        "saturn"    => "mednafen_saturn_libretro.dll",
+        "dreamcast" => "flycast_libretro",
+        "psp"       => "ppsspp_libretro",
+        "ds"        => "melonds_libretro",
+        "saturn"    => "mednafen_saturn_libretro",
         // Sega extras reusam o core do MD (cobre SMS/GG/SegaCD/SG-1000)
-        "sms"       => "genesis_plus_gx_libretro.dll",
-        "gg"        => "genesis_plus_gx_libretro.dll",
-        "segacd"    => "genesis_plus_gx_libretro.dll",
-        "arcade"    => "mame_libretro.dll",
-        "tg16"      => "mednafen_pce_libretro.dll",
-        "a2600"     => "stella_libretro.dll",
-        "lynx"      => "beetle_lynx_libretro.dll",
-        "ws"        => "beetle_wswan_libretro.dll",
-        "vb"        => "beetle_vb_libretro.dll",
-        "ngpc"      => "beetle_ngp_libretro.dll",
-        "msx"       => "bluemsx_libretro.dll",
-        "c64"       => "vice_x64_libretro.dll",
-        "zx"        => "fuse_libretro.dll",
-        "amiga"     => "puae_libretro.dll",
-        "threedo"   => "opera_libretro.dll",
-        "jaguar"    => "virtualjaguar_libretro.dll",
-        _ => "",
-    }
+        "sms"       => "genesis_plus_gx_libretro",
+        "gg"        => "genesis_plus_gx_libretro",
+        "segacd"    => "genesis_plus_gx_libretro",
+        "arcade"    => "mame_libretro",
+        "tg16"      => "mednafen_pce_libretro",
+        "a2600"     => "stella_libretro",
+        "lynx"      => "beetle_lynx_libretro",
+        "ws"        => "beetle_wswan_libretro",
+        "vb"        => "beetle_vb_libretro",
+        "ngpc"      => "beetle_ngp_libretro",
+        "msx"       => "bluemsx_libretro",
+        "c64"       => "vice_x64_libretro",
+        "zx"        => "fuse_libretro",
+        "amiga"     => "puae_libretro",
+        "threedo"   => "opera_libretro",
+        "jaguar"    => "virtualjaguar_libretro",
+        _ => return String::new(),
+    };
+    format!("{}{}", base, CORE_EXT)
 }
 
 const EMULATORS: &[EmulatorConfig] = &[
@@ -1095,7 +1111,7 @@ fn group_multidisc_games(games: Vec<Game>) -> Vec<Game> {
 fn scan_system(roms_root: &Path, emulators_root: &Path, cfg: &EmulatorConfig) -> SystemInfo {
     let folder = roms_root.join(cfg.folder_name);
     let folder_exists = folder.is_dir();
-    let mut libretro_core = libretro_core_for(cfg.id).to_string();
+    let mut libretro_core = libretro_core_for(cfg.id);
     let core_dll_exists = if libretro_core.is_empty() {
         false
     } else {
