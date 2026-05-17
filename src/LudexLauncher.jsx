@@ -3093,6 +3093,135 @@ function GameDetailPanel({ system, game, playTimeSec, gameMeta, onClose, onLaunc
   );
 }
 
+/**
+ * Preview popup compacto: aparece quando o usuario clica num card de jogo
+ * (single click). Mostra cover + nome + sistema + screenshot rotativo + summary
+ * curto + acoes (Jogar / Detalhes / Fechar). Pra ver tudo, o botao "Detalhes"
+ * abre o GameDetailPanel fullscreen.
+ *
+ * Double-click no card pula o popup e lanca direto (atalho power-user).
+ */
+function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLaunch, onOpenDetails, closing }) {
+  const [details, setDetails] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeShot, setActiveShot] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setDetails(null);
+    setActiveShot(0);
+    (async () => {
+      try {
+        const d = await invoke("fetch_game_details", { systemId: system.id, gameName: game.name });
+        if (!cancelled) setDetails(d);
+      } catch (e) {
+        console.error("preview fetch_game_details", e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [system.id, game.path, game.name]);
+
+  // Rotaciona screenshots a cada 3.5s
+  useEffect(() => {
+    if (!details?.screenshot_paths?.length) return;
+    const id = setInterval(() => {
+      setActiveShot((i) => (i + 1) % details.screenshot_paths.length);
+    }, 3500);
+    return () => clearInterval(id);
+  }, [details]);
+
+  // Hotkeys: Esc fecha, Enter lanca
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); onClose(); }
+      else if (e.key === "Enter") { e.preventDefault(); onLaunch(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, onLaunch]);
+
+  const coverSrc = details?.cover_path ? convertFileSrc(details.cover_path) : null;
+  const shotSrc = details?.screenshot_paths?.[activeShot] ? convertFileSrc(details.screenshot_paths[activeShot]) : null;
+  const summaryShort = details?.summary
+    ? (details.summary.length > 220 ? details.summary.slice(0, 220).trim() + "..." : details.summary)
+    : null;
+
+  return (
+    <div className={`pb-preview-backdrop ${closing ? "closing" : ""}`} onClick={onClose}>
+      <div
+        className={`pb-preview ${closing ? "closing" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+        style={{ "--sys-color": system.color }}
+      >
+        <div className="pb-preview-shot">
+          {shotSrc ? (
+            <img key={shotSrc} className="pb-preview-shot-img" src={shotSrc} alt="" aria-hidden />
+          ) : (
+            <div className="pb-preview-shot-fallback" style={{ background: system.color }} />
+          )}
+          <div className="pb-preview-shot-overlay" />
+          <button className="pb-preview-close" onClick={onClose} title="Fechar (Esc)">
+            <CloseIcon />
+          </button>
+        </div>
+
+        <div className="pb-preview-body">
+          <div className="pb-preview-cover-wrap">
+            {coverSrc ? (
+              <img className="pb-preview-cover" src={coverSrc} alt={game.name} />
+            ) : (
+              <div className="pb-preview-cover pb-preview-cover-fallback" style={{ background: system.color }}>
+                <SystemIcon id={system.id} />
+              </div>
+            )}
+            {isFavorite && <span className="pb-preview-fav"><StarIcon filled /></span>}
+          </div>
+
+          <div className="pb-preview-info">
+            <div className="pb-preview-tag">
+              <span className="pb-preview-tag-icon" style={{ color: system.color }}>
+                <SystemIcon id={system.id} />
+              </span>
+              <span>{system.name}</span>
+            </div>
+            <h2 className="pb-preview-title">{details?.name || game.name}</h2>
+            <div className="pb-preview-meta">
+              {details?.first_release_year && <span>{details.first_release_year}</span>}
+              {details?.developer && <span>· {details.developer}</span>}
+              {playTimeSec > 0 && <span>· {formatPlayTime(playTimeSec)} jogado</span>}
+              {!details?.first_release_year && !details?.developer && playTimeSec === 0 && game.size_mb && (
+                <span>{game.size_mb} MB</span>
+              )}
+            </div>
+            {details?.genres?.length > 0 && (
+              <div className="pb-preview-genres">
+                {details.genres.slice(0, 3).map((g) => <span key={g} className="pb-preview-genre">{g}</span>)}
+              </div>
+            )}
+            {summaryShort && <p className="pb-preview-summary">{summaryShort}</p>}
+            {loading && !details && <p className="pb-preview-loading">Buscando info no IGDB...</p>}
+          </div>
+        </div>
+
+        <div className="pb-preview-actions">
+          <button className="pb-preview-btn pb-preview-btn-primary" onClick={onLaunch}>
+            <PlayIcon /> <span>Jogar</span>
+          </button>
+          <button className="pb-preview-btn" onClick={onOpenDetails}>
+            <InfoIcon /> <span>Detalhes</span>
+          </button>
+          <button className="pb-preview-btn pb-preview-btn-ghost" onClick={onClose}>
+            <span>Fechar</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GameContextMenu({ x, y, system, game, isFavorite, onClose, onLaunch, onResyncCover, onPickCover, onOpenLocation, onDelete, onToggleFavorite, onShowDetails }) {
   const ref = useRef(null);
   const [pos, setPos] = useState({ left: x, top: y });
@@ -3240,6 +3369,9 @@ export default function LudexLauncher() {
   // Ficha do jogo: { system, game } | null
   const [detailPanel, setDetailPanel] = useState(null);
   const [detailClosing, setDetailClosing] = useState(false);
+  // Preview popup compacto: { system, game } | null
+  const [previewPopup, setPreviewPopup] = useState(null);
+  const [previewClosing, setPreviewClosing] = useState(false);
   // Selector de disco: { system, game } | null
   const [discPicker, setDiscPicker] = useState(null);
   // Logs viewer modal
@@ -4001,6 +4133,21 @@ export default function LudexLauncher() {
       setDetailClosing(false);
     }, MODAL_EXIT_MS);
   }, [detailPanel]);
+
+  const openPreviewPopup = useCallback((system, game) => {
+    sfx.open();
+    setPreviewPopup({ system, game });
+    setPreviewClosing(false);
+  }, []);
+
+  const closePreviewPopup = useCallback(() => {
+    if (!previewPopup) return;
+    setPreviewClosing(true);
+    setTimeout(() => {
+      setPreviewPopup(null);
+      setPreviewClosing(false);
+    }, MODAL_EXIT_MS);
+  }, [previewPopup]);
 
   const openGameLocation = useCallback(async (game) => {
     try {
@@ -4813,8 +4960,8 @@ export default function LudexLauncher() {
                           ref={i === selectedGameIdx ? activeCardRef : null}
                           className={`pb-card ${i === selectedGameIdx ? (focusZone === "games" ? "active focused" : "active") : ""} ${hasCover ? "has-cover" : ""}`}
                           style={{ "--card-color": selected.color, animationDelay: `${i * 40}ms` }}
-                          onClick={() => { sfx.click(); setSelectedGameIdx(i); }}
-                          onDoubleClick={handleLaunch}
+                          onClick={() => { sfx.click(); setSelectedGameIdx(i); openPreviewPopup(selected, g); }}
+                          onDoubleClick={() => { if (previewPopup) closePreviewPopup(); handleLaunch(); }}
                           onContextMenu={(e) => {
                             e.preventDefault();
                             sfx.click();
@@ -5060,6 +5207,19 @@ export default function LudexLauncher() {
           onDelete={() => { const c = ctxMenu; setCtxMenu(null); confirmDeleteGame(c.system, c.game); }}
           onToggleFavorite={() => { setCtxMenu(null); toggleFavorite(); }}
           isFavorite={favoriteSet.has(ctxMenu.game.path)}
+        />
+      )}
+
+      {previewPopup && (
+        <GamePreviewPopup
+          closing={previewClosing}
+          system={previewPopup.system}
+          game={previewPopup.game}
+          playTimeSec={(activeProfile?.play_time?.[`${previewPopup.system.id}::${previewPopup.game.path}`]) || 0}
+          isFavorite={favoriteSet.has(previewPopup.game.path)}
+          onClose={closePreviewPopup}
+          onLaunch={() => { closePreviewPopup(); setTimeout(() => handleLaunch(), MODAL_EXIT_MS); }}
+          onOpenDetails={() => { const p = previewPopup; closePreviewPopup(); setTimeout(() => openDetailPanel(p.system, p.game), MODAL_EXIT_MS); }}
         />
       )}
 

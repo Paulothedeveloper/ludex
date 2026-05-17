@@ -1,5 +1,5 @@
-# Script de release do Playbox Launcher
-# Uso: .\scripts\release.ps1 -Version "0.1.1" -Notes "Descricao da release"
+# Script de release do Ludex
+# Uso: .\scripts\release.ps1 -Version "0.6.5" -Notes "Descricao da release"
 
 param(
   [Parameter(Mandatory=$true)][string]$Version,
@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 
-Write-Host "=== Playbox Release v$Version ===" -ForegroundColor Cyan
+Write-Host "=== Ludex Release v$Version ===" -ForegroundColor Cyan
 
 # 1. Atualiza version em 3 arquivos
 Write-Host "[1/5] Atualizando version em package.json, Cargo.toml e tauri.conf.json"
@@ -38,7 +38,7 @@ try {
 }
 
 # 3. Localiza artefatos
-$nsisExe = "$root\src-tauri\target\release\bundle\nsis\Playbox_${Version}_x64-setup.exe"
+$nsisExe = "$root\src-tauri\target\release\bundle\nsis\Ludex_${Version}_x64-setup.exe"
 $nsisSig = "$nsisExe.sig"
 if (-not (Test-Path $nsisExe)) { throw "Instalador nao encontrado: $nsisExe" }
 if (-not (Test-Path $nsisSig)) { throw "Assinatura nao encontrada: $nsisSig" }
@@ -55,7 +55,7 @@ $latest = @{
   platforms = @{
     "windows-x86_64" = @{
       signature = $signature
-      url       = "https://github.com/EllaeMyApp/playbox-launcher/releases/download/v$Version/Playbox_${Version}_x64-setup.exe"
+      url       = "https://github.com/EllaeMyApp/ludex/releases/download/v$Version/Ludex_${Version}_x64-setup.exe"
     }
   }
 }
@@ -82,5 +82,5 @@ try {
 }
 
 Write-Host "`n=== OK! Release v$Version publicada ===" -ForegroundColor Green
-Write-Host "URL: https://github.com/EllaeMyApp/playbox-launcher/releases/tag/v$Version"
+Write-Host "URL: https://github.com/EllaeMyApp/ludex/releases/tag/v$Version"
 Write-Host "Usuarios com a versao antiga vao receber a atualizacao na proxima vez que abrirem (ou clicarem em 'Verificar atualizacao')."
