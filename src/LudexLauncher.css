@@ -1896,6 +1896,38 @@
   object-fit: cover;
   animation: pb-fade-in 0.4s ease both;
 }
+.pb-preview-video {
+  position: absolute;
+  /* Esconde controles e fundo preto do YouTube: escala 1.4x e clipa overflow.
+     O 16:9 do video preenche o container sem barras pretas. */
+  top: 50%;
+  left: 50%;
+  width: 140%;
+  height: 140%;
+  transform: translate(-50%, -50%);
+  border: 0;
+  pointer-events: none;
+  animation: pb-fade-in 0.5s ease both;
+}
+.pb-preview-mute {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.55);
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+  z-index: 3;
+}
+.pb-preview-mute:hover { background: rgba(255,255,255,0.18); transform: scale(1.06); }
+.pb-preview-mute svg { width: 14px; height: 14px; }
 .pb-preview-shot-fallback {
   position: absolute;
   inset: 0;

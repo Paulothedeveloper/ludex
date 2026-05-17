@@ -1086,6 +1086,12 @@ struct IgdbGenre {
 }
 
 #[derive(Debug, Deserialize)]
+struct IgdbVideo {
+    video_id: Option<String>,
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct IgdbGameDetails {
     name: Option<String>,
     summary: Option<String>,
@@ -1096,6 +1102,13 @@ struct IgdbGameDetails {
     screenshots: Option<Vec<IgdbScreenshot>>,
     genres: Option<Vec<IgdbGenre>>,
     involved_companies: Option<Vec<IgdbInvolvedCompany>>,
+    videos: Option<Vec<IgdbVideo>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct GameVideo {
+    youtube_id: String,
+    name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1109,6 +1122,9 @@ struct GameDetails {
     publisher: Option<String>,
     cover_path: Option<String>,
     screenshot_paths: Vec<String>,
+    // v2 (v0.6.6+): videos do YouTube vindos do IGDB. Default vazio pra cache antigo.
+    #[serde(default)]
+    videos: Vec<GameVideo>,
 }
 
 static TOKEN_CACHE: OnceLock<Mutex<Option<CachedToken>>> = OnceLock::new();
@@ -2595,7 +2611,7 @@ async fn igdb_search_game_details(
     platform: u32,
 ) -> Result<Option<IgdbGameDetails>, String> {
     let escaped = name.replace('"', "\\\"");
-    let fields = "fields name, summary, storyline, first_release_date, rating, cover.url, screenshots.url, genres.name, involved_companies.developer, involved_companies.publisher, involved_companies.company.name";
+    let fields = "fields name, summary, storyline, first_release_date, rating, cover.url, screenshots.url, genres.name, involved_companies.developer, involved_companies.publisher, involved_companies.company.name, videos.video_id, videos.name";
     let body = if platform > 0 {
         format!("search \"{}\"; {}; where platforms = ({}); limit 1;", escaped, fields, platform)
     } else {
@@ -2620,7 +2636,9 @@ async fn fetch_game_details(system_id: String, game_name: String) -> Option<Game
     let cache_dir = details_dir()?.join(&system_id);
     std::fs::create_dir_all(&cache_dir).ok()?;
     let safe = sanitize_filename(&game_name);
-    let cache_file = cache_dir.join(format!("{}.json", safe));
+    // v2 cache filename (v0.6.6+): separa do .json v1 (sem videos) pra forcar refetch.
+    // Caches v1 antigos ficam orfaos no disco mas nao causam problema.
+    let cache_file = cache_dir.join(format!("{}.v2.json", safe));
 
     // Cache hit
     if let Ok(data) = std::fs::read_to_string(&cache_file) {
@@ -2704,6 +2722,13 @@ async fn fetch_game_details(system_id: String, game_name: String) -> Option<Game
         }
     }
 
+    let videos: Vec<GameVideo> = g.videos
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|v| v.video_id.map(|yid| GameVideo { youtube_id: yid, name: v.name }))
+        .take(3)
+        .collect();
+
     let result = GameDetails {
         name: g.name.unwrap_or_else(|| game_name.clone()),
         summary: g.storyline.or(g.summary).unwrap_or_default(),
@@ -2714,6 +2739,7 @@ async fn fetch_game_details(system_id: String, game_name: String) -> Option<Game
         publisher,
         cover_path,
         screenshot_paths: shot_paths,
+        videos,
     };
 
     if let Ok(data) = serde_json::to_string_pretty(&result) {
@@ -2726,8 +2752,10 @@ async fn fetch_game_details(system_id: String, game_name: String) -> Option<Game
 fn clear_game_details(system_id: String, game_name: String) -> Result<(), String> {
     let dir = details_dir().ok_or("dir details indisponivel")?.join(&system_id);
     let safe = sanitize_filename(&game_name);
-    let f = dir.join(format!("{}.json", safe));
-    if f.is_file() { std::fs::remove_file(&f).map_err(|e| e.to_string())?; }
+    let f_v2 = dir.join(format!("{}.v2.json", safe));
+    if f_v2.is_file() { std::fs::remove_file(&f_v2).map_err(|e| e.to_string())?; }
+    let f_v1 = dir.join(format!("{}.json", safe));
+    if f_v1.is_file() { std::fs::remove_file(&f_v1).map_err(|e| e.to_string())?; }
     Ok(())
 }
 

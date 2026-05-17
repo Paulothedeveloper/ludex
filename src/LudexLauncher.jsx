@@ -498,6 +498,8 @@ function StarIcon({ filled }) {
 function PlayIcon() { return (<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden><polygon points="6 4 20 12 6 20 6 4" /></svg>); }
 function FolderIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>); }
 function InfoIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>); }
+function SpeakerIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /></svg>); }
+function SpeakerMuteIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" /><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" /></svg>); }
 function CheckIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><polyline points="20 6 9 17 4 12" /></svg>); }
 function ShieldIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>); }
 function SortIcon() { return (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="15" y2="12" /><line x1="3" y1="18" x2="9" y2="18" /></svg>); }
@@ -3105,12 +3107,31 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeShot, setActiveShot] = useState(0);
+  const [videoMuted, setVideoMuted] = useState(true);
+  const [videoFailed, setVideoFailed] = useState(false);
+  const videoRef = useRef(null);
+
+  const toggleMute = useCallback(() => {
+    if (!videoRef.current?.contentWindow) return;
+    const next = !videoMuted;
+    setVideoMuted(next);
+    // YouTube IFrame API: postMessage pra mutar/desmutar sem reload
+    const cmd = next ? "mute" : "unMute";
+    try {
+      videoRef.current.contentWindow.postMessage(
+        JSON.stringify({ event: "command", func: cmd, args: [] }),
+        "*"
+      );
+    } catch {}
+  }, [videoMuted]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setDetails(null);
     setActiveShot(0);
+    setVideoMuted(true);
+    setVideoFailed(false);
     (async () => {
       try {
         const d = await invoke("fetch_game_details", { systemId: system.id, gameName: game.name });
@@ -3124,14 +3145,17 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
     return () => { cancelled = true; };
   }, [system.id, game.path, game.name]);
 
-  // Rotaciona screenshots a cada 3.5s
+  const youtubeId = !videoFailed && details?.videos?.[0]?.youtube_id ? details.videos[0].youtube_id : null;
+
+  // Rotaciona screenshots a cada 3.5s (somente quando NAO tem video)
   useEffect(() => {
+    if (youtubeId) return;
     if (!details?.screenshot_paths?.length) return;
     const id = setInterval(() => {
       setActiveShot((i) => (i + 1) % details.screenshot_paths.length);
     }, 3500);
     return () => clearInterval(id);
-  }, [details]);
+  }, [details, youtubeId]);
 
   // Hotkeys: Esc fecha, Enter lanca
   useEffect(() => {
@@ -3157,12 +3181,34 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
         style={{ "--sys-color": system.color }}
       >
         <div className="pb-preview-shot">
-          {shotSrc ? (
+          {youtubeId ? (
+            <iframe
+              key={youtubeId}
+              ref={videoRef}
+              className="pb-preview-video"
+              src={`https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&playsinline=1&loop=1&playlist=${youtubeId}&enablejsapi=1`}
+              title="Game trailer"
+              frameBorder="0"
+              allow="autoplay; encrypted-media; picture-in-picture"
+              referrerPolicy="strict-origin-when-cross-origin"
+              onError={() => setVideoFailed(true)}
+              allowFullScreen
+            />
+          ) : shotSrc ? (
             <img key={shotSrc} className="pb-preview-shot-img" src={shotSrc} alt="" aria-hidden />
           ) : (
             <div className="pb-preview-shot-fallback" style={{ background: system.color }} />
           )}
           <div className="pb-preview-shot-overlay" />
+          {youtubeId && (
+            <button
+              className="pb-preview-mute"
+              onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+              title={videoMuted ? "Ativar som" : "Mutar"}
+            >
+              {videoMuted ? <SpeakerMuteIcon /> : <SpeakerIcon />}
+            </button>
+          )}
           <button className="pb-preview-close" onClick={onClose} title="Fechar (Esc)">
             <CloseIcon />
           </button>
