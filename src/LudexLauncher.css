@@ -1928,6 +1928,36 @@
 }
 .pb-preview-mute:hover { background: rgba(255,255,255,0.18); transform: scale(1.06); }
 .pb-preview-mute svg { width: 14px; height: 14px; }
+
+.pb-preview-shot-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  z-index: 2;
+  animation: pb-fade-in 0.2s ease both;
+}
+.pb-preview-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--sys-color, #6a5cff);
+  border-radius: 50%;
+  animation: pb-preview-spin 0.9s linear infinite;
+}
+@keyframes pb-preview-spin {
+  to { transform: rotate(360deg); }
+}
 .pb-preview-shot-fallback {
   position: absolute;
   inset: 0;

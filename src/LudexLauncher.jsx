@@ -3103,7 +3103,7 @@ function GameDetailPanel({ system, game, playTimeSec, gameMeta, onClose, onLaunc
  *
  * Double-click no card pula o popup e lanca direto (atalho power-user).
  */
-function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLaunch, onOpenDetails, closing }) {
+function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLaunch, onOpenDetails, closing, modalGamepadRef, detailsCache }) {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeShot, setActiveShot] = useState(0);
@@ -3125,8 +3125,20 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
     } catch {}
   }, [videoMuted]);
 
+  // Fetch details (com cache em memoria pra reabrir instantaneo)
   useEffect(() => {
     let cancelled = false;
+    const cacheKey = `${system.id}::${game.path}`;
+    const cached = detailsCache?.current?.get(cacheKey);
+    if (cached) {
+      // Cache hit em memoria: zero delay
+      setDetails(cached);
+      setLoading(false);
+      setActiveShot(0);
+      setVideoMuted(true);
+      setVideoFailed(false);
+      return () => { cancelled = true; };
+    }
     setLoading(true);
     setDetails(null);
     setActiveShot(0);
@@ -3135,7 +3147,11 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
     (async () => {
       try {
         const d = await invoke("fetch_game_details", { systemId: system.id, gameName: game.name });
-        if (!cancelled) setDetails(d);
+        if (cancelled) return;
+        setDetails(d);
+        if (d && detailsCache?.current) {
+          detailsCache.current.set(cacheKey, d);
+        }
       } catch (e) {
         console.error("preview fetch_game_details", e);
       } finally {
@@ -3143,7 +3159,7 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
       }
     })();
     return () => { cancelled = true; };
-  }, [system.id, game.path, game.name]);
+  }, [system.id, game.path, game.name, detailsCache]);
 
   const youtubeId = !videoFailed && details?.videos?.[0]?.youtube_id ? details.videos[0].youtube_id : null;
 
@@ -3157,7 +3173,7 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
     return () => clearInterval(id);
   }, [details, youtubeId]);
 
-  // Hotkeys: Esc fecha, Enter lanca
+  // Hotkeys teclado: Esc fecha, Enter lanca
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") { e.preventDefault(); onClose(); }
@@ -3166,6 +3182,19 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, onLaunch]);
+
+  // Gamepad: registra como modal handler. A=lanca, B/X=fecha, Y=detalhes
+  useEffect(() => {
+    if (!modalGamepadRef) return;
+    const handler = (action) => {
+      if (action === "a") { onLaunch(); return true; }
+      if (action === "b" || action === "x") { onClose(); return true; }
+      if (action === "y") { onOpenDetails(); return true; }
+      return false;
+    };
+    modalGamepadRef.current = handler;
+    return () => { if (modalGamepadRef.current === handler) modalGamepadRef.current = null; };
+  }, [modalGamepadRef, onClose, onLaunch, onOpenDetails]);
 
   const coverSrc = details?.cover_path ? convertFileSrc(details.cover_path) : null;
   const shotSrc = details?.screenshot_paths?.[activeShot] ? convertFileSrc(details.screenshot_paths[activeShot]) : null;
@@ -3198,6 +3227,12 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
             <img key={shotSrc} className="pb-preview-shot-img" src={shotSrc} alt="" aria-hidden />
           ) : (
             <div className="pb-preview-shot-fallback" style={{ background: system.color }} />
+          )}
+          {loading && (
+            <div className="pb-preview-shot-loading">
+              <div className="pb-preview-spinner" aria-hidden />
+              <span>Carregando preview...</span>
+            </div>
           )}
           <div className="pb-preview-shot-overlay" />
           {youtubeId && (
@@ -3248,7 +3283,6 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
               </div>
             )}
             {summaryShort && <p className="pb-preview-summary">{summaryShort}</p>}
-            {loading && !details && <p className="pb-preview-loading">Buscando info no IGDB...</p>}
           </div>
         </div>
 
@@ -3418,6 +3452,9 @@ export default function LudexLauncher() {
   // Preview popup compacto: { system, game } | null
   const [previewPopup, setPreviewPopup] = useState(null);
   const [previewClosing, setPreviewClosing] = useState(false);
+  // Cache em memoria de GameDetails (chave = `${system.id}::${game.path}`)
+  // Sobrevive enquanto o app esta aberto. Backend continua tendo cache em disco.
+  const detailsCacheRef = useRef(new Map());
   // Selector de disco: { system, game } | null
   const [discPicker, setDiscPicker] = useState(null);
   // Logs viewer modal
@@ -4393,6 +4430,7 @@ export default function LudexLauncher() {
     settingsOpen: false,
     profilesOpen: false,
     searchOpen: false,
+    previewOpen: false,
     launching: false,
     emulatorOpen: false,
     focusZone: "games",
@@ -4400,6 +4438,7 @@ export default function LudexLauncher() {
     closeSettings: () => {},
     closeProfiles: () => {},
     closeSearch: () => {},
+    openPreviewPopup: () => {},
   });
   // Handler de input de modal (cada modal seta o seu via useEffect ao montar).
   // Recebe action: "left"|"right"|"up"|"down"|"a"|"b"|"y"|"x"|"start"|"select"
@@ -4421,6 +4460,8 @@ export default function LudexLauncher() {
     padCtxRef.current.closeSettings = closeSettings;
     padCtxRef.current.closeProfiles = closeProfiles;
     padCtxRef.current.closeSearch = closeSearch;
+    padCtxRef.current.previewOpen = !!previewPopup;
+    padCtxRef.current.openPreviewPopup = openPreviewPopup;
   });
 
   useEffect(() => {
@@ -4501,7 +4542,7 @@ export default function LudexLauncher() {
         }
         // Quando ha modal aberto: input vai pro modal handler.
         // Modal handler retorna true se consumiu o input.
-        const modalActive = ctx.settingsOpen || ctx.profilesOpen || ctx.searchOpen;
+        const modalActive = ctx.settingsOpen || ctx.profilesOpen || ctx.searchOpen || ctx.previewOpen;
         if (modalActive) {
           const isStandardM = pad.mapping === "standard";
           const ax = pad.axes[0] || 0;
@@ -4678,7 +4719,12 @@ export default function LudexLauncher() {
             ctx.setFocusZone("systems");
           }
           if (y && !st.prevY) { sfx.confirm(); setSettingsOpen(true); }
-          if (x && !st.prevX) { sfx.confirm(); setProfilesOpen(true); }
+          // X = abre preview popup do jogo selecionado (Profiles agora via Y -> Settings -> Trocar perfil)
+          if (x && !st.prevX) {
+            if (ctx.focusZone === "games" && ctx.selectedGame) {
+              ctx.openPreviewPopup(ctx.selected, ctx.selectedGame);
+            }
+          }
           if (start && !st.prevStart) { sfx.confirm(); setSearchOpen(true); }
           if (select && !st.prevSelect) ctx.toggleFavorite();
 
@@ -5116,21 +5162,33 @@ export default function LudexLauncher() {
       </nav>
 
       <div className="pb-hints">
-        {focusZone === "games" ? (
+        {previewPopup ? (
+          <>
+            <span className="pb-hint-key">A</span> Jogar
+            <span className="pb-hint-divider" />
+            <span className="pb-hint-key">Y</span> Detalhes
+            <span className="pb-hint-divider" />
+            <span className="pb-hint-key">B</span> Fechar
+          </>
+        ) : focusZone === "games" ? (
           <>
             <span className="pb-hint-key">A</span> Iniciar
             <span className="pb-hint-divider" />
+            <span className="pb-hint-key">X</span> Preview
+            <span className="pb-hint-divider" />
             <span className="pb-hint-key">B</span> Sistemas
+            <span className="pb-hint-divider" />
+            <span className="pb-hint-key">Y</span> Opcoes
           </>
         ) : (
           <>
             <span className="pb-hint-key">A</span> Entrar
             <span className="pb-hint-divider" />
             <span className="pb-hint-key">↑</span> Voltar
+            <span className="pb-hint-divider" />
+            <span className="pb-hint-key">Y</span> Opcoes
           </>
         )}
-        <span className="pb-hint-divider" />
-        <span className="pb-hint-key">Y</span> Opcoes
         <span className="pb-hint-divider" />
         <span className="pb-hint-key">F2</span> Diagnostico
       </div>
@@ -5266,6 +5324,8 @@ export default function LudexLauncher() {
           onClose={closePreviewPopup}
           onLaunch={() => { closePreviewPopup(); setTimeout(() => handleLaunch(), MODAL_EXIT_MS); }}
           onOpenDetails={() => { const p = previewPopup; closePreviewPopup(); setTimeout(() => openDetailPanel(p.system, p.game), MODAL_EXIT_MS); }}
+          modalGamepadRef={modalGamepadRef}
+          detailsCache={detailsCacheRef}
         />
       )}
 
