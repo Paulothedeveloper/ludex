@@ -1447,15 +1447,11 @@ fn token_cache() -> &'static Mutex<Option<CachedToken>> {
     TOKEN_CACHE.get_or_init(|| Mutex::new(None))
 }
 
-// v0.8.7: definidas DEPOIS de ludex_base_dir, mas pra evitar forward refs
-// vou usar dirs::data_dir aqui ainda — mas com fallback Android.
+// v0.8.8: tudo passa por ludex_base_dir() (definida mais abaixo) que ja resolve
+// Android via Tauri path resolver e desktop via dirs::data_dir.
 
 fn _ludex_data_subdir(name: &str) -> Option<PathBuf> {
-    #[cfg(target_os = "android")]
-    let base = PathBuf::from("/storage/emulated/0/Ludex");
-    #[cfg(not(target_os = "android"))]
-    let base = dirs::data_dir()?.join("Ludex");
-    let dir = base.join(name);
+    let dir = ludex_base_dir()?.join(name);
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir)
 }
@@ -1465,12 +1461,7 @@ fn screenshots_dir() -> Option<PathBuf> { _ludex_data_subdir("screenshots") }
 fn details_dir() -> Option<PathBuf> { _ludex_data_subdir("details") }
 
 fn token_path() -> Option<PathBuf> {
-    #[cfg(target_os = "android")]
-    let dir = PathBuf::from("/storage/emulated/0/Ludex");
-    #[cfg(not(target_os = "android"))]
-    let dir = dirs::data_dir()?.join("Ludex");
-    std::fs::create_dir_all(&dir).ok()?;
-    Some(dir.join("igdb_token.json"))
+    Some(ludex_base_dir()?.join("igdb_token.json"))
 }
 
 fn now_secs() -> u64 {
@@ -1768,14 +1759,17 @@ impl Default for AppConfig {
 }
 
 /// Diretorio base do Ludex (config + profiles + caches).
-/// Android: /storage/emulated/0/Ludex/ (acessivel sem SAF, sobrevive ao APK).
+/// Android: storage privado do app via Tauri path resolver — /data/user/0/gg.ludex.app/files/.
+///   NAO usar /storage/emulated/0/ — exige MANAGE_EXTERNAL_STORAGE + user habilitar
+///   "Acesso a todos os arquivos" no Settings, senao create_dir_all falha (v0.8.7 bug).
 /// Desktop: %APPDATA%/Ludex/ ou ~/.local/share/Ludex/ via dirs::data_dir.
 fn ludex_base_dir() -> Option<PathBuf> {
     #[cfg(target_os = "android")]
     {
-        let p = PathBuf::from("/storage/emulated/0/Ludex");
-        std::fs::create_dir_all(&p).ok()?;
-        return Some(p);
+        let handle = APP_HANDLE.get()?;
+        let base = handle.path().app_data_dir().ok()?;
+        std::fs::create_dir_all(&base).ok()?;
+        return Some(base);
     }
     #[cfg(not(target_os = "android"))]
     {
