@@ -66,6 +66,32 @@ async function pickImageFile() {
 
 const MODAL_EXIT_MS = 220;
 
+// Detecta se rodando em Android (APK) — usado pra desativar features desktop-only
+// (license gate, OSK auto-open, etc) e ativar layout portrait.
+const IS_ANDROID = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent || "");
+const IS_MOBILE = IS_ANDROID || (typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent || ""));
+
+// Categorias pros sistemas — agrupa por fabricante/familia.
+// Cada sistema vai em UMA categoria. Switch + handhelds Nintendo continuam em Nintendo.
+const SYSTEM_CATEGORIES = [
+  { id: "all",       name: "TODOS",       icon: "🎮", systems: null /* = mostra tudo */ },
+  { id: "nintendo",  name: "NINTENDO",    icon: "N",  systems: ["switch","wiiu","3ds","wii","gc","n64","gba","ds","gb","gbc","snes","nes","vb"] },
+  { id: "sony",      name: "SONY",        icon: "PS", systems: ["ps3","ps4","ps2","ps1","psp","vita"] },
+  { id: "sega",      name: "SEGA",        icon: "S",  systems: ["dreamcast","saturn","md","sms","gg","segacd"] },
+  { id: "microsoft", name: "MICROSOFT",   icon: "X",  systems: ["xbox","xbox360"] },
+  { id: "atari",     name: "ATARI",       icon: "A",  systems: ["a2600","lynx","jaguar"] },
+  { id: "arcade",    name: "ARCADE",      icon: "★",  systems: ["arcade"] },
+  { id: "handheld",  name: "PORTATEIS",   icon: "H",  systems: ["ws","ngpc"] },
+  { id: "outros",    name: "OUTROS",      icon: "+",  systems: ["tg16","threedo","msx","c64","zx","amiga","retro"] },
+];
+
+function systemMatchesCategory(systemId, categoryId) {
+  if (categoryId === "all") return true;
+  const cat = SYSTEM_CATEGORIES.find(c => c.id === categoryId);
+  if (!cat || !cat.systems) return true;
+  return cat.systems.includes(systemId);
+}
+
 const THEMES = [
   {
     id: "switch-dark",
@@ -790,33 +816,36 @@ function SearchOverlay({ systems, onPick, onClose, closing, modalGamepadRef }) {
           <span className="pb-search-count">{trimmed ? `${results.length}` : ""}</span>
         </div>
 
-        <div className={`pb-vk ${zone === "keyboard" ? "focused" : ""}`}>
-          {VK_ROWS.map((row, r) => (
-            <div key={r} className="pb-vk-row">
-              {row.map((c, ci) => (
+        {/* OSK escondido em Android (user usa teclado nativo) e em desktop sem gamepad */}
+        {!IS_ANDROID && (
+          <div className={`pb-vk ${zone === "keyboard" ? "focused" : ""}`}>
+            {VK_ROWS.map((row, r) => (
+              <div key={r} className="pb-vk-row">
+                {row.map((c, ci) => (
+                  <button
+                    key={ci}
+                    className={`pb-vk-key ${zone === "keyboard" && kbRow === r && kbCol === ci ? "focused" : ""}`}
+                    onClick={() => { setZone("keyboard"); setKbRow(r); setKbCol(ci); appendChar(c); }}
+                  >{c === " " ? "␣" : c}</button>
+                ))}
+              </div>
+            ))}
+            <div className="pb-vk-row pb-vk-actions">
+              {VK_ACTIONS.map((a, ai) => (
                 <button
-                  key={ci}
-                  className={`pb-vk-key ${zone === "keyboard" && kbRow === r && kbCol === ci ? "focused" : ""}`}
-                  onClick={() => { setZone("keyboard"); setKbRow(r); setKbCol(ci); appendChar(c); }}
-                >{c === " " ? "␣" : c}</button>
+                  key={ai}
+                  className={`pb-vk-key pb-vk-action ${zone === "keyboard" && kbRow === 4 && kbCol === ai ? "focused" : ""}`}
+                  onClick={() => {
+                    setZone("keyboard"); setKbRow(4); setKbCol(ai);
+                    if (a === "⌫") backspace();
+                    else if (a === "CLEAR") clearAll();
+                    else if (a === "BUSCAR" && results[0]) onPick(results[0]);
+                  }}
+                >{a}</button>
               ))}
             </div>
-          ))}
-          <div className="pb-vk-row pb-vk-actions">
-            {VK_ACTIONS.map((a, ai) => (
-              <button
-                key={ai}
-                className={`pb-vk-key pb-vk-action ${zone === "keyboard" && kbRow === 4 && kbCol === ai ? "focused" : ""}`}
-                onClick={() => {
-                  setZone("keyboard"); setKbRow(4); setKbCol(ai);
-                  if (a === "⌫") backspace();
-                  else if (a === "CLEAR") clearAll();
-                  else if (a === "BUSCAR" && results[0]) onPick(results[0]);
-                }}
-              >{a}</button>
-            ))}
           </div>
-        </div>
+        )}
 
         <div className={`pb-search-results ${zone === "results" ? "focused" : ""}`}>
           {results.map(({ system, game }, i) => (
@@ -3486,6 +3515,7 @@ export default function LudexLauncher() {
   const [loading, setLoading] = useState(true);
   const [scanError, setScanError] = useState(null);
   const [selectedSystemIdx, setSelectedSystemIdx] = useState(0);
+  const [selectedCategoryId, setSelectedCategoryId] = useState("all");
   // focusZone: "games" (default, navega jogos) | "systems" (navega barra de sistemas)
   // D-pad DOWN em games -> systems. D-pad UP em systems -> games. A em systems -> entra (volta pra games).
   const [focusZone, setFocusZone] = useState("games");
@@ -3660,10 +3690,11 @@ export default function LudexLauncher() {
     };
   }, [favoriteSet, systems]);
 
-  const displayedSystems = useMemo(
-    () => (favoritesSystem ? [favoritesSystem, ...systems] : systems),
-    [favoritesSystem, systems]
-  );
+  const displayedSystems = useMemo(() => {
+    const all = favoritesSystem ? [favoritesSystem, ...systems] : systems;
+    // Favoritos sempre visivel, mesmo quando filtrando por categoria
+    return all.filter(s => s.id === "_favorites" || systemMatchesCategory(s.id, selectedCategoryId));
+  }, [favoritesSystem, systems, selectedCategoryId]);
 
   const selected = displayedSystems[selectedSystemIdx];
 
@@ -3751,7 +3782,13 @@ export default function LudexLauncher() {
   // mostrar a home brevemente. Se license existe local, tenta re-validar online;
   // se valido (ou cache no grace period), libera. Se nao, mostra LicenseGate.
   // Em build de desenvolvimento (PLACEHOLDER token), pula gate (libera tudo).
+  // Em Android (APK): pula license gate por enquanto (Paulo, 2026-05-17).
   useEffect(() => {
+    if (IS_ANDROID) {
+      console.info("License gate desativado (Android APK)");
+      setLicenseStatus(true);
+      return;
+    }
     (async () => {
       try {
         const localInfo = await invoke("license_get_local_info");
@@ -3877,6 +3914,8 @@ export default function LudexLauncher() {
   }, []);
 
   useEffect(() => { setSelectedGameIdx(0); }, [selectedSystemIdx, sortMode]);
+  // Quando trocar categoria, volta pro primeiro sistema (evita idx fora de range)
+  useEffect(() => { setSelectedSystemIdx(0); }, [selectedCategoryId]);
 
   useEffect(() => {
     if (activeCardRef.current) {
@@ -5197,6 +5236,22 @@ export default function LudexLauncher() {
           <div className={`pb-toast pb-toast-${launchMsg.kind}`}>{launchMsg.text}</div>
         )}
       </main>
+
+      <nav className="pb-categories">
+        <div className="pb-categories-list">
+          {SYSTEM_CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              className={`pb-category ${selectedCategoryId === cat.id ? "active" : ""}`}
+              onClick={() => { sfx.switchSys(); setSelectedCategoryId(cat.id); }}
+              title={cat.name}
+            >
+              <span className="pb-category-icon">{cat.icon}</span>
+              <span className="pb-category-name">{cat.name}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
 
       <nav className={`pb-systems ${focusZone === "systems" ? "focused" : ""}`}>
         <div className="pb-systems-list" data-tour="systems">

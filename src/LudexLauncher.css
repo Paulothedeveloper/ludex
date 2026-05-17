@@ -3178,11 +3178,79 @@
   letter-spacing: 0.06em;
 }
 
+/* ---------- Category tabs (acima da bottom bar) ---------- */
+.pb-categories {
+  display: flex;
+  justify-content: center;
+  padding: 6px 24px 0;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+}
+.pb-categories-list {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px;
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: none;
+}
+.pb-categories-list::-webkit-scrollbar { display: none; }
+.pb-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.pb-category:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+}
+.pb-category.active {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+.pb-category-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+}
+.pb-category.active .pb-category-icon {
+  background: rgba(255, 255, 255, 0.2);
+}
+.pb-category-name {
+  font-size: 11px;
+}
+
 /* ---------- Bottom bar Switch 2 (cards quadrados coloridos) ---------- */
 .pb-systems {
   display: flex;
   justify-content: center;
-  padding: 14px 24px 24px;
+  padding: 8px 24px 18px;
   flex-shrink: 0;
 }
 .pb-systems-list {
@@ -5485,4 +5553,134 @@
   background: linear-gradient(135deg, rgba(124, 58, 237, 0.55), rgba(236, 72, 153, 0.45));
   box-shadow: 0 0 0 2px rgba(196, 181, 253, 0.7), 0 6px 20px rgba(124, 58, 237, 0.45);
   transform: scale(1.06);
+}
+
+/* =================================================================
+ * MOBILE / PORTRAIT layout (Android APK + janelas estreitas desktop)
+ * Adapta UI horizontal pra layout 9:16
+ * ================================================================= */
+@media (max-aspect-ratio: 4/5), (max-width: 600px) {
+  /* Top bar: empilha menos itens, reduz altura */
+  .pb-top {
+    padding: 6px 10px;
+    flex-wrap: wrap;
+    min-height: 44px;
+  }
+  .pb-top-actions {
+    gap: 4px;
+  }
+  .pb-icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Game grid: 2 colunas em vez de 5-6 */
+  .pb-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px;
+    padding: 10px;
+  }
+  .pb-card {
+    aspect-ratio: 3 / 4;
+  }
+
+  /* Categories: scroll horizontal mais compacto */
+  .pb-categories {
+    padding: 4px 8px 0;
+  }
+  .pb-category {
+    padding: 4px 10px;
+  }
+  .pb-category-name {
+    display: none;  /* só mostra ícone em portrait */
+  }
+  .pb-category-icon {
+    width: 22px;
+    height: 22px;
+    font-size: 13px;
+  }
+
+  /* Systems bar: scroll horizontal (era center, agora left) */
+  .pb-systems {
+    padding: 6px 8px 12px;
+    justify-content: flex-start;
+  }
+  .pb-systems-list {
+    overflow-x: auto;
+    max-width: 100%;
+    scrollbar-width: none;
+  }
+  .pb-systems-list::-webkit-scrollbar { display: none; }
+  .pb-sys {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+  }
+
+  /* Hints bar do controle: esconde em mobile (não usa controle por default) */
+  .pb-hints {
+    display: none;
+  }
+
+  /* Preview popup vira bottom sheet */
+  .pb-preview-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .pb-preview {
+    max-width: 100%;
+    max-height: 80vh;
+    border-radius: 16px 16px 0 0;
+    animation: pb-bottom-sheet-in 0.3s cubic-bezier(0.2, 0.85, 0.3, 1) both;
+  }
+  .pb-preview.closing {
+    animation: pb-bottom-sheet-out 0.22s cubic-bezier(0.4, 0, 1, 1) both;
+  }
+  @keyframes pb-bottom-sheet-in {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+  @keyframes pb-bottom-sheet-out {
+    from { transform: translateY(0); }
+    to   { transform: translateY(100%); }
+  }
+  /* Preview body: cover em cima (não ao lado) */
+  .pb-preview-body {
+    grid-template-columns: 1fr;
+    margin-top: -32px;
+  }
+  .pb-preview-cover-wrap {
+    width: 100px;
+    height: 134px;
+    margin: 0 auto;
+  }
+  .pb-preview-info {
+    padding-top: 4px;
+    text-align: center;
+  }
+  .pb-preview-tag, .pb-preview-meta, .pb-preview-genres {
+    justify-content: center;
+  }
+
+  /* Detail panel (tela cheia funciona ok, só ajusta padding) */
+  .pb-detail-stage {
+    grid-template-columns: 1fr;
+    padding: 16px;
+    gap: 16px;
+  }
+  .pb-detail-cover-wrap {
+    width: 140px;
+    margin: 0 auto;
+  }
+
+  /* Settings / modais ocupam tela toda */
+  .pb-modal {
+    max-width: 100%;
+    max-height: 95vh;
+    border-radius: 12px 12px 0 0;
+  }
+  .pb-modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
 }
