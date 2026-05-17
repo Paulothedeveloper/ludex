@@ -251,6 +251,10 @@ fn libretro_core_for(system_id: &str) -> &'static str {
         "md"   => "genesis_plus_gx_libretro.dll",
         "n64"  => "mupen64plus_next_libretro.dll",
         "ps1"  => "swanstation_libretro.dll",
+        // migrados externo -> embedded em v0.7.1
+        "wii"  => "dolphin_libretro.dll",
+        "gc"   => "dolphin_libretro.dll",
+        "ps2"  => "pcsx2_libretro.dll",
         // novos em v0.7.0
         "dreamcast" => "flycast_libretro.dll",
         "psp"       => "ppsspp_libretro.dll",
@@ -313,9 +317,9 @@ const EMULATORS: &[EmulatorConfig] = &[
         name: "WII",
         color: "#0094d9",
         folder_name: "WII",
-        emulator_rel: "DOLPHIN\\Dolphin.exe",
+        emulator_rel: "",  // libretro embarcado (dolphin) — v0.7.1 migrou de Dolphin.exe
         extensions: &["iso", "wbfs", "rvz", "wad"],
-        launch_args: &["-b", "-e"],
+        launch_args: &[],
         igdb_platform: 5,
     },
     EmulatorConfig {
@@ -323,9 +327,9 @@ const EMULATORS: &[EmulatorConfig] = &[
         name: "GAMECUBE",
         color: "#6c4ab6",
         folder_name: "GAMECUBE",
-        emulator_rel: "DOLPHIN\\Dolphin.exe",
+        emulator_rel: "",  // libretro embarcado (dolphin) — v0.7.1 migrou de Dolphin.exe
         extensions: &["iso", "gcm", "rvz", "gcz"],
-        launch_args: &["-b", "-e"],
+        launch_args: &[],
         igdb_platform: 21,
     },
     EmulatorConfig {
@@ -333,7 +337,7 @@ const EMULATORS: &[EmulatorConfig] = &[
         name: "NINTENDO 64",
         color: "#22c55e",
         folder_name: "N64",
-        emulator_rel: "N64\\Project64.exe",
+        emulator_rel: "",  // libretro embarcado (mupen64plus_next) — v0.7.1 migrou de Project64.exe
         extensions: &["n64", "z64", "v64", "rom"],
         launch_args: &[],
         igdb_platform: 4,
@@ -343,9 +347,9 @@ const EMULATORS: &[EmulatorConfig] = &[
         name: "GAME BOY ADVANCE",
         color: "#a855f7",
         folder_name: "GBA",
-        emulator_rel: "GBA\\mGBA.exe",
+        emulator_rel: "",  // libretro embarcado (mgba) — v0.7.1 migrou de mGBA.exe
         extensions: &["gba", "zip"],
-        launch_args: &["-f"],
+        launch_args: &[],
         igdb_platform: 24,
     },
     EmulatorConfig {
@@ -373,9 +377,9 @@ const EMULATORS: &[EmulatorConfig] = &[
         name: "PLAYSTATION 2",
         color: "#1d4ed8",
         folder_name: "PS2",
-        emulator_rel: "PCSX2\\pcsx2-qt.exe",
+        emulator_rel: "",  // libretro embarcado (pcsx2/lrps2) — v0.7.1 migrou de pcsx2-qt.exe
         extensions: &["iso", "chd", "cue", "bin"],
-        launch_args: &["-fullscreen", "-batch", "--"],
+        launch_args: &[],
         igdb_platform: 8,
     },
     EmulatorConfig {
@@ -383,9 +387,9 @@ const EMULATORS: &[EmulatorConfig] = &[
         name: "PLAYSTATION",
         color: "#7c3aed",
         folder_name: "PS1",
-        emulator_rel: "DUCKSTATION\\duckstation-qt-x64-ReleaseLTCG.exe",
+        emulator_rel: "",  // libretro embarcado (swanstation — fork do duckstation) — v0.7.1 migrou de DuckStation.exe
         extensions: &["cue", "bin", "chd", "pbp", "iso"],
-        launch_args: &["-fullscreen"],
+        launch_args: &[],
         igdb_platform: 7,
     },
     EmulatorConfig {
