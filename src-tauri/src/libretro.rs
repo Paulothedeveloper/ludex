@@ -363,7 +363,8 @@ fn libretro_defaults() -> &'static std::collections::HashMap<&'static str, CStri
 }
 
 // v0.8.27: log callback — recebe printf-style do core.
-// v0.8.28: usa log::warn pra aparecer no Ludex.log (Windows GUI suprime stderr).
+// v0.8.28: usa log::warn pra aparecer no Ludex.log.
+// (variadic vsnprintf precisa nightly — fica so com fmt string crua por enquanto)
 extern "C" fn cb_log(level: c_uint, fmt: *const c_char) {
     if fmt.is_null() { return; }
     let msg = unsafe { CStr::from_ptr(fmt).to_string_lossy() };
@@ -487,6 +488,46 @@ pub struct LibretroCore {
     lib: Library,
 }
 
+/// v0.8.31: cria hardlink/symlink em path simples se o original tem chars
+/// que cores libretro lidam mal (espaco, parenteses, unicode). Retorna o path
+/// que deve ser passado pro core. Se falhar criar link, retorna o original.
+pub fn make_safe_link(rom_path: &Path) -> std::path::PathBuf {
+    let name = rom_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    // Se ja eh "safe" (so ASCII e sem espaco/parenteses), nao mexe
+    let is_safe = name.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-');
+    if is_safe { return rom_path.to_path_buf(); }
+    // Cria dir <data>/Ludex/temp/
+    let temp_dir = dirs::data_dir()
+        .map(|d| d.join("Ludex").join("temp"))
+        .unwrap_or_else(|| std::env::temp_dir().join("ludex"));
+    if std::fs::create_dir_all(&temp_dir).is_err() {
+        return rom_path.to_path_buf();
+    }
+    let ext = rom_path.extension().and_then(|e| e.to_str()).unwrap_or("iso");
+    let link_path = temp_dir.join(format!("rom.{}", ext));
+    // Remove anterior se existe (pra link novo apontar pro ROM atual)
+    let _ = std::fs::remove_file(&link_path);
+    // 1) Tenta hardlink (mesmo volume, instantaneo)
+    if std::fs::hard_link(rom_path, &link_path).is_ok() {
+        return link_path;
+    }
+    // 2) Tenta symlink (Windows precisa Dev Mode)
+    #[cfg(windows)]
+    {
+        if std::os::windows::fs::symlink_file(rom_path, &link_path).is_ok() {
+            return link_path;
+        }
+    }
+    #[cfg(unix)]
+    {
+        if std::os::unix::fs::symlink(rom_path, &link_path).is_ok() {
+            return link_path;
+        }
+    }
+    // 3) Nada funcionou — usa path original
+    rom_path.to_path_buf()
+}
+
 impl LibretroCore {
     pub unsafe fn load(dll_path: &Path) -> Result<Self, String> {
         let lib = Library::new(dll_path).map_err(|e| format!("load .dll: {}", e))?;
@@ -535,7 +576,14 @@ impl LibretroCore {
 
         // v0.8.27: respeitar need_fullpath (PCSX2/Flycast/Dolphin/etc precisam
         // do path no disco direto — load em memoria de ISO 4GB faz segfault).
-        let path_c = CString::new(rom_path.to_string_lossy().as_ref()).map_err(|e| e.to_string())?;
+        // v0.8.31: hardlink em path simples (sem espacos/parenteses/unicode)
+        //   PCSX2 libretro tem problemas com paths complexos. Cria hardlink em
+        //   <data>/Ludex/temp/rom.<ext> e usa esse path. Hardlink eh instantaneo
+        //   no mesmo volume + zero espaco extra. Symlink fallback (precisa Dev
+        //   Mode em Windows). Cópia ultima opcao.
+        let actual_path = make_safe_link(rom_path);
+        let path_c = CString::new(actual_path.to_string_lossy().as_ref()).map_err(|e| e.to_string())?;
+        log::info!("[libretro] using path={} (original={})", actual_path.display(), rom_path.display());
         let sys_info_fn: Symbol<SysFn> = self.lib.get(b"retro_get_system_info").map_err(|e| e.to_string())?;
         let mut sys_info = RetroSystemInfo {
             library_name: std::ptr::null(),
