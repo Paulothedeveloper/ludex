@@ -11,6 +11,7 @@
 -keep class gg.ludex.app.Logger { *; }
 -keep class gg.ludex.app.MainActivity { *; }
 -keep class gg.ludex.app.WryLifecycleObserver { *; }
+-keep class gg.ludex.app.Permissions { *; }
 
 # Tauri plugins manager
 -keep class gg.ludex.app.TauriActivity { *; }

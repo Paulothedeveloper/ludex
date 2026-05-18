@@ -1,6 +1,6 @@
 [package]
 name = "ludex"
-version = "0.8.11"
+version = "0.8.13"
 description = "Ludex - Sua biblioteca retro em um lugar so"
 authors = ["Paulo Batista"]
 license = ""
@@ -43,3 +43,8 @@ tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+
+# Android-only: JNI pra chamar Kotlin Permissions (MANAGE_EXTERNAL_STORAGE).
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk-context = "0.1"

@@ -1147,10 +1147,19 @@ fn scan_system(roms_root: &Path, emulators_root: &Path, cfg: &EmulatorConfig) ->
     };
     let emulator_exists = emulator_full.is_file();
 
+    // Decide diretorio de scan:
+    // - Se roms_root/folder_name/ existe (organizacao classica desktop): scan nele
+    // - Senao, faz scan direto em roms_root (caso tipico Android: Download/, etc)
+    let (scan_dir, scan_depth) = if folder_exists {
+        (folder.clone(), 2)
+    } else {
+        (roms_root.to_path_buf(), 3)
+    };
+
     let mut games: Vec<Game> = Vec::new();
-    if folder_exists {
-        for entry in WalkDir::new(&folder)
-            .max_depth(2)
+    if scan_dir.is_dir() {
+        for entry in WalkDir::new(&scan_dir)
+            .max_depth(scan_depth)
             .into_iter()
             .filter_map(|e| e.ok())
         {
@@ -1182,15 +1191,17 @@ fn scan_system(roms_root: &Path, emulators_root: &Path, cfg: &EmulatorConfig) ->
                 discs: None,
             });
         }
-        // Casos especiais: pastas extracted
-        if cfg.id == "wiiu" {
-            scan_extracted_wiiu(&folder, &mut games);
-        }
-        if cfg.id == "ps3" {
-            scan_extracted_ps3(&folder, &mut games);
-        }
-        if cfg.id == "ps4" {
-            scan_extracted_ps4(&folder, &mut games);
+        // Casos especiais: pastas extracted (so quando folder organizado existe)
+        if folder_exists {
+            if cfg.id == "wiiu" {
+                scan_extracted_wiiu(&folder, &mut games);
+            }
+            if cfg.id == "ps3" {
+                scan_extracted_ps3(&folder, &mut games);
+            }
+            if cfg.id == "ps4" {
+                scan_extracted_ps4(&folder, &mut games);
+            }
         }
         // Multi-disc grouping pra sistemas de disco optico
         if matches!(cfg.id, "ps1" | "ps2" | "gc") {
@@ -2662,6 +2673,8 @@ fn app_log_dir() -> Option<PathBuf> {
 
 #[tauri::command]
 fn frontend_log(level: String, message: String) {
+    // v0.8.12: tambem escreve em stderr (logcat RustStdoutStderr) pra debug Android
+    eprintln!("[FRONTEND/{}] {}", level, message);
     match level.as_str() {
         "error" => log::error!(target: "frontend", "{}", message),
         "warn"  => log::warn!(target: "frontend", "{}", message),
@@ -2676,6 +2689,65 @@ fn get_app_log_dir() -> Result<String, String> {
         .map(|p| p.to_string_lossy().to_string())
         .ok_or("data dir indisponivel".into())
 }
+
+// ============================================================
+// === ANDROID: MANAGE_EXTERNAL_STORAGE permission ============
+// ============================================================
+// v0.8.13: chama Kotlin gg.ludex.app.Permissions via JNI.
+
+#[cfg(target_os = "android")]
+fn jni_call_permissions<F, R>(method: &str, sig: &str, args_fn: F) -> Result<R, String>
+where
+    F: for<'a> FnOnce(&mut jni::JNIEnv<'a>) -> Result<(Vec<jni::objects::JValueOwned<'a>>, R), String>,
+{
+    use jni::objects::JValue;
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.map_err(|e| e.to_string())?;
+    let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+    let (args, ret) = args_fn(&mut env)?;
+    let jargs: Vec<JValue> = args.iter().map(|v| v.borrow()).collect();
+    env.call_static_method("gg/ludex/app/Permissions", method, sig, &jargs)
+        .map_err(|e| format!("JNI {}: {}", method, e))?;
+    Ok(ret)
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn android_has_all_files_access() -> bool {
+    let ctx = ndk_context::android_context();
+    let Ok(vm) = (unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }) else { return false; };
+    let Ok(mut env) = vm.attach_current_thread() else { return false; };
+    env.call_static_method("gg/ludex/app/Permissions", "hasAllFilesAccess", "()Z", &[])
+        .ok()
+        .and_then(|v| v.z().ok())
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn android_open_all_files_settings() -> Result<(), String> {
+    use jni::objects::JObject;
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.map_err(|e| e.to_string())?;
+    let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+    let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+    env.call_static_method(
+        "gg/ludex/app/Permissions",
+        "openAllFilesAccessSettings",
+        "(Landroid/app/Activity;)V",
+        &[(&activity).into()],
+    ).map_err(|e| format!("JNI openSettings: {}", e))?;
+    Ok(())
+}
+
+// Stubs pra desktop: sempre tem acesso, abrir settings nao faz nada
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+fn android_has_all_files_access() -> bool { true }
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+fn android_open_all_files_settings() -> Result<(), String> { Ok(()) }
 
 #[tauri::command]
 fn clear_app_logs() -> Result<u32, String> {
@@ -4364,6 +4436,8 @@ pub fn run() {
             frontend_log,
             get_app_log_dir,
             clear_app_logs,
+            android_has_all_files_access,
+            android_open_all_files_settings,
             load_config,
             save_config,
             reset_config,

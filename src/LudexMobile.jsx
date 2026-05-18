@@ -246,48 +246,67 @@ export default function LudexMobile() {
 
   // ============ PICKER DE PASTA ROMS ============
   // tauri-plugin-dialog NAO suporta directory picker em Android.
-  // Em Android: abre modal com lista de pastas comuns + input custom.
-  // Em Desktop: usa openDialog nativo.
+  // LudexMobile so roda em Android (App.jsx faz routing) -> sempre modal custom.
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
-  const pickRomsFolder = useCallback(async () => {
-    // Desktop tenta o picker nativo primeiro
-    try {
-      const selected = await openDialog({ directory: true, multiple: false });
-      if (selected && typeof selected === "string") {
-        await invoke("set_paths_config", { emulatorsRoot: null, romsRoot: selected });
-        const sys = await invoke("scan_roms", { romsRoot: selected });
-        setSystems((sys || []).filter((s) => ANDROID_SUPPORTED.has(s.id)));
-        return;
-      }
-    } catch (e) {
-      // Android: openDialog falha -> abre modal com lista de pastas comuns
-      if (String(e).includes("not implemented") || String(e).includes("Folder picker")) {
-        setFolderPickerOpen(true);
-        return;
-      }
-      console.error("pickRomsFolder", e);
-      alert(`Falha: ${e}`);
-    }
+  const dbg = useCallback((msg) => {
+    // v0.8.12 debug: WebView release nao loga console no logcat,
+    // entao usa frontend_log (Tauri tauri_plugin_log -> LogDir).
+    try { invoke("frontend_log", { level: "info", message: `[picker] ${msg}` }); } catch {}
+    try { console.log(`[Ludex] ${msg}`); } catch {}
   }, []);
 
+  const pickRomsFolder = useCallback(() => {
+    dbg("pickRomsFolder() chamado");
+    setFolderPickerOpen(true);
+  }, [dbg]);
+
   const setRomsFolder = useCallback(async (path) => {
-    if (!path) return;
+    dbg(`setRomsFolder path=${path}`);
+    if (!path) {
+      dbg("setRomsFolder: path vazio, ignorando");
+      return;
+    }
     try {
       await invoke("set_paths_config", { emulatorsRoot: null, romsRoot: path });
+      dbg("set_paths_config OK");
       const sys = await invoke("scan_roms", { romsRoot: path });
+      dbg(`scan_roms retornou ${sys?.length || 0} sistemas`);
       const filtered = (sys || []).filter((s) => ANDROID_SUPPORTED.has(s.id));
+      const totalGames = filtered.reduce((acc, s) => acc + (s.games?.length || 0), 0);
+      dbg(`filtrado=${filtered.length} sistemas totalGames=${totalGames}`);
       setSystems(filtered);
       setFolderPickerOpen(false);
-      // Refresh config local
       try {
         const c = await invoke("load_config");
         if (c) setConfig(c);
       } catch {}
+      if (totalGames === 0) {
+        // Checa permissao de acesso a todos os arquivos
+        let hasAccess = true;
+        try { hasAccess = await invoke("android_has_all_files_access"); } catch {}
+        if (!hasAccess) {
+          const ok = window.confirm(
+            "O Ludex precisa de permissao para acessar seus arquivos.\n\n" +
+            "Vou abrir Configuracoes -- ative 'Permitir gerenciar todos os arquivos' e volte aqui.\n\n" +
+            "Abrir agora?"
+          );
+          if (ok) {
+            try { await invoke("android_open_all_files_settings"); } catch (err) {
+              alert("Nao consegui abrir Configuracoes: " + err);
+            }
+          }
+        } else {
+          alert(
+            "Nenhum jogo encontrado em:\n" + path + "\n\n" +
+            "ROMs supported: .nes .smc .sfc .gba .gb .gbc .iso .bin .cue .z64 .n64 .md .smd .gen .sms .gg .pce .ws .ngc .lnx .a26 .j64 .zip .7z e outras."
+          );
+        }
+      }
     } catch (e) {
-      console.error("setRomsFolder", e);
+      dbg(`setRomsFolder falhou: ${e}`);
       alert(`Falha: ${e}`);
     }
-  }, []);
+  }, [dbg]);
 
   // ============ DEMO EXPIRED (bloqueia) ============
   if (androidDemo?.expired && !androidDemo?.is_admin_unlocked) {
