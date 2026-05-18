@@ -89,8 +89,8 @@ function SysGlyph({ id }) {
 const ANDROID_SUPPORTED = new Set([
   // Nintendo (embedded via libretro ARM)
   "snes", "nes", "gb", "gbc", "n64", "gba", "ds", "wii", "gc", "vb",
-  // Sony — PS1 e PSP embedded via libretro ARM; PS2 via AetherSX2 Intent (app externo)
-  "ps1", "psp", "ps2",
+  // Sony — so PS1 e PSP tem core libretro ARM. PS2/PS3/PS4/Vita: nao suportado.
+  "ps1", "psp",
   // Sega
   "dreamcast", "saturn", "md", "sms", "gg", "segacd",
   // Atari
@@ -276,48 +276,18 @@ export default function LudexMobile() {
   }, [systems]);
 
   // ============ LANCAR JOGO ============
-  // Em Android: libretro embedded OU fallback pra app externo via Intent (PS2 -> AetherSX2).
+  // Android: so libretro embedded. Sistemas sem core ARM nao aparecem na lista
+  // (filtrados por ANDROID_SUPPORTED). PS2/PS3/PS4/Vita/Xbox/Switch: nao suportados.
   const [playingGame, setPlayingGame] = useState(null);
-  // Mapa system_id -> [packageName, displayName]: emuladores externos Android
-  const EXTERNAL_ANDROID_EMUS = useMemo(() => ({
-    ps2: { pkg: "xyz.aethersx2.android", name: "AetherSX2" },
-    // futuro: gc/wii -> dolphin; n64 -> mupen; etc
-  }), []);
-  const launchGame = useCallback(async (system, game) => {
-    // Jingle do sistema antes de carregar — feedback que o jogo tá abrindo
+  const launchGame = useCallback((system, game) => {
+    if (!system.libretro_core) {
+      alert(`Sistema "${system.name}" nao tem core libretro embedded pra Android.`);
+      return;
+    }
     playPlatformJingle(system.id);
     haptic(20);
-    // Sistema tem core libretro embedded? Usa MobileEmulatorView (in-app)
-    if (system.libretro_core) {
-      setPlayingGame({ system, game });
-      return;
-    }
-    // Sem core embedded -> tenta app externo Android
-    const ext = EXTERNAL_ANDROID_EMUS[system.id];
-    if (!ext) {
-      alert(`Sistema "${system.name}" nao suportado em mobile.`);
-      return;
-    }
-    try {
-      const installed = await invoke("android_is_package_installed", { packageName: ext.pkg });
-      if (!installed) {
-        const wants = window.confirm(
-          `${system.name} usa ${ext.name} (app separado) que voce nao tem instalado.\n\n` +
-          `Quer abrir a Play Store pra instalar?`
-        );
-        if (wants) {
-          try { await invoke("android_open_play_store", { packageName: ext.pkg }); } catch {}
-        }
-        return;
-      }
-      const ok = await invoke("android_launch_external_emu", { packageName: ext.pkg, romPath: game.path });
-      if (!ok) {
-        alert(`Nao consegui abrir ${ext.name} com este jogo. Abre o ${ext.name} manualmente e seleciona a ROM.`);
-      }
-    } catch (e) {
-      alert(`Falha: ${e}`);
-    }
-  }, [EXTERNAL_ANDROID_EMUS]);
+    setPlayingGame({ system, game });
+  }, []);
 
   // ============ PICKER DE PASTA ROMS ============
   // tauri-plugin-dialog NAO suporta directory picker em Android.
@@ -332,6 +302,12 @@ export default function LudexMobile() {
 
   const pickRomsFolder = useCallback(() => {
     dbg("pickRomsFolder() chamado");
+    // Fecha overlays/sub-telas pra o modal ficar visivel
+    // (modal e renderizado so na tela principal — early return de openSystem/openGame
+    //  fazia o modal nao aparecer ate user voltar, causando o "trava o celular")
+    setOpenSystem(null);
+    setOpenGame(null);
+    setPlayingGame(null);
     setFolderPickerOpen(true);
   }, [dbg]);
 
@@ -916,27 +892,13 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
       </section>
 
       <section className="lmx-settings-card">
-        <div className="lmx-settings-label">PS2 (AetherSX2)</div>
-        <p className="lmx-settings-hint">
-          PS2 mobile usa AetherSX2 (app externo gratuito). Se nao tiver instalado, ao
-          tentar abrir uma ROM PS2 o Ludex sugere instalar pela Play Store.
-        </p>
-        <button className="lmx-settings-btn ghost" onClick={async () => {
-          try { await invoke("android_open_play_store", { packageName: "xyz.aethersx2.android" }); }
-          catch (e) { alert("Falha: " + e); }
-        }}>
-          Instalar AetherSX2
-        </button>
-      </section>
-
-      <section className="lmx-settings-card">
         <div className="lmx-settings-label">Sons</div>
         <SoundToggle />
       </section>
 
       <section className="lmx-settings-card">
         <div className="lmx-settings-label">Sobre</div>
-        <div className="lmx-settings-value">Ludex Android v0.8.18</div>
+        <div className="lmx-settings-value">Ludex Android v0.8.19</div>
         <p className="lmx-settings-hint">
           A versao Windows tem auto-update, gamepad nativo, todos os sistemas embedded + Switch/Wii U/PS3/Xbox 360/PS Vita via emulador externo.
         </p>
