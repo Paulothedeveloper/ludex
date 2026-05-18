@@ -1449,3 +1449,113 @@
   font-size: 11px;
   min-width: 64px;
 }
+
+/* ===== ANIMACOES (mobile-tuned: easeOutCubic 220-320ms) ===== */
+@keyframes lmx-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes lmx-slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes lmx-slide-from-right {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes lmx-slide-from-bottom {
+  from { opacity: 0; transform: translateY(100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes lmx-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes lmx-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+/* Conteudo das tabs: fade + slight slide ao trocar */
+.lmx-home, .lmx-systems, .lmx-search, .lmx-settings {
+  animation: lmx-slide-up 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* SystemScreen abre vindo da direita (push) */
+.lmx-systemview {
+  animation: lmx-slide-from-right 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* GameDetail abre vindo de baixo (bottom-sheet style) */
+.lmx-detail {
+  animation: lmx-slide-from-bottom 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Emulator boot: fade preto + scale do canvas */
+.lmx-emu-root {
+  animation: lmx-fade-in 260ms ease-out;
+}
+.lmx-emu-canvas-wrap .lmx-emu-canvas {
+  animation: lmx-scale-in 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lmx-emu-loading {
+  animation: lmx-pulse 1.2s ease-in-out infinite;
+}
+
+/* Cards entram com stagger leve (parent define delay via nth-child) */
+.lmx-carousel > .lmx-card {
+  animation: lmx-slide-up 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.lmx-carousel > .lmx-card:nth-child(1) { animation-delay: 0ms; }
+.lmx-carousel > .lmx-card:nth-child(2) { animation-delay: 35ms; }
+.lmx-carousel > .lmx-card:nth-child(3) { animation-delay: 70ms; }
+.lmx-carousel > .lmx-card:nth-child(4) { animation-delay: 105ms; }
+.lmx-carousel > .lmx-card:nth-child(5) { animation-delay: 140ms; }
+.lmx-carousel > .lmx-card:nth-child(6) { animation-delay: 175ms; }
+.lmx-carousel > .lmx-card:nth-child(7) { animation-delay: 210ms; }
+.lmx-carousel > .lmx-card:nth-child(8) { animation-delay: 245ms; }
+
+/* Toast (state save/load msg) anima vindo de cima */
+.lmx-emu-toast {
+  animation: lmx-slide-up 220ms ease-out;
+}
+
+/* Menu in-game scale + fade */
+.lmx-emu-menu {
+  animation: lmx-scale-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lmx-emu-menu-overlay {
+  animation: lmx-fade-in 180ms ease-out;
+}
+
+/* Folder picker modal (bottom sheet style) */
+.lmx-folder-picker {
+  animation: lmx-slide-from-bottom 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Tab btn pulse no active (subtle bounce ao trocar) */
+.lmx-tab.active .lmx-tab-icon {
+  animation: lmx-tab-bounce 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes lmx-tab-bounce {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+/* Edit banner do emulador slide-down */
+.lmx-emu-edit-banner {
+  animation: lmx-slide-up 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Respeito a prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .lmx-home, .lmx-systems, .lmx-search, .lmx-settings,
+  .lmx-systemview, .lmx-detail, .lmx-emu-root,
+  .lmx-emu-canvas-wrap .lmx-emu-canvas, .lmx-emu-loading,
+  .lmx-carousel > .lmx-card, .lmx-emu-toast, .lmx-emu-menu,
+  .lmx-emu-menu-overlay, .lmx-folder-picker, .lmx-tab.active .lmx-tab-icon,
+  .lmx-emu-edit-banner {
+    animation: none !important;
+  }
+}

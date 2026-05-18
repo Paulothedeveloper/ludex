@@ -16,6 +16,7 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { sfx, playPlatformJingle, unlockAudio, haptic, setMuted as setSfxMuted, isMutedNow } from "./ludexMobileAudio";
 
 // ============================================================
 // === ICONES SVG (sem emojis, regra Paulo) ===================
@@ -204,6 +205,24 @@ export default function LudexMobile() {
     })();
   }, []);
 
+  // ============ AUDIO: unlock no primeiro toque (autoplay policy) ============
+  useEffect(() => {
+    const onFirstTouch = () => { unlockAudio(); };
+    window.addEventListener("touchstart", onFirstTouch, { passive: true, once: true });
+    window.addEventListener("click", onFirstTouch, { once: true });
+    return () => {
+      window.removeEventListener("touchstart", onFirstTouch);
+      window.removeEventListener("click", onFirstTouch);
+    };
+  }, []);
+
+  // Helper sons + haptic juntos (single source of truth pra interacao)
+  const changeTab = useCallback((newTab) => {
+    if (newTab === activeTab) return;
+    sfx.nav(); haptic(8);
+    setActiveTab(newTab);
+  }, [activeTab]);
+
   // ============ FETCH COVERS PRO SISTEMA ABERTO ============
   useEffect(() => {
     if (!openSystem) return;
@@ -265,6 +284,9 @@ export default function LudexMobile() {
     // futuro: gc/wii -> dolphin; n64 -> mupen; etc
   }), []);
   const launchGame = useCallback(async (system, game) => {
+    // Jingle do sistema antes de carregar — feedback que o jogo tá abrindo
+    playPlatformJingle(system.id);
+    haptic(20);
     // Sistema tem core libretro embedded? Usa MobileEmulatorView (in-app)
     if (system.libretro_core) {
       setPlayingGame({ system, game });
@@ -319,6 +341,7 @@ export default function LudexMobile() {
       dbg("setRomsFolder: path vazio, ignorando");
       return;
     }
+    sfx.confirm(); haptic(15);
     try {
       await invoke("set_paths_config", { emulatorsRoot: null, romsRoot: path });
       dbg("set_paths_config OK");
@@ -372,7 +395,7 @@ export default function LudexMobile() {
       <MobileEmulatorView
         system={playingGame.system}
         game={playingGame.game}
-        onClose={() => setPlayingGame(null)}
+        onClose={() => { sfx.shutdown(); haptic(30); setPlayingGame(null); }}
       />
     );
   }
@@ -384,7 +407,7 @@ export default function LudexMobile() {
         system={openGame.system}
         game={openGame.game}
         coverSrc={covers[openGame.game.path]}
-        onClose={() => setOpenGame(null)}
+        onClose={() => { sfx.back(); haptic(8); setOpenGame(null); }}
         onLaunch={() => { launchGame(openGame.system, openGame.game); setOpenGame(null); }}
       />
     );
@@ -396,8 +419,8 @@ export default function LudexMobile() {
       <SystemScreen
         system={openSystem}
         covers={covers}
-        onBack={() => setOpenSystem(null)}
-        onPickGame={(game) => setOpenGame({ system: openSystem, game })}
+        onBack={() => { sfx.back(); haptic(8); setOpenSystem(null); }}
+        onPickGame={(game) => { sfx.open(); haptic(10); setOpenGame({ system: openSystem, game }); }}
         onPickFolder={pickRomsFolder}
       />
     );
@@ -421,8 +444,8 @@ export default function LudexMobile() {
             activeProfile={activeProfile}
             androidDemo={androidDemo}
             loading={loading}
-            onPickSystem={(sys) => setOpenSystem(sys)}
-            onPickGame={(system, game) => setOpenGame({ system, game })}
+            onPickSystem={(sys) => { playPlatformJingle(sys.id); haptic(12); setOpenSystem(sys); }}
+            onPickGame={(system, game) => { sfx.open(); haptic(10); setOpenGame({ system, game }); }}
             onPickFolder={pickRomsFolder}
             hasFilesAccess={hasFilesAccess}
             onRequestAccess={requestFilesAccess}
@@ -431,7 +454,7 @@ export default function LudexMobile() {
         {activeTab === "systems" && (
           <SystemsTab
             systems={systems}
-            onPickSystem={(sys) => setOpenSystem(sys)}
+            onPickSystem={(sys) => { playPlatformJingle(sys.id); haptic(12); setOpenSystem(sys); }}
           />
         )}
         {activeTab === "search" && (
@@ -440,7 +463,7 @@ export default function LudexMobile() {
             covers={covers}
             search={search}
             setSearch={setSearch}
-            onPickGame={(system, game) => setOpenGame({ system, game })}
+            onPickGame={(system, game) => { sfx.open(); haptic(10); setOpenGame({ system, game }); }}
           />
         )}
         {activeTab === "settings" && (
@@ -464,10 +487,10 @@ export default function LudexMobile() {
 
       {/* Bottom tab bar (estilo iOS/Android nativo) */}
       <nav className="lmx-tabs">
-        <TabBtn icon={<IconHome />} label="Inicio" active={activeTab === "home"} onClick={() => setActiveTab("home")} />
-        <TabBtn icon={<IconGrid />} label="Sistemas" active={activeTab === "systems"} onClick={() => setActiveTab("systems")} />
-        <TabBtn icon={<IconSearch />} label="Buscar" active={activeTab === "search"} onClick={() => setActiveTab("search")} />
-        <TabBtn icon={<IconSettings />} label="Ajustes" active={activeTab === "settings"} onClick={() => setActiveTab("settings")} />
+        <TabBtn icon={<IconHome />} label="Inicio" active={activeTab === "home"} onClick={() => changeTab("home")} />
+        <TabBtn icon={<IconGrid />} label="Sistemas" active={activeTab === "systems"} onClick={() => changeTab("systems")} />
+        <TabBtn icon={<IconSearch />} label="Buscar" active={activeTab === "search"} onClick={() => changeTab("search")} />
+        <TabBtn icon={<IconSettings />} label="Ajustes" active={activeTab === "settings"} onClick={() => changeTab("settings")} />
       </nav>
     </div>
   );
@@ -748,6 +771,26 @@ function SearchTab({ systems, covers, search, setSearch, onPickGame }) {
 // ============================================================
 // === SETTINGS TAB ===========================================
 // ============================================================
+function SoundToggle() {
+  const [muted, setMutedState] = useState(() => isMutedNow());
+  return (
+    <>
+      <p className="lmx-settings-hint">
+        Sons curtos ao trocar de aba, abrir jogo, jingles por sistema. Som do
+        emulador (audio do jogo) e independente.
+      </p>
+      <button className="lmx-settings-btn primary" onClick={() => {
+        const next = !muted;
+        setSfxMuted(next);
+        setMutedState(next);
+        if (!next) sfx.confirm();
+      }}>
+        {muted ? "Ativar sons UI" : "Desativar sons UI"}
+      </button>
+    </>
+  );
+}
+
 function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, currentRomsRoot }) {
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [keyInput, setKeyInput] = useState("");
@@ -887,8 +930,13 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
       </section>
 
       <section className="lmx-settings-card">
+        <div className="lmx-settings-label">Sons</div>
+        <SoundToggle />
+      </section>
+
+      <section className="lmx-settings-card">
         <div className="lmx-settings-label">Sobre</div>
-        <div className="lmx-settings-value">Ludex Android v0.8.17</div>
+        <div className="lmx-settings-value">Ludex Android v0.8.18</div>
         <p className="lmx-settings-hint">
           A versao Windows tem auto-update, gamepad nativo, todos os sistemas embedded + Switch/Wii U/PS3/Xbox 360/PS Vita via emulador externo.
         </p>
