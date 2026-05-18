@@ -1167,6 +1167,12 @@ const DEFAULT_LAYOUT = SYSTEM_LAYOUTS.snes;
 // ============================================================
 function MobileEmulatorView({ system, game, onClose }) {
   const layout = SYSTEM_LAYOUTS[system.id] || DEFAULT_LAYOUT;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const mutedRef = useRef(false);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
+  const [scaleMode, setScaleMode] = useState("contain"); // contain | cover | integer
+  const [stateMsg, setStateMsg] = useState(null);
   const canvasRef = useRef(null);
   const [info, setInfo] = useState(null);
   const [error, setError] = useState(null);
@@ -1239,7 +1245,7 @@ function MobileEmulatorView({ system, game, onClose }) {
           }
           const audioBuf = await invoke("libretro_take_audio");
           const actx = audioCtxRef.current;
-          if (audioBuf && audioBuf.byteLength > 0 && actx) {
+          if (audioBuf && audioBuf.byteLength > 0 && actx && !mutedRef.current) {
             const i16 = new Int16Array(audioBuf.buffer ? audioBuf.buffer : audioBuf, audioBuf.byteOffset || 0, audioBuf.byteLength / 2);
             const frames = i16.length / 2;
             if (frames > 0) {
@@ -1286,12 +1292,77 @@ function MobileEmulatorView({ system, game, onClose }) {
     );
   }
 
+  // Save / Load state
+  const saveState = useCallback(async (slot) => {
+    try {
+      await invoke("libretro_save_state", { slot });
+      setStateMsg(`Salvo no slot ${slot}`);
+    } catch (e) { setStateMsg(`Falha ao salvar: ${e}`); }
+    setTimeout(() => setStateMsg(null), 2500);
+  }, []);
+  const loadState = useCallback(async (slot) => {
+    try {
+      await invoke("libretro_load_state", { slot });
+      setStateMsg(`Carregado slot ${slot}`);
+    } catch (e) { setStateMsg(`Falha ao carregar: ${e}`); }
+    setTimeout(() => setStateMsg(null), 2500);
+  }, []);
+
   return (
     <div className="lmx-emu-root">
       <button className="lmx-emu-back" onClick={onClose} aria-label="Voltar"><IconArrowLeft /></button>
-      <div className="lmx-emu-canvas-wrap">
+      <button className="lmx-emu-menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu">⚙</button>
+      <div className={`lmx-emu-canvas-wrap lmx-emu-scale-${scaleMode}`}>
         <canvas ref={canvasRef} className="lmx-emu-canvas" />
       </div>
+      {stateMsg && <div className="lmx-emu-toast">{stateMsg}</div>}
+      {menuOpen && (
+        <div className="lmx-emu-menu-overlay" onClick={() => setMenuOpen(false)}>
+          <div className="lmx-emu-menu" onClick={(e) => e.stopPropagation()}>
+            <h3>Opcoes</h3>
+
+            <div className="lmx-emu-menu-section">
+              <div className="lmx-emu-menu-label">Escala da tela</div>
+              <div className="lmx-emu-menu-row">
+                {[
+                  ["contain", "Encaixar"],
+                  ["cover",   "Preencher"],
+                  ["integer", "Integer (pixel-perfect)"],
+                ].map(([k, lbl]) => (
+                  <button
+                    key={k}
+                    className={`lmx-emu-menu-pill ${scaleMode === k ? "on" : ""}`}
+                    onClick={() => setScaleMode(k)}
+                  >{lbl}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="lmx-emu-menu-section">
+              <div className="lmx-emu-menu-label">Save states</div>
+              <div className="lmx-emu-menu-row">
+                {[1,2,3].map(s => (
+                  <button key={`s${s}`} className="lmx-emu-menu-pill" onClick={() => { saveState(s); setMenuOpen(false); }}>Salvar {s}</button>
+                ))}
+              </div>
+              <div className="lmx-emu-menu-row">
+                {[1,2,3].map(s => (
+                  <button key={`l${s}`} className="lmx-emu-menu-pill" onClick={() => { loadState(s); setMenuOpen(false); }}>Carregar {s}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="lmx-emu-menu-section">
+              <button className="lmx-emu-menu-pill" onClick={() => setMuted(m => !m)}>
+                {muted ? "Ativar som" : "Mutar som"}
+              </button>
+            </div>
+
+            <button className="lmx-settings-btn primary" onClick={() => setMenuOpen(false)}>Fechar</button>
+            <button className="lmx-settings-btn ghost" onClick={() => { onClose(); }} style={{marginTop: 8}}>Sair do jogo</button>
+          </div>
+        </div>
+      )}
       {!info && (
         <div className="lmx-emu-loading">
           <div className="lmx-spinner" />

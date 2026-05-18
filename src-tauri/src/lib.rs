@@ -1127,6 +1127,52 @@ fn group_multidisc_games(games: Vec<Game>) -> Vec<Game> {
     result
 }
 
+/// Extensoes que multiplos sistemas aceitam — em scan flat (sem subpasta),
+/// essas exigem que o nome do arquivo/pasta mencione o sistema pra evitar
+/// que .iso apareca em PS1+PS2+Wii+GC+Saturn+Dreamcast+PSP+3DO simultaneamente.
+fn is_generic_extension(ext: &str) -> bool {
+    matches!(ext, "iso" | "bin" | "img" | "zip" | "7z" | "chd" | "cue"
+        | "pbp" | "m3u" | "mds" | "ccd" | "rom")
+}
+
+/// Palavras-chave (lowercase, substring) que identificam um sistema no
+/// nome de arquivo/pasta. Ex: "ps2" no path -> sistema PS2. Vazias = nao aceitar
+/// extensao generica sozinha (forca user organizar em subpasta).
+fn system_match_keys(system_id: &str) -> &'static [&'static str] {
+    match system_id {
+        "ps1"       => &["ps1", "psx", "playstation"],
+        "ps2"       => &["ps2", "playstation 2", "playstation2"],
+        "ps3"       => &["ps3", "playstation 3"],
+        "ps4"       => &["ps4", "playstation 4"],
+        "psp"       => &["psp", "playstation portable"],
+        "vita"      => &["vita", "psvita"],
+        "wii"       => &["wii"],
+        "wiiu"      => &["wiiu", "wii u"],
+        "gc"        => &["gc", "gamecube", "game cube"],
+        "switch"    => &["switch", "nsw"],
+        "xbox"      => &["xbox"],
+        "xbox360"   => &["x360", "xbox360", "xbox 360"],
+        "dreamcast" => &["dc", "dreamcast"],
+        "saturn"    => &["saturn", "ss"],
+        "segacd"    => &["segacd", "sega cd", "mcd", "mega cd"],
+        "n64"       => &["n64", "nintendo64", "nintendo 64"],
+        "ds"        => &["ds", "nds"],
+        "3ds"       => &["3ds"],
+        "snes"      => &["snes", "sfc", "super nintendo"],
+        "nes"       => &["nes", "famicom"],
+        "gba"       => &["gba", "advance"],
+        "gb"        => &["gb", "game boy", "gameboy"],
+        "gbc"       => &["gbc", "color"],
+        "md"        => &["md", "genesis", "mega drive", "megadrive"],
+        "sms"       => &["sms", "master system"],
+        "gg"        => &["gg", "game gear"],
+        "tg16"      => &["tg16", "pce", "turbografx", "pcengine"],
+        "arcade"    => &["mame", "arcade", "fbneo"],
+        "threedo"   => &["3do"],
+        _           => &[],
+    }
+}
+
 fn scan_system(roms_root: &Path, emulators_root: &Path, cfg: &EmulatorConfig) -> SystemInfo {
     let folder = roms_root.join(cfg.folder_name);
     let folder_exists = folder.is_dir();
@@ -1150,10 +1196,10 @@ fn scan_system(roms_root: &Path, emulators_root: &Path, cfg: &EmulatorConfig) ->
     // Decide diretorio de scan:
     // - Se roms_root/folder_name/ existe (organizacao classica desktop): scan nele
     // - Senao, faz scan direto em roms_root (caso tipico Android: Download/, etc)
-    let (scan_dir, scan_depth) = if folder_exists {
-        (folder.clone(), 2)
+    let (scan_dir, scan_depth, is_flat) = if folder_exists {
+        (folder.clone(), 2, false)
     } else {
-        (roms_root.to_path_buf(), 3)
+        (roms_root.to_path_buf(), 3, true)
     };
 
     let mut games: Vec<Game> = Vec::new();
@@ -1174,6 +1220,26 @@ fn scan_system(roms_root: &Path, emulators_root: &Path, cfg: &EmulatorConfig) ->
                 .unwrap_or_default();
             if !cfg.extensions.iter().any(|e| *e == ext) {
                 continue;
+            }
+            // Flat scan: extensoes genericas (.iso, .bin, .zip, .chd, .cue, .pbp, .img,
+            // .m3u, .mds, .ccd) batem em multiplos sistemas (PS1/PS2/Wii/GC/Saturn/etc).
+            // Aceita SO se nome ou pasta-pai contem o id/folder_name do sistema —
+            // senao um .iso aparece replicado em todos sistemas que aceitam iso.
+            if is_flat && is_generic_extension(&ext) {
+                let parent_name = path.parent()
+                    .and_then(|p| p.file_name())
+                    .and_then(|n| n.to_str())
+                    .map(|s| s.to_ascii_lowercase())
+                    .unwrap_or_default();
+                let file_name_lower = path.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|s| s.to_ascii_lowercase())
+                    .unwrap_or_default();
+                let sys_keys: &[&str] = system_match_keys(cfg.id);
+                let matches = sys_keys.iter().any(|k| {
+                    !k.is_empty() && (parent_name.contains(k) || file_name_lower.contains(k))
+                });
+                if !matches { continue; }
             }
             let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
             if filename.to_ascii_lowercase().ends_with(".part") {
