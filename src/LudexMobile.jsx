@@ -1108,7 +1108,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
 
       <section className="lmx-settings-card">
         <div className="lmx-settings-label">Sobre</div>
-        <div className="lmx-settings-value">Ludex Android v0.8.22</div>
+        <div className="lmx-settings-value">Ludex Android v0.8.23</div>
         <p className="lmx-settings-hint">
           A versao Windows tem auto-update, gamepad nativo, todos os sistemas embedded + Switch/Wii U/PS3/Xbox 360/PS Vita via emulador externo.
         </p>
@@ -1474,6 +1474,14 @@ function MobileEmulatorView({ system, game, onClose }) {
   // Sleep timer: pausa core se sem input por X min (v0.8.22)
   const lastInputRef = useRef(Date.now());
   const [autoPaused, setAutoPaused] = useState(false);
+  // v0.8.23: fast-forward (acelera GBA/Pokemon e outros lentos)
+  // ffSpeed = 1 (normal), 2, 3, 4. ffActive = override temporario (hold)
+  const [ffSpeed, setFfSpeed] = useState(1);
+  const [ffActive, setFfActive] = useState(false);
+  const ffEffectiveRef = useRef(1);
+  useEffect(() => {
+    ffEffectiveRef.current = ffActive ? Math.max(ffSpeed, 2) : ffSpeed;
+  }, [ffActive, ffSpeed]);
   // Quick save/load via tap duplo no canto (v0.8.22)
   const cornerTapRef = useRef({ tl: 0, tr: 0 });
 
@@ -1586,6 +1594,11 @@ function MobileEmulatorView({ system, game, onClose }) {
       if (now - lastTime >= targetFrameMs - 1) {
         lastTime = now;
         try {
+          // Fast-forward: roda N-1 frames extras sem coletar buffer (rapido)
+          const ff = ffEffectiveRef.current;
+          if (ff > 1) {
+            try { await invoke("libretro_skip_frames", { n: ff - 1 }); } catch {}
+          }
           const buf = await invoke("libretro_run_frame");
           if (buf && buf.byteLength >= 8) {
             const view = new DataView(buf.buffer ? buf.buffer : buf, buf.byteOffset || 0, buf.byteLength);
@@ -1714,6 +1727,19 @@ function MobileEmulatorView({ system, game, onClose }) {
     <div className="lmx-emu-root">
       <button className="lmx-emu-back" onClick={onClose} aria-label="Voltar"><IconArrowLeft /></button>
       <button className="lmx-emu-menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu">⚙</button>
+      {/* v0.8.23: botao Fast-Forward — hold pra acelerar 2x, indicador visual */}
+      <button
+        className={`lmx-emu-ff-btn ${ffActive || ffSpeed > 1 ? "active" : ""}`}
+        onTouchStart={(e) => { e.preventDefault(); setFfActive(true); haptic(8); }}
+        onTouchEnd={(e) => { e.preventDefault(); setFfActive(false); }}
+        onTouchCancel={(e) => { e.preventDefault(); setFfActive(false); }}
+        onMouseDown={() => setFfActive(true)}
+        onMouseUp={() => setFfActive(false)}
+        onMouseLeave={() => setFfActive(false)}
+        aria-label="Fast forward"
+      >
+        {ffSpeed > 1 && !ffActive ? `${ffSpeed}x` : "FF"}
+      </button>
       <div className={`lmx-emu-canvas-wrap lmx-emu-scale-${scaleMode}`}>
         <canvas ref={canvasRef} className="lmx-emu-canvas" />
         {/* Corner tap zones: TL=quick save, TR=quick load (double tap) */}
@@ -1773,6 +1799,28 @@ function MobileEmulatorView({ system, game, onClose }) {
               <button className="lmx-emu-menu-pill" onClick={resetLayout} style={{marginTop:6}}>
                 Resetar posicoes
               </button>
+            </div>
+
+            <div className="lmx-emu-menu-section">
+              <div className="lmx-emu-menu-label">Velocidade (fast-forward)</div>
+              <div className="lmx-emu-menu-row">
+                {[
+                  [1, "1x (normal)"],
+                  [2, "2x"],
+                  [3, "3x"],
+                  [4, "4x"],
+                ].map(([sp, lbl]) => (
+                  <button
+                    key={sp}
+                    className={`lmx-emu-menu-pill ${ffSpeed === sp ? "on" : ""}`}
+                    onClick={() => setFfSpeed(sp)}
+                  >{lbl}</button>
+                ))}
+              </div>
+              <p className="lmx-settings-hint" style={{ marginTop: 6 }}>
+                Sustenta botao FF no canto pra acelerar so enquanto segura, ou trava
+                velocidade aqui (otimo pra Pokemon e RPGs lentos).
+              </p>
             </div>
 
             <div className="lmx-emu-menu-section">

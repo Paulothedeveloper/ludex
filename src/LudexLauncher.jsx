@@ -2480,6 +2480,11 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
   const audioNextTimeRef = useRef(0);
   const audioRateRef = useRef(32040);
   const autoLoadDoneRef = useRef(false);
+  // v0.8.23: fast-forward — Tab (hold) ou + / - pra ajustar nivel persistente
+  const [ffSpeed, setFfSpeed] = useState(1); // 1, 2, 3, 4
+  const [ffHold, setFfHold] = useState(false);
+  const ffEffectiveRef = useRef(1);
+  useEffect(() => { ffEffectiveRef.current = ffHold ? Math.max(ffSpeed, 2) : ffSpeed; }, [ffHold, ffSpeed]);
 
   // Mapeamento teclado -> button id libretro (joypad)
   const KEY_MAP = useMemo(() => ({
@@ -2550,6 +2555,11 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
       if (now - lastTime >= targetFrameMs - 1) {
         lastTime = now;
         try {
+          // v0.8.23: fast-forward — roda N-1 frames extras sem coletar buffer
+          const ff = ffEffectiveRef.current;
+          if (ff > 1) {
+            try { await invoke("libretro_skip_frames", { n: ff - 1 }); } catch {}
+          }
           // Response binario: 4 bytes width LE + 4 bytes height LE + rgba
           const buf = await invoke("libretro_run_frame");
           if (buf && buf.byteLength >= 8) {
@@ -2725,6 +2735,22 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
         if (e.key === "F5") { e.preventDefault(); saveState(0); return; }
         if (e.key === "F8") { e.preventDefault(); loadState(0); return; }
       }
+      // v0.8.23: Space = fast-forward (hold); + / - ajusta speed persistente
+      if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        setFfHold(pressed);
+        return;
+      }
+      if (pressed && (e.key === "+" || e.key === "=")) {
+        e.preventDefault();
+        setFfSpeed(s => Math.min(s + 1, 4));
+        return;
+      }
+      if (pressed && (e.key === "-" || e.key === "_")) {
+        e.preventDefault();
+        setFfSpeed(s => Math.max(s - 1, 1));
+        return;
+      }
       const id = KEY_MAP[e.key];
       if (id !== undefined) {
         e.preventDefault();
@@ -2814,8 +2840,13 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
         {info && <span className="pb-emulator-meta">{info.library_name} {info.library_version} · {info.base_width}×{info.base_height} · {Math.round(info.fps)}fps</span>}
       </div>
       <div className="pb-emulator-hints">
-        <kbd>Tab</kbd> Slots · <kbd>F5</kbd>/<kbd>F8</kbd> Quick · <kbd>Esc</kbd> Sair
+        <kbd>Tab</kbd> Slots · <kbd>F5</kbd>/<kbd>F8</kbd> Quick · <kbd>Space</kbd> FF · <kbd>+</kbd>/<kbd>-</kbd> Speed · <kbd>Esc</kbd> Sair
       </div>
+      {(ffHold || ffSpeed > 1) && (
+        <div className="pb-emulator-ff-indicator">
+          ▶▶ {ffHold ? Math.max(ffSpeed, 2) : ffSpeed}x
+        </div>
+      )}
       {stateMsg && (
         <div className={`pb-emulator-state-msg pb-emulator-state-${stateMsg.kind}`}>
           {stateMsg.text}

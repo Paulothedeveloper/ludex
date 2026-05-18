@@ -2716,6 +2716,25 @@ fn libretro_load_game(core_filename: String, rom_path: String) -> Result<Libretr
 
 /// Roda 1 frame. Retorna Response binario: [u32 width LE][u32 height LE][rgba bytes].
 /// Vazio se nao tem frame novo. Binary evita overhead de serializacao JSON do Vec<u8>.
+/// v0.8.23: roda N frames extras SEM coletar buffer (fast-forward).
+/// Audio drenado e descartado pra evitar overflow. Usado quando user
+/// segura botao FF — minimiza overhead JNI (1 invoke vs N).
+#[tauri::command]
+fn libretro_skip_frames(n: u32) -> Result<(), String> {
+    let slot = libretro_slot();
+    let g = slot.lock().unwrap();
+    if let Some(core) = g.as_ref() {
+        for _ in 0..n.min(16) {
+            unsafe { let _ = core.run(); }
+        }
+        // Limpa audio buffer pra evitar acumulo (drena tudo)
+        let s = libretro::state();
+        let mut state = s.lock().unwrap();
+        state.audio_buf.clear();
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn libretro_run_frame() -> tauri::ipc::Response {
     {
@@ -4899,6 +4918,7 @@ pub fn run() {
             libretro_list_cores,
             libretro_load_game,
             libretro_run_frame,
+            libretro_skip_frames,
             libretro_take_audio,
             libretro_set_input,
             libretro_save_state,
