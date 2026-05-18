@@ -138,6 +138,25 @@ export default function LudexMobile() {
   const [search, setSearch] = useState("");
   const [androidDemo, setAndroidDemo] = useState(null);
   const [launching, setLaunching] = useState(false);
+  // v0.8.14: rastreia se app ja tem acesso a todos os arquivos (Android)
+  const [hasFilesAccess, setHasFilesAccess] = useState(true);
+  const requestFilesAccess = useCallback(async () => {
+    try {
+      await invoke("android_open_all_files_settings");
+    } catch (e) { alert("Nao consegui abrir Configuracoes: " + e); }
+  }, []);
+  // Quando user volta de Settings, re-checa
+  useEffect(() => {
+    const onVisible = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const has = await invoke("android_has_all_files_access");
+        setHasFilesAccess(has);
+      } catch {}
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   const activeProfile = useMemo(
     () => config.profiles?.find((p) => p.id === config.active_profile_id) || null,
@@ -167,6 +186,12 @@ export default function LudexMobile() {
         const demo = await invoke("android_demo_status");
         setAndroidDemo(demo);
       } catch (e) { /* desktop ou erro -- ignora */ }
+
+      // v0.8.14: checa permissao logo no startup (sem esperar scan retornar 0)
+      try {
+        const has = await invoke("android_has_all_files_access");
+        setHasFilesAccess(has);
+      } catch { setHasFilesAccess(true); /* desktop = sempre true */ }
 
       try {
         const sys = await invoke("scan_roms", { romsRoot: null });
@@ -232,16 +257,15 @@ export default function LudexMobile() {
   }, [systems]);
 
   // ============ LANCAR JOGO ============
-  const launchGame = useCallback(async (system, game) => {
-    setLaunching(true);
-    try {
-      await invoke("launch_game", { systemId: system.id, romPath: game.path });
-    } catch (e) {
-      console.error("launch_game", e);
-      alert(`Falha ao iniciar: ${e}`);
-    } finally {
-      setTimeout(() => setLaunching(false), 1500);
+  // Em Android nao tem emulador externo (.exe). Tudo passa pelo libretro embedded.
+  // playingGame={system,game} ativa o MobileEmulatorView (canvas + touch controls).
+  const [playingGame, setPlayingGame] = useState(null);
+  const launchGame = useCallback((system, game) => {
+    if (!system.libretro_core) {
+      alert(`Sistema "${system.name}" nao suportado em mobile (sem core libretro embedded).`);
+      return;
     }
+    setPlayingGame({ system, game });
   }, []);
 
   // ============ PICKER DE PASTA ROMS ============
@@ -313,6 +337,17 @@ export default function LudexMobile() {
     return <DemoExpiredScreen demo={androidDemo} onUnlock={setAndroidDemo} />;
   }
 
+  // ============ EMULADOR RODANDO (full screen libretro) ============
+  if (playingGame) {
+    return (
+      <MobileEmulatorView
+        system={playingGame.system}
+        game={playingGame.game}
+        onClose={() => setPlayingGame(null)}
+      />
+    );
+  }
+
   // ============ GAME DETAIL (full screen modal) ============
   if (openGame) {
     return (
@@ -360,6 +395,8 @@ export default function LudexMobile() {
             onPickSystem={(sys) => setOpenSystem(sys)}
             onPickGame={(system, game) => setOpenGame({ system, game })}
             onPickFolder={pickRomsFolder}
+            hasFilesAccess={hasFilesAccess}
+            onRequestAccess={requestFilesAccess}
           />
         )}
         {activeTab === "systems" && (
@@ -423,7 +460,7 @@ function TabBtn({ icon, label, active, onClick }) {
 // === HOME TAB ===============================================
 // Hero (perfil + DEMO) + Recentes + Carrossel por sistema
 // ============================================================
-function HomeTab({ systems, covers, activeProfile, androidDemo, loading, onPickSystem, onPickGame, onPickFolder }) {
+function HomeTab({ systems, covers, activeProfile, androidDemo, loading, onPickSystem, onPickGame, onPickFolder, hasFilesAccess, onRequestAccess }) {
   const nonEmptySystems = systems.filter((s) => s.games.length > 0);
   const topSystems = nonEmptySystems.slice(0, 6);
 
@@ -466,14 +503,29 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, onPickS
         <div className="lmx-empty-state">
           <div className="lmx-empty-icon"><IconGrid /></div>
           <h2>Nenhum jogo ainda</h2>
-          <p>
-            Escolha a pasta no seu celular onde tem as ROMs.
-            Pode ser <code>/Download</code>, <code>/Ludex/roms</code>,
-            ou qualquer outra que voce ja tenha jogos.
-          </p>
-          <button className="lmx-settings-btn primary" onClick={onPickFolder} style={{ maxWidth: 280, margin: "16px auto 0" }}>
-            Escolher pasta de ROMs
-          </button>
+          {!hasFilesAccess ? (
+            <>
+              <p>
+                O Ludex precisa de permissao pra acessar suas ROMs no celular.
+                <br /><br />
+                Apos clicar, ative o switch do <b>Ludex</b> em <b>"Acesso a todos os arquivos"</b> e volte aqui.
+              </p>
+              <button className="lmx-settings-btn primary" onClick={onRequestAccess} style={{ maxWidth: 280, margin: "16px auto 0" }}>
+                Permitir acesso aos arquivos
+              </button>
+            </>
+          ) : (
+            <>
+              <p>
+                Escolha a pasta no seu celular onde tem as ROMs.
+                Pode ser <code>/Download</code>, <code>/Ludex/roms</code>,
+                ou qualquer outra que voce ja tenha jogos.
+              </p>
+              <button className="lmx-settings-btn primary" onClick={onPickFolder} style={{ maxWidth: 280, margin: "16px auto 0" }}>
+                Escolher pasta de ROMs
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -1050,6 +1102,174 @@ function DemoExpiredScreen({ demo, onUnlock }) {
             {msg && <p className={`lmx-settings-msg ${msg.kind}`}>{msg.text}</p>}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// === MOBILE EMULATOR VIEW (canvas libretro + touch controls)
+// Versao mobile do EmulatorView do desktop. Frame loop, audio,
+// touch D-pad esquerda + A/B/X/Y direita + Start/Select topo.
+// ============================================================
+function MobileEmulatorView({ system, game, onClose }) {
+  const canvasRef = useRef(null);
+  const [info, setInfo] = useState(null);
+  const [error, setError] = useState(null);
+  const audioCtxRef = useRef(null);
+  const audioNextTimeRef = useRef(0);
+  const audioRateRef = useRef(32040);
+  const stoppedRef = useRef(false);
+
+  // Carrega core + ROM
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const coreFile = system.libretro_core;
+        if (!coreFile) { setError(`Sistema "${system.name}" sem core libretro`); return; }
+        const result = await invoke("libretro_load_game", { coreFilename: coreFile, romPath: game.path });
+        if (cancelled) return;
+        setInfo(result);
+        audioRateRef.current = result.sample_rate || 32040;
+        if (canvasRef.current) {
+          canvasRef.current.width = result.base_width;
+          canvasRef.current.height = result.base_height;
+        }
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: result.sample_rate });
+          await ctx.resume();
+          audioCtxRef.current = ctx;
+          audioNextTimeRef.current = ctx.currentTime + 0.05;
+        } catch (e) { console.warn("AudioContext", e); }
+      } catch (e) {
+        if (!cancelled) setError(String(e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+      stoppedRef.current = true;
+      invoke("libretro_unload").catch(() => {});
+      if (audioCtxRef.current) {
+        try { audioCtxRef.current.close(); } catch {}
+        audioCtxRef.current = null;
+      }
+    };
+  }, [system.id, game.path, system.libretro_core]);
+
+  // Loop de frames + audio
+  useEffect(() => {
+    if (!info) return;
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+    let lastTime = performance.now();
+    const targetFrameMs = 1000 / (info.fps || 60);
+    let raf = null;
+
+    async function tick() {
+      if (stoppedRef.current) return;
+      const now = performance.now();
+      if (now - lastTime >= targetFrameMs - 1) {
+        lastTime = now;
+        try {
+          const buf = await invoke("libretro_run_frame");
+          if (buf && buf.byteLength >= 8) {
+            const view = new DataView(buf.buffer ? buf.buffer : buf, buf.byteOffset || 0, buf.byteLength);
+            const w = view.getUint32(0, true);
+            const h = view.getUint32(4, true);
+            const rgba = new Uint8ClampedArray(buf.buffer ? buf.buffer : buf, (buf.byteOffset || 0) + 8, w * h * 4);
+            if (w !== ctx.canvas.width || h !== ctx.canvas.height) {
+              ctx.canvas.width = w; ctx.canvas.height = h;
+            }
+            ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
+          }
+          const audioBuf = await invoke("libretro_take_audio");
+          const actx = audioCtxRef.current;
+          if (audioBuf && audioBuf.byteLength > 0 && actx) {
+            const i16 = new Int16Array(audioBuf.buffer ? audioBuf.buffer : audioBuf, audioBuf.byteOffset || 0, audioBuf.byteLength / 2);
+            const frames = i16.length / 2;
+            if (frames > 0) {
+              const sampleRate = audioRateRef.current;
+              const node = actx.createBuffer(2, frames, sampleRate);
+              const L = node.getChannelData(0); const R = node.getChannelData(1);
+              for (let i = 0; i < frames; i++) { L[i] = i16[i*2]/32768; R[i] = i16[i*2+1]/32768; }
+              const src = actx.createBufferSource(); src.buffer = node; src.connect(actx.destination);
+              if (audioNextTimeRef.current < actx.currentTime + 0.02) audioNextTimeRef.current = actx.currentTime + 0.05;
+              src.start(audioNextTimeRef.current);
+              audioNextTimeRef.current += frames / sampleRate;
+            }
+          }
+        } catch (e) { console.error("frame tick", e); }
+      }
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => { if (raf) cancelAnimationFrame(raf); };
+  }, [info]);
+
+  // Touch handlers: button id libretro (joypad)
+  const press = useCallback((id, pressed) => {
+    invoke("libretro_set_input", { buttonId: id, pressed }).catch(() => {});
+  }, []);
+  const btnProps = (id) => ({
+    onTouchStart: (e) => { e.preventDefault(); press(id, true); },
+    onTouchEnd:   (e) => { e.preventDefault(); press(id, false); },
+    onTouchCancel:(e) => { e.preventDefault(); press(id, false); },
+    onMouseDown:  () => press(id, true),
+    onMouseUp:    () => press(id, false),
+    onMouseLeave: () => press(id, false),
+  });
+
+  if (error) {
+    return (
+      <div className="lmx-emu-root">
+        <div className="lmx-emu-error">
+          <h2>Erro ao carregar jogo</h2>
+          <pre>{error}</pre>
+          <button className="lmx-settings-btn primary" onClick={onClose}>Voltar</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="lmx-emu-root">
+      <button className="lmx-emu-back" onClick={onClose} aria-label="Voltar"><IconArrowLeft /></button>
+      <div className="lmx-emu-canvas-wrap">
+        <canvas ref={canvasRef} className="lmx-emu-canvas" />
+      </div>
+      {!info && (
+        <div className="lmx-emu-loading">
+          <div className="lmx-spinner" />
+          <div>Carregando emulador...</div>
+        </div>
+      )}
+      {/* Touch controls */}
+      <div className="lmx-emu-controls">
+        {/* D-pad esquerda */}
+        <div className="lmx-emu-dpad">
+          <button className="lmx-emu-dpad-up"    {...btnProps(4)}>▲</button>
+          <button className="lmx-emu-dpad-left"  {...btnProps(6)}>◀</button>
+          <button className="lmx-emu-dpad-right" {...btnProps(7)}>▶</button>
+          <button className="lmx-emu-dpad-down"  {...btnProps(5)}>▼</button>
+        </div>
+        {/* Botoes direita: A/B/X/Y (libretro: 0=B, 1=Y, 8=A, 9=X) */}
+        <div className="lmx-emu-abxy">
+          <button className="lmx-emu-btn lmx-emu-btn-x" {...btnProps(9)}>X</button>
+          <button className="lmx-emu-btn lmx-emu-btn-y" {...btnProps(1)}>Y</button>
+          <button className="lmx-emu-btn lmx-emu-btn-a" {...btnProps(8)}>A</button>
+          <button className="lmx-emu-btn lmx-emu-btn-b" {...btnProps(0)}>B</button>
+        </div>
+        {/* Start / Select topo (libretro: 2=SELECT, 3=START) */}
+        <div className="lmx-emu-system">
+          <button className="lmx-emu-btn lmx-emu-btn-select" {...btnProps(2)}>SELECT</button>
+          <button className="lmx-emu-btn lmx-emu-btn-start"  {...btnProps(3)}>START</button>
+        </div>
+        {/* L/R ombros (libretro: 10=L, 11=R) */}
+        <div className="lmx-emu-shoulders">
+          <button className="lmx-emu-btn lmx-emu-btn-l" {...btnProps(10)}>L</button>
+          <button className="lmx-emu-btn lmx-emu-btn-r" {...btnProps(11)}>R</button>
+        </div>
       </div>
     </div>
   );

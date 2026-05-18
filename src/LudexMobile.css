@@ -1051,3 +1051,205 @@
 .lmx-folder-custom-input:focus {
   border-color: var(--lmx-accent);
 }
+
+/* ===== EMULADOR (canvas libretro + touch controls) ===== */
+.lmx-emu-root {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+.lmx-emu-back {
+  position: absolute;
+  top: env(safe-area-inset-top, 12px);
+  left: 12px;
+  z-index: 10;
+  background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #fff;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lmx-emu-back svg { width: 22px; height: 22px; }
+.lmx-emu-canvas-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 8px 8px;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.lmx-emu-canvas {
+  /* object-fit: contain mantém aspect ratio do canvas (240x160 GBA, 256x224 SNES etc) */
+  /* e escala pra preencher o wrap sem distorcer. */
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: #000;
+}
+.lmx-emu-loading, .lmx-emu-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #fff;
+  text-align: center;
+  padding: 20px;
+}
+.lmx-emu-error pre { font-size: 12px; max-width: 90%; white-space: pre-wrap; opacity: 0.7; }
+
+/* Controles touch */
+.lmx-emu-controls {
+  flex-shrink: 0;
+  height: 230px;
+  position: relative;
+  padding: 8px 16px env(safe-area-inset-bottom, 16px);
+}
+.lmx-emu-dpad {
+  position: absolute;
+  bottom: 28px;
+  left: 24px;
+  width: 144px;
+  height: 144px;
+  display: grid;
+  grid-template-columns: 48px 48px 48px;
+  grid-template-rows:    48px 48px 48px;
+}
+.lmx-emu-dpad button {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #fff;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lmx-emu-dpad button:active { background: rgba(124, 58, 237, 0.6); }
+.lmx-emu-dpad-up    { grid-column: 2; grid-row: 1; border-radius: 8px 8px 0 0; }
+.lmx-emu-dpad-left  { grid-column: 1; grid-row: 2; border-radius: 8px 0 0 8px; }
+.lmx-emu-dpad-right { grid-column: 3; grid-row: 2; border-radius: 0 8px 8px 0; }
+.lmx-emu-dpad-down  { grid-column: 2; grid-row: 3; border-radius: 0 0 8px 8px; }
+
+.lmx-emu-abxy {
+  position: absolute;
+  bottom: 28px;
+  right: 24px;
+  width: 156px;
+  height: 156px;
+}
+.lmx-emu-btn {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lmx-emu-btn:active { background: rgba(236, 72, 153, 0.65); }
+.lmx-emu-btn-x { top: 0;   left: 50px; background: rgba(59, 130, 246, 0.18); }
+.lmx-emu-btn-y { top: 50px; left: 0;   background: rgba(34, 197, 94, 0.18); }
+.lmx-emu-btn-a { top: 50px; right: 0;  background: rgba(239, 68, 68, 0.18); }
+.lmx-emu-btn-b { top: 100px; left: 50px; background: rgba(250, 204, 21, 0.18); }
+
+.lmx-emu-system {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+}
+.lmx-emu-system .lmx-emu-btn {
+  position: relative;
+  width: auto;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 16px;
+  font-size: 11px;
+}
+
+.lmx-emu-shoulders {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.lmx-emu-shoulders .lmx-emu-btn {
+  position: relative;
+  pointer-events: auto;
+  width: 60px;
+  height: 32px;
+  border-radius: 16px;
+  font-size: 12px;
+}
+
+/* ===== EMULADOR LANDSCAPE: controles laterais, canvas centro ===== */
+@media (orientation: landscape) {
+  .lmx-emu-root {
+    flex-direction: column;
+  }
+  .lmx-emu-canvas-wrap {
+    /* Canvas ocupa tela inteira; controles ficam absolutos por cima nas laterais */
+    flex: 1;
+    padding: 8px;
+    min-height: 0;
+  }
+  .lmx-emu-controls {
+    /* Controles overlay nas laterais — canvas fica no centro full size */
+    position: absolute;
+    inset: 0;
+    height: auto;
+    padding: 0;
+    pointer-events: none;
+  }
+  .lmx-emu-controls > * { pointer-events: auto; }
+  .lmx-emu-dpad {
+    bottom: max(env(safe-area-inset-bottom, 20px), 30px);
+    left: 24px;
+  }
+  .lmx-emu-abxy {
+    bottom: max(env(safe-area-inset-bottom, 20px), 30px);
+    right: 24px;
+  }
+  .lmx-emu-system {
+    top: auto;
+    bottom: 20px;
+    left: 50%;
+  }
+  .lmx-emu-shoulders {
+    top: max(env(safe-area-inset-top, 16px), 16px);
+    left: 24px;
+    right: 24px;
+  }
+  .lmx-emu-back {
+    /* Em landscape o back fica menor pra nao ocupar muito */
+    width: 38px;
+    height: 38px;
+  }
+}

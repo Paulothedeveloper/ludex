@@ -2376,15 +2376,26 @@ fn libretro_slot() -> Arc<StdMutex<Option<LibretroCore>>> {
 /// 1. <install_dir>/cores/  (bundlado)
 /// 2. <project_root>/cores/ (dev)
 fn resolve_cores_dir() -> Option<PathBuf> {
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            let bundled = parent.join("cores");
-            if bundled.is_dir() { return Some(bundled); }
-            let dev = parent.join("..").join("..").join("..").join("cores");
-            if dev.is_dir() { return Some(dev); }
-        }
+    // Android: cores extraidos de assets/ pro filesystem privado via
+    // MainActivity.extractCoresAssets() (Kotlin), durante onCreate.
+    #[cfg(target_os = "android")]
+    {
+        let p = PathBuf::from("/data/data/gg.ludex.app/files/Ludex/cores");
+        if p.is_dir() { return Some(p); }
+        return None;
     }
-    None
+    #[cfg(not(target_os = "android"))]
+    {
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(parent) = exe.parent() {
+                let bundled = parent.join("cores");
+                if bundled.is_dir() { return Some(bundled); }
+                let dev = parent.join("..").join("..").join("..").join("cores");
+                if dev.is_dir() { return Some(dev); }
+            }
+        }
+        None
+    }
 }
 
 #[tauri::command]
@@ -2394,7 +2405,13 @@ fn libretro_list_cores() -> Vec<String> {
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for e in entries.flatten() {
             let p = e.path();
-            if p.extension().and_then(|x| x.to_str()).map(|s| s.eq_ignore_ascii_case("dll")).unwrap_or(false) {
+            let ext_ok = p.extension().and_then(|x| x.to_str())
+                .map(|s| {
+                    let s = s.to_ascii_lowercase();
+                    s == "dll" || s == "so" || s == "dylib"
+                })
+                .unwrap_or(false);
+            if ext_ok {
                 out.push(p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string());
             }
         }
@@ -2413,6 +2430,50 @@ struct LibretroLoadResult {
     sample_rate: f64,
 }
 
+/// Diretorio system/ do libretro (mesma logica usada em libretro.rs::state).
+fn libretro_system_dir() -> PathBuf {
+    let base = ludex_base_dir()
+        .unwrap_or_else(|| dirs::data_dir().map(|d| d.join("Ludex")).unwrap_or_else(|| PathBuf::from(".")));
+    let dir = base.join("system");
+    std::fs::create_dir_all(&dir).ok();
+    dir
+}
+
+/// Lista de BIOS necessarias por core. Pelo menos UMA precisa existir em system/.
+/// Cores nao listados nao precisam BIOS (ou tem BIOS opcional).
+fn required_bios_files(core_filename: &str) -> &'static [&'static str] {
+    let c = core_filename.to_ascii_lowercase();
+    if c.contains("pcsx2") {
+        &["ps2-0230a-20080220.bin", "scph39001.bin", "scph10000.bin",
+          "scph30004r.bin", "scph70012.bin", "ps2-0250a-20100415.bin"]
+    } else if c.contains("flycast") {
+        &["dc_boot.bin"]
+    } else if c.contains("mednafen_saturn") || c.contains("beetle_saturn") {
+        &["sega_101.bin", "mpr-17933.bin"]
+    } else if c.contains("opera") {
+        &["panafz1.bin", "panafz10.bin", "goldstar.bin"]
+    } else if c.contains("swanstation") || c.contains("mednafen_psx") || c.contains("beetle_psx") {
+        &["scph5500.bin", "scph5501.bin", "scph5502.bin", "scph1001.bin", "ps-30a.bin"]
+    } else if c.contains("virtualjaguar") {
+        &["jagboot.rom"]
+    } else {
+        &[]
+    }
+}
+
+fn check_required_bios(core_filename: &str) -> Option<String> {
+    let needed = required_bios_files(core_filename);
+    if needed.is_empty() { return None; }
+    let sys_dir = libretro_system_dir();
+    let any_present = needed.iter().any(|f| sys_dir.join(f).is_file());
+    if any_present { return None; }
+    Some(format!(
+        "BIOS necessaria para este sistema nao encontrada.\n\nColoca um destes arquivos em:\n{}\n\nArquivos aceitos:\n{}",
+        sys_dir.display(),
+        needed.join("\n")
+    ))
+}
+
 #[tauri::command]
 fn libretro_load_game(core_filename: String, rom_path: String) -> Result<LibretroLoadResult, String> {
     let cores_dir = resolve_cores_dir().ok_or("pasta cores nao encontrada")?;
@@ -2423,6 +2484,11 @@ fn libretro_load_game(core_filename: String, rom_path: String) -> Result<Libretr
     let rom = PathBuf::from(&rom_path);
     if !rom.is_file() {
         return Err(format!("ROM nao encontrada: {}", rom_path));
+    }
+    // v0.8.14: checa BIOS ANTES de carregar core. Sem isso, cores como pcsx2,
+    // flycast, saturn etc fazem segfault dentro da DLL -> mata o Ludex inteiro.
+    if let Some(err) = check_required_bios(&core_filename) {
+        return Err(err);
     }
 
     // Descarrega anterior se existe
@@ -2694,6 +2760,27 @@ fn get_app_log_dir() -> Result<String, String> {
 // === ANDROID: MANAGE_EXTERNAL_STORAGE permission ============
 // ============================================================
 // v0.8.13: chama Kotlin gg.ludex.app.Permissions via JNI.
+// v0.8.14: inicializa ndk_context manualmente via funcao native chamada
+// pela MainActivity.onCreate (Kotlin). Sem isso, ndk_context::android_context()
+// panica com "android context was not initialized".
+
+#[cfg(target_os = "android")]
+static ANDROID_ACTIVITY: std::sync::OnceLock<jni::objects::GlobalRef> = std::sync::OnceLock::new();
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_gg_ludex_app_MainActivity_ludexInitNdkContext<'local>(
+    mut env: jni::JNIEnv<'local>,
+    _class: jni::objects::JClass<'local>,
+    activity: jni::objects::JObject<'local>,
+) {
+    let Ok(vm) = env.get_java_vm() else { return; };
+    let vm_ptr = vm.get_java_vm_pointer() as *mut std::ffi::c_void;
+    let Ok(activity_ref) = env.new_global_ref(&activity) else { return; };
+    let raw_activity = activity_ref.as_obj().as_raw() as *mut std::ffi::c_void;
+    let _ = ANDROID_ACTIVITY.set(activity_ref);
+    unsafe { ndk_context::initialize_android_context(vm_ptr, raw_activity); }
+}
 
 #[cfg(target_os = "android")]
 fn jni_call_permissions<F, R>(method: &str, sig: &str, args_fn: F) -> Result<R, String>
