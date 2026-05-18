@@ -200,15 +200,22 @@ extern "C" fn cb_environment(cmd: c_uint, data: *mut c_void) -> bool {
         },
         RETRO_ENVIRONMENT_GET_VARIABLE => unsafe {
             if data.is_null() { return false; }
-            // Loga o que o core esta perguntando (debug)
+            // v0.8.30: retorna defaults pras opcoes que cores grandes (PCSX2, Dolphin,
+            // Flycast) PRECISAM pra carregar. Sem isso PCSX2 acha que nao tem BIOS.
             #[repr(C)]
-            struct RetroVariable { key: *const c_char, value: *mut c_char }
-            let var = data as *const RetroVariable;
-            if !(*var).key.is_null() {
-                let key = CStr::from_ptr((*var).key).to_string_lossy();
-                log::info!("[libretro] GET_VARIABLE key={}", key);
+            struct RetroVariable { key: *const c_char, value: *const c_char }
+            let var = data as *mut RetroVariable;
+            if (*var).key.is_null() { return false; }
+            let key_cstr = CStr::from_ptr((*var).key);
+            let key = key_cstr.to_string_lossy();
+            let key_str: &str = &key;
+            if let Some(val) = libretro_defaults().get(key_str) {
+                (*var).value = val.as_ptr();
+                log::info!("[libretro] GET_VARIABLE {} -> {}", key, val.to_string_lossy());
+                return true;
             }
-            false // sem options por enquanto
+            log::info!("[libretro] GET_VARIABLE key={} (no default)", key);
+            false
         },
         RETRO_ENVIRONMENT_SET_VARIABLES => unsafe {
             // Loga TODAS as opcoes que o core anuncia (debug)
@@ -281,6 +288,78 @@ extern "C" fn cb_environment(cmd: c_uint, data: *mut c_void) -> bool {
             false
         }
     }
+}
+
+/// v0.8.30: defaults por key pra GET_VARIABLE — PCSX2 e outros cores grandes
+/// chamam GET_VARIABLE("pcsx2_bios"/etc) durante load_game e rejeitam carregar
+/// se a opcao nao for retornada. CStrings vivem pelo ciclo todo do app (OnceLock).
+static LIBRETRO_DEFAULTS: OnceLock<std::collections::HashMap<&'static str, CString>> = OnceLock::new();
+
+fn libretro_defaults() -> &'static std::collections::HashMap<&'static str, CString> {
+    LIBRETRO_DEFAULTS.get_or_init(|| {
+        let mut m = std::collections::HashMap::new();
+        let mut ins = |k: &'static str, v: &str| {
+            m.insert(k, CString::new(v).unwrap_or_default());
+        };
+        // PCSX2 — defaults sensatos (vide SET_VARIABLES log)
+        ins("pcsx2_bios", "scph39001.bin");
+        ins("pcsx2_renderer", "Auto");
+        ins("pcsx2_fastboot", "enabled");
+        ins("pcsx2_fastcdvd", "disabled");
+        ins("pcsx2_upscale_multiplier", "1x Native (PS2)");
+        ins("pcsx2_widescreen_hint", "disabled");
+        ins("pcsx2_nointerlacing_hint", "enabled");
+        ins("pcsx2_uncapped_framerate_hint", "disabled");
+        ins("pcsx2_game_enhancements_hint", "disabled");
+        ins("pcsx2_ee_cycle_rate", "100% (Normal Speed)");
+        ins("pcsx2_ee_cycle_skip", "disabled");
+        ins("pcsx2_deinterlace_mode", "Automatic");
+        ins("pcsx2_enable_cheats", "disabled");
+        ins("pcsx2_shared_memory_cards", "disabled");
+        ins("pcsx2_hint_language_unlock", "disabled");
+        ins("pcsx2_enable_hw_hacks", "disabled");
+        ins("pcsx2_pgs_ssaa", "Native");
+        ins("pcsx2_pgs_ss_tex", "disabled");
+        ins("pcsx2_pgs_deblur", "disabled");
+        ins("pcsx2_pgs_high_res_scanout", "disabled");
+        ins("pcsx2_pgs_disable_mipmaps", "disabled");
+        ins("pcsx2_pcrtc_antiblur", "enabled");
+        ins("pcsx2_pcrtc_screen_offsets", "disabled");
+        ins("pcsx2_disable_interlace_offset", "disabled");
+        ins("pcsx2_auto_flush_software", "enabled");
+        ins("pcsx2_texture_filtering", "Bilinear (PS2)");
+        ins("pcsx2_trilinear_filtering", "Automatic");
+        ins("pcsx2_anisotropic_filtering", "disabled");
+        ins("pcsx2_dithering", "Unscaled");
+        ins("pcsx2_blending_accuracy", "Basic");
+        // Input ports (PCSX2 pede pra port 1 e 2)
+        for port in &["1", "2"] {
+            ins(Box::leak(format!("pcsx2_axis_deadzone{}", port).into_boxed_str()), "15%");
+            ins(Box::leak(format!("pcsx2_button_deadzone{}", port).into_boxed_str()), "0%");
+            ins(Box::leak(format!("pcsx2_axis_scale{}", port).into_boxed_str()), "133%");
+            ins(Box::leak(format!("pcsx2_enable_rumble{}", port).into_boxed_str()), "100%");
+            ins(Box::leak(format!("pcsx2_invert_left_stick{}", port).into_boxed_str()), "disabled");
+            ins(Box::leak(format!("pcsx2_invert_right_stick{}", port).into_boxed_str()), "disabled");
+        }
+        // HW Hacks PCSX2 (defaults seguros = desabilitado)
+        for k in &[
+            "pcsx2_cpu_sprite_size", "pcsx2_cpu_sprite_level", "pcsx2_software_clut_render",
+            "pcsx2_gpu_target_clut", "pcsx2_auto_flush", "pcsx2_texture_inside_rt",
+            "pcsx2_disable_depth_conversion", "pcsx2_framebuffer_conversion",
+            "pcsx2_disable_partial_invalidation", "pcsx2_gpu_palette_conversion",
+            "pcsx2_preload_frame_data", "pcsx2_half_pixel_offset", "pcsx2_native_scaling",
+            "pcsx2_round_sprite", "pcsx2_align_sprite", "pcsx2_merge_sprite",
+            "pcsx2_unscaled_palette_draw", "pcsx2_force_sprite_position",
+        ] { ins(k, "disabled"); }
+        ins("pcsx2_cpu_sprite_size", "0");
+        ins("pcsx2_cpu_sprite_level", "Sprites Only");
+        // Dolphin / Flycast / Saturn defaults comuns
+        ins("dolphin_renderer", "Hardware");
+        ins("flycast_internal_resolution", "640x480");
+        ins("flycast_cable_type", "TV (Composite)");
+        ins("beetle_saturn_cdimagecache", "disabled");
+        m
+    })
 }
 
 // v0.8.27: log callback — recebe printf-style do core.
