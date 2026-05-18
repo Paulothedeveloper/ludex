@@ -139,6 +139,25 @@ pub fn state() -> Arc<StdMutex<LibretroState>> {
         let save_dir = dir_base.join("saves-libretro");
         std::fs::create_dir_all(&sys_dir).ok();
         std::fs::create_dir_all(&save_dir).ok();
+        // v0.8.29: PCSX2 libretro pode procurar BIOSes em system/pcsx2/bios/
+        // ao inves de system/ raiz. Mirror todos .bin pra la pra cobrir os 2 casos.
+        let pcsx2_bios = sys_dir.join("pcsx2").join("bios");
+        if std::fs::create_dir_all(&pcsx2_bios).is_ok() {
+            if let Ok(entries) = std::fs::read_dir(&sys_dir) {
+                for e in entries.flatten() {
+                    let p = e.path();
+                    if !p.is_file() { continue; }
+                    let Some(name) = p.file_name() else { continue; };
+                    let name_str = name.to_string_lossy().to_ascii_lowercase();
+                    // So copia arquivos relacionados a PS2 (BIOS + auxiliares)
+                    let is_ps2 = name_str.starts_with("scph") || name_str.starts_with("ps2")
+                        || name_str == "rom1.bin";
+                    if !is_ps2 { continue; }
+                    let dest = pcsx2_bios.join(name);
+                    if !dest.exists() { let _ = std::fs::copy(&p, &dest); }
+                }
+            }
+        }
         Arc::new(StdMutex::new(LibretroState {
             library: None,
             frame:   None,
@@ -179,7 +198,34 @@ extern "C" fn cb_environment(cmd: c_uint, data: *mut c_void) -> bool {
             *(data as *mut bool) = true;
             true
         },
-        RETRO_ENVIRONMENT_GET_VARIABLE => false, // por enquanto sem options
+        RETRO_ENVIRONMENT_GET_VARIABLE => unsafe {
+            if data.is_null() { return false; }
+            // Loga o que o core esta perguntando (debug)
+            #[repr(C)]
+            struct RetroVariable { key: *const c_char, value: *mut c_char }
+            let var = data as *const RetroVariable;
+            if !(*var).key.is_null() {
+                let key = CStr::from_ptr((*var).key).to_string_lossy();
+                log::info!("[libretro] GET_VARIABLE key={}", key);
+            }
+            false // sem options por enquanto
+        },
+        RETRO_ENVIRONMENT_SET_VARIABLES => unsafe {
+            // Loga TODAS as opcoes que o core anuncia (debug)
+            if !data.is_null() {
+                #[repr(C)]
+                struct RetroVariable { key: *const c_char, value: *const c_char }
+                let mut p = data as *const RetroVariable;
+                while !p.is_null() && !(*p).key.is_null() {
+                    let key = CStr::from_ptr((*p).key).to_string_lossy();
+                    let val = if (*p).value.is_null() { "(null)".into() }
+                              else { CStr::from_ptr((*p).value).to_string_lossy() };
+                    log::info!("[libretro] SET_VARIABLES {}: {}", key, val);
+                    p = p.add(1);
+                }
+            }
+            true
+        },
         RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE => unsafe {
             if !data.is_null() { *(data as *mut bool) = false; }
             true
@@ -438,6 +484,22 @@ impl LibretroCore {
             size: data_size,
             meta: std::ptr::null(),
         };
+
+        // Log estado pre-load (debug)
+        {
+            let s = state();
+            let g = s.lock().unwrap();
+            let sys_path = g.system_dir.to_string_lossy();
+            log::info!("[libretro] load_game sys_dir={} need_fullpath={} rom={}",
+                sys_path, sys_info.need_fullpath, rom_path.display());
+            if let Ok(entries) = std::fs::read_dir(sys_path.as_ref()) {
+                let mut files: Vec<String> = entries.flatten()
+                    .filter_map(|e| e.file_name().to_str().map(|s| s.to_string()))
+                    .collect();
+                files.sort();
+                log::info!("[libretro] system_dir contains: {:?}", files);
+            }
+        }
 
         let load: Symbol<LoadFn> = self.lib.get(b"retro_load_game").map_err(|e| e.to_string())?;
         if !load(&info as *const _) {
