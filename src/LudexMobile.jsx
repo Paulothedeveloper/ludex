@@ -88,8 +88,8 @@ function SysGlyph({ id }) {
 const ANDROID_SUPPORTED = new Set([
   // Nintendo (embedded via libretro ARM)
   "snes", "nes", "gb", "gbc", "n64", "gba", "ds", "wii", "gc", "vb",
-  // Sony (so PS1 e PSP tem core libretro ARM)
-  "ps1", "psp",
+  // Sony — PS1 e PSP embedded via libretro ARM; PS2 via AetherSX2 Intent (app externo)
+  "ps1", "psp", "ps2",
   // Sega
   "dreamcast", "saturn", "md", "sms", "gg", "segacd",
   // Atari
@@ -257,16 +257,45 @@ export default function LudexMobile() {
   }, [systems]);
 
   // ============ LANCAR JOGO ============
-  // Em Android nao tem emulador externo (.exe). Tudo passa pelo libretro embedded.
-  // playingGame={system,game} ativa o MobileEmulatorView (canvas + touch controls).
+  // Em Android: libretro embedded OU fallback pra app externo via Intent (PS2 -> AetherSX2).
   const [playingGame, setPlayingGame] = useState(null);
-  const launchGame = useCallback((system, game) => {
-    if (!system.libretro_core) {
-      alert(`Sistema "${system.name}" nao suportado em mobile (sem core libretro embedded).`);
+  // Mapa system_id -> [packageName, displayName]: emuladores externos Android
+  const EXTERNAL_ANDROID_EMUS = useMemo(() => ({
+    ps2: { pkg: "xyz.aethersx2.android", name: "AetherSX2" },
+    // futuro: gc/wii -> dolphin; n64 -> mupen; etc
+  }), []);
+  const launchGame = useCallback(async (system, game) => {
+    // Sistema tem core libretro embedded? Usa MobileEmulatorView (in-app)
+    if (system.libretro_core) {
+      setPlayingGame({ system, game });
       return;
     }
-    setPlayingGame({ system, game });
-  }, []);
+    // Sem core embedded -> tenta app externo Android
+    const ext = EXTERNAL_ANDROID_EMUS[system.id];
+    if (!ext) {
+      alert(`Sistema "${system.name}" nao suportado em mobile.`);
+      return;
+    }
+    try {
+      const installed = await invoke("android_is_package_installed", { packageName: ext.pkg });
+      if (!installed) {
+        const wants = window.confirm(
+          `${system.name} usa ${ext.name} (app separado) que voce nao tem instalado.\n\n` +
+          `Quer abrir a Play Store pra instalar?`
+        );
+        if (wants) {
+          try { await invoke("android_open_play_store", { packageName: ext.pkg }); } catch {}
+        }
+        return;
+      }
+      const ok = await invoke("android_launch_external_emu", { packageName: ext.pkg, romPath: game.path });
+      if (!ok) {
+        alert(`Nao consegui abrir ${ext.name} com este jogo. Abre o ${ext.name} manualmente e seleciona a ROM.`);
+      }
+    } catch (e) {
+      alert(`Falha: ${e}`);
+    }
+  }, [EXTERNAL_ANDROID_EMUS]);
 
   // ============ PICKER DE PASTA ROMS ============
   // tauri-plugin-dialog NAO suporta directory picker em Android.
@@ -823,20 +852,43 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
       </section>
 
       <section className="lmx-settings-card">
-        <div className="lmx-settings-label">BIOS e Saves</div>
+        <div className="lmx-settings-label">BIOS, Mods e Traducoes</div>
         <div className="lmx-settings-paths">
-          <div><strong>BIOS:</strong> <code>/storage/emulated/0/Ludex/system/</code></div>
-          <div><strong>Saves:</strong> <code>/storage/emulated/0/Ludex/saves-libretro/</code></div>
+          <div><strong>BIOS:</strong> <code>Ludex/system/</code> (Saturn/PSP/PS1/Dreamcast)</div>
+          <div><strong>Saves:</strong> <code>Ludex/saves-libretro/</code></div>
+          <div><strong>Mods/traducoes:</strong> <code>Ludex/mods/&lt;sistema&gt;/</code></div>
         </div>
+        <button className="lmx-settings-btn primary" onClick={async () => {
+          try {
+            const base = await invoke("android_ludex_base_path");
+            await invoke("android_open_folder", { absPath: base });
+          } catch (e) { alert("Nao consegui abrir Files Manager: " + e); }
+        }}>
+          Abrir pasta Ludex no Files
+        </button>
         <p className="lmx-settings-hint">
-          Saturn/PSP/PS1/Dreamcast precisam BIOS na pasta acima. Saves
-          ficam la tambem (sao gerados conforme voce joga).
+          Coloca BIOS na pasta <code>system/</code>. Mods/traducoes do mesmo jeito que no Windows:
+          renomeia o ROM ou patcha antes de colocar em <code>roms/</code>.
         </p>
       </section>
 
       <section className="lmx-settings-card">
+        <div className="lmx-settings-label">PS2 (AetherSX2)</div>
+        <p className="lmx-settings-hint">
+          PS2 mobile usa AetherSX2 (app externo gratuito). Se nao tiver instalado, ao
+          tentar abrir uma ROM PS2 o Ludex sugere instalar pela Play Store.
+        </p>
+        <button className="lmx-settings-btn ghost" onClick={async () => {
+          try { await invoke("android_open_play_store", { packageName: "xyz.aethersx2.android" }); }
+          catch (e) { alert("Falha: " + e); }
+        }}>
+          Instalar AetherSX2
+        </button>
+      </section>
+
+      <section className="lmx-settings-card">
         <div className="lmx-settings-label">Sobre</div>
-        <div className="lmx-settings-value">Ludex Android v0.8.0</div>
+        <div className="lmx-settings-value">Ludex Android v0.8.17</div>
         <p className="lmx-settings-hint">
           A versao Windows tem auto-update, gamepad nativo, todos os sistemas embedded + Switch/Wii U/PS3/Xbox 360/PS Vita via emulador externo.
         </p>
@@ -1165,14 +1217,91 @@ const DEFAULT_LAYOUT = SYSTEM_LAYOUTS.snes;
 // Versao mobile do EmulatorView do desktop. Frame loop, audio,
 // touch controls customizados por sistema (cada console tem layout proprio).
 // ============================================================
+// localStorage key pra layout custom per-system
+const LAYOUT_STORAGE_KEY = "ludex.controlLayout.v1";
+function loadCustomLayout(systemId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY) || "{}");
+    return all[systemId] || null;
+  } catch { return null; }
+}
+function saveCustomLayout(systemId, offsets) {
+  try {
+    const all = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY) || "{}");
+    all[systemId] = offsets;
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(all));
+  } catch {}
+}
+
 function MobileEmulatorView({ system, game, onClose }) {
   const layout = SYSTEM_LAYOUTS[system.id] || DEFAULT_LAYOUT;
   const [menuOpen, setMenuOpen] = useState(false);
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false);
   useEffect(() => { mutedRef.current = muted; }, [muted]);
-  const [scaleMode, setScaleMode] = useState("contain"); // contain | cover | integer
+  const [scaleMode, setScaleMode] = useState(() => {
+    try { return localStorage.getItem(`ludex.scale.${system.id}`) || "contain"; }
+    catch { return "contain"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(`ludex.scale.${system.id}`, scaleMode); } catch {}
+  }, [scaleMode, system.id]);
   const [stateMsg, setStateMsg] = useState(null);
+  // Edit mode + offsets custom dos grupos de botoes (dpad, face, system, shoulders)
+  const [editMode, setEditMode] = useState(false);
+  const [offsets, setOffsets] = useState(() => loadCustomLayout(system.id) || {});
+  const dragState = useRef(null);
+
+  const startDrag = useCallback((groupKey) => (e) => {
+    if (!editMode) return;
+    e.preventDefault();
+    const touch = e.touches ? e.touches[0] : e;
+    const cur = offsets[groupKey] || { x: 0, y: 0 };
+    dragState.current = {
+      groupKey,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      baseX: cur.x,
+      baseY: cur.y,
+    };
+  }, [editMode, offsets]);
+  const moveDrag = useCallback((e) => {
+    const st = dragState.current;
+    if (!st) return;
+    const touch = e.touches ? e.touches[0] : e;
+    const dx = touch.clientX - st.startX;
+    const dy = touch.clientY - st.startY;
+    setOffsets((prev) => ({ ...prev, [st.groupKey]: { x: st.baseX + dx, y: st.baseY + dy } }));
+  }, []);
+  const endDrag = useCallback(() => {
+    if (dragState.current) {
+      dragState.current = null;
+      // persist
+      setOffsets((cur) => { saveCustomLayout(system.id, cur); return cur; });
+    }
+  }, [system.id]);
+  useEffect(() => {
+    if (!editMode) return;
+    window.addEventListener("touchmove", moveDrag, { passive: false });
+    window.addEventListener("touchend", endDrag);
+    window.addEventListener("mousemove", moveDrag);
+    window.addEventListener("mouseup", endDrag);
+    return () => {
+      window.removeEventListener("touchmove", moveDrag);
+      window.removeEventListener("touchend", endDrag);
+      window.removeEventListener("mousemove", moveDrag);
+      window.removeEventListener("mouseup", endDrag);
+    };
+  }, [editMode, moveDrag, endDrag]);
+  const groupStyle = useCallback((key) => {
+    const o = offsets[key];
+    if (!o) return undefined;
+    return { transform: `translate(${o.x}px, ${o.y}px)` };
+  }, [offsets]);
+  const resetLayout = useCallback(() => {
+    setOffsets({});
+    saveCustomLayout(system.id, {});
+  }, [system.id]);
   const canvasRef = useRef(null);
   const [info, setInfo] = useState(null);
   const [error, setError] = useState(null);
@@ -1353,6 +1482,16 @@ function MobileEmulatorView({ system, game, onClose }) {
             </div>
 
             <div className="lmx-emu-menu-section">
+              <div className="lmx-emu-menu-label">Controles</div>
+              <button className="lmx-emu-menu-pill" onClick={() => { setEditMode(true); setMenuOpen(false); }}>
+                Editar layout (arrastar botoes)
+              </button>
+              <button className="lmx-emu-menu-pill" onClick={resetLayout} style={{marginTop:6}}>
+                Resetar posicoes
+              </button>
+            </div>
+
+            <div className="lmx-emu-menu-section">
               <button className="lmx-emu-menu-pill" onClick={() => setMuted(m => !m)}>
                 {muted ? "Ativar som" : "Mutar som"}
               </button>
@@ -1370,56 +1509,71 @@ function MobileEmulatorView({ system, game, onClose }) {
         </div>
       )}
       {/* Touch controls — layout customizado por sistema */}
-      <div className="lmx-emu-controls" data-face-count={layout.face.length}>
+      <div className={`lmx-emu-controls ${editMode ? "lmx-emu-edit" : ""}`} data-face-count={layout.face.length}>
         {/* D-pad esquerda (todos os sistemas tem D-pad) */}
-        <div className="lmx-emu-dpad">
-          <button className="lmx-emu-dpad-up"    {...btnProps(4)}>▲</button>
-          <button className="lmx-emu-dpad-left"  {...btnProps(6)}>◀</button>
-          <button className="lmx-emu-dpad-right" {...btnProps(7)}>▶</button>
-          <button className="lmx-emu-dpad-down"  {...btnProps(5)}>▼</button>
+        <div className="lmx-emu-dpad" style={groupStyle("dpad")}
+             onTouchStart={editMode ? startDrag("dpad") : undefined}
+             onMouseDown={editMode ? startDrag("dpad") : undefined}>
+          <button className="lmx-emu-dpad-up"    {...(editMode ? {} : btnProps(4))}>▲</button>
+          <button className="lmx-emu-dpad-left"  {...(editMode ? {} : btnProps(6))}>◀</button>
+          <button className="lmx-emu-dpad-right" {...(editMode ? {} : btnProps(7))}>▶</button>
+          <button className="lmx-emu-dpad-down"  {...(editMode ? {} : btnProps(5))}>▼</button>
         </div>
         {/* Face buttons (A/B/X/Y/C/etc — varia por sistema) */}
-        <div className={`lmx-emu-face lmx-emu-face-${layout.face.length}`}>
+        <div className={`lmx-emu-face lmx-emu-face-${layout.face.length}`}
+             style={groupStyle("face")}
+             onTouchStart={editMode ? startDrag("face") : undefined}
+             onMouseDown={editMode ? startDrag("face") : undefined}>
           {layout.face.map((btn, i) => (
             <button
               key={btn.id}
               className={`lmx-emu-btn lmx-emu-face-pos-${i} lmx-emu-color-${btn.color}`}
-              {...btnProps(btn.id)}
+              {...(editMode ? {} : btnProps(btn.id))}
             >{btn.label}</button>
           ))}
         </div>
         {/* Start / Select topo (libretro: 2=SELECT, 3=START) */}
         {layout.selectStart && (() => {
-          // selectStart pode ser true (Select/Start) ou ["LeftLabel","RightLabel"]
-          // Label "" = oculta esse botao
           const labels = Array.isArray(layout.selectStart) ? layout.selectStart : ["SELECT", "START"];
           return (
-            <div className="lmx-emu-system">
-              {labels[0] && <button className="lmx-emu-btn lmx-emu-btn-select" {...btnProps(2)}>{labels[0]}</button>}
-              {labels[1] && <button className="lmx-emu-btn lmx-emu-btn-start"  {...btnProps(3)}>{labels[1]}</button>}
+            <div className="lmx-emu-system" style={groupStyle("system")}
+                 onTouchStart={editMode ? startDrag("system") : undefined}
+                 onMouseDown={editMode ? startDrag("system") : undefined}>
+              {labels[0] && <button className="lmx-emu-btn lmx-emu-btn-select" {...(editMode ? {} : btnProps(2))}>{labels[0]}</button>}
+              {labels[1] && <button className="lmx-emu-btn lmx-emu-btn-start"  {...(editMode ? {} : btnProps(3))}>{labels[1]}</button>}
             </div>
           );
         })()}
-        {/* Shoulders: false | ["L","R"] | ["L1","R1","L2","R2"] | ["Z","R"] */}
+        {/* Shoulders */}
         {layout.shoulders && (() => {
           const sh = layout.shoulders;
           const map = { L: 10, R: 11, L1: 10, R1: 11, L2: 12, R2: 13, Z: 10 };
           return (
-            <div className="lmx-emu-shoulders">
+            <div className="lmx-emu-shoulders" style={groupStyle("shoulders")}
+                 onTouchStart={editMode ? startDrag("shoulders") : undefined}
+                 onMouseDown={editMode ? startDrag("shoulders") : undefined}>
               <div className="lmx-emu-shoulders-l">
                 {sh.filter(l => /^L|^Z/.test(l)).map(l => (
-                  <button key={l} className="lmx-emu-btn lmx-emu-btn-l" {...btnProps(map[l])}>{l}</button>
+                  <button key={l} className="lmx-emu-btn lmx-emu-btn-l" {...(editMode ? {} : btnProps(map[l]))}>{l}</button>
                 ))}
               </div>
               <div className="lmx-emu-shoulders-r">
                 {sh.filter(l => /^R/.test(l)).map(l => (
-                  <button key={l} className="lmx-emu-btn lmx-emu-btn-r" {...btnProps(map[l])}>{l}</button>
+                  <button key={l} className="lmx-emu-btn lmx-emu-btn-r" {...(editMode ? {} : btnProps(map[l]))}>{l}</button>
                 ))}
               </div>
             </div>
           );
         })()}
       </div>
+      {/* Banner edit mode */}
+      {editMode && (
+        <div className="lmx-emu-edit-banner">
+          <span>Arraste cada grupo de botoes pra reposicionar</span>
+          <button className="lmx-settings-btn ghost" onClick={resetLayout}>Resetar</button>
+          <button className="lmx-settings-btn primary" onClick={() => setEditMode(false)}>OK</button>
+        </div>
+      )}
     </div>
   );
 }

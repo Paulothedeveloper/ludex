@@ -1405,3 +1405,47 @@
     right: 14px;
   }
 }
+
+/* ===== EMULADOR: modo edit layout ===== */
+.lmx-emu-edit .lmx-emu-dpad,
+.lmx-emu-edit .lmx-emu-face,
+.lmx-emu-edit .lmx-emu-system,
+.lmx-emu-edit .lmx-emu-shoulders {
+  outline: 2px dashed rgba(124, 58, 237, 0.7);
+  outline-offset: 4px;
+  border-radius: 12px;
+  cursor: grab;
+  touch-action: none;
+}
+.lmx-emu-edit .lmx-emu-dpad button,
+.lmx-emu-edit .lmx-emu-face button,
+.lmx-emu-edit .lmx-emu-system button,
+.lmx-emu-edit .lmx-emu-shoulders button {
+  pointer-events: none;
+  opacity: 0.7;
+}
+.lmx-emu-edit-banner {
+  position: fixed;
+  top: env(safe-area-inset-top, 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10001;
+  background: rgba(124, 58, 237, 0.95);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: var(--lmx-radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 95vw;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.6);
+}
+.lmx-emu-edit-banner .lmx-settings-btn {
+  width: auto;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 11px;
+  min-width: 64px;
+}

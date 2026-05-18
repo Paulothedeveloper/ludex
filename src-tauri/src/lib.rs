@@ -2902,6 +2902,112 @@ fn android_has_all_files_access() -> bool { true }
 #[tauri::command]
 fn android_open_all_files_settings() -> Result<(), String> { Ok(()) }
 
+// --- v0.8.17: abrir pasta Ludex no Files Manager + launch app externo (AetherSX2) ---
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn android_open_folder(abs_path: String) -> Result<(), String> {
+    use jni::objects::{JObject, JString};
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.map_err(|e| e.to_string())?;
+    let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+    let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+    let jpath: JString = env.new_string(&abs_path).map_err(|e| e.to_string())?;
+    env.call_static_method(
+        "gg/ludex/app/Permissions",
+        "openFolder",
+        "(Landroid/app/Activity;Ljava/lang/String;)V",
+        &[(&activity).into(), (&jpath).into()],
+    ).map_err(|e| format!("JNI openFolder: {}", e))?;
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn android_launch_external_emu(package_name: String, rom_path: String) -> Result<bool, String> {
+    use jni::objects::{JObject, JString};
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.map_err(|e| e.to_string())?;
+    let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+    let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+    let jpkg: JString = env.new_string(&package_name).map_err(|e| e.to_string())?;
+    let jrom: JString = env.new_string(&rom_path).map_err(|e| e.to_string())?;
+    let ok = env.call_static_method(
+        "gg/ludex/app/Permissions",
+        "launchExternalEmulator",
+        "(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;)Z",
+        &[(&activity).into(), (&jpkg).into(), (&jrom).into()],
+    ).map_err(|e| format!("JNI launchExternal: {}", e))?
+     .z().map_err(|e| e.to_string())?;
+    Ok(ok)
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn android_open_play_store(package_name: String) -> Result<(), String> {
+    use jni::objects::{JObject, JString};
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.map_err(|e| e.to_string())?;
+    let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+    let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+    let jpkg: JString = env.new_string(&package_name).map_err(|e| e.to_string())?;
+    env.call_static_method(
+        "gg/ludex/app/Permissions",
+        "openPlayStorePage",
+        "(Landroid/app/Activity;Ljava/lang/String;)V",
+        &[(&activity).into(), (&jpkg).into()],
+    ).map_err(|e| format!("JNI openPlay: {}", e))?;
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn android_is_package_installed(package_name: String) -> bool {
+    use jni::objects::{JObject, JString};
+    let ctx = ndk_context::android_context();
+    let Ok(vm) = (unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }) else { return false; };
+    let Ok(mut env) = vm.attach_current_thread() else { return false; };
+    let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+    let Ok(jpkg): Result<JString, _> = env.new_string(&package_name) else { return false; };
+    env.call_static_method(
+        "gg/ludex/app/Permissions",
+        "isPackageInstalled",
+        "(Landroid/app/Activity;Ljava/lang/String;)Z",
+        &[(&activity).into(), (&jpkg).into()],
+    ).ok().and_then(|v| v.z().ok()).unwrap_or(false)
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn android_ludex_base_path() -> String {
+    "/data/data/gg.ludex.app/files/Ludex".to_string()
+}
+
+// Stubs desktop
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+fn android_open_folder(_abs_path: String) -> Result<(), String> { Ok(()) }
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+fn android_launch_external_emu(_package_name: String, _rom_path: String) -> Result<bool, String> { Ok(false) }
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+fn android_open_play_store(_package_name: String) -> Result<(), String> { Ok(()) }
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+fn android_is_package_installed(_package_name: String) -> bool { false }
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+fn android_ludex_base_path() -> String {
+    dirs::data_dir()
+        .map(|p| p.join("Ludex").to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
 #[tauri::command]
 fn clear_app_logs() -> Result<u32, String> {
     let dir = app_log_dir().ok_or("data dir indisponivel")?;
@@ -4591,6 +4697,11 @@ pub fn run() {
             clear_app_logs,
             android_has_all_files_access,
             android_open_all_files_settings,
+            android_open_folder,
+            android_launch_external_emu,
+            android_open_play_store,
+            android_is_package_installed,
+            android_ludex_base_path,
             load_config,
             save_config,
             reset_config,
