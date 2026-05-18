@@ -2531,18 +2531,73 @@ fn check_required_bios(core_filename: &str) -> Option<String> {
     let needed = required_bios_files(core_filename);
     if needed.is_empty() { return None; }
     let sys_dir = libretro_system_dir();
+    // 1. Check exato por nome (rapido)
     let any_present = needed.iter().any(|f| sys_dir.join(f).is_file());
     if any_present { return None; }
-    // Tenta auto-import de paths conhecidos antes de desistir
+    // 2. v0.8.24: check heuristico por padrao+tamanho (case-insensitive,
+    //    aceita qualquer scph*.bin/ps2*.bin/dc_boot/etc do tamanho certo)
+    if bios_heuristic_check(core_filename, &sys_dir) {
+        log::info!("BIOS heuristico OK em {}", sys_dir.display());
+        return None;
+    }
+    // 3. Tenta auto-import de paths conhecidos antes de desistir
     if bios_auto_import_into_system(needed) {
-        let any_now = needed.iter().any(|f| sys_dir.join(f).is_file());
+        let any_now = needed.iter().any(|f| sys_dir.join(f).is_file())
+            || bios_heuristic_check(core_filename, &sys_dir);
         if any_now { return None; }
+    }
+    // Log detalhado pra debug
+    if let Ok(entries) = std::fs::read_dir(&sys_dir) {
+        let names: Vec<String> = entries.flatten()
+            .filter_map(|e| e.file_name().to_str().map(|s| s.to_string()))
+            .collect();
+        log::warn!("BIOS check failed. sys_dir={} files={:?} needed={:?}",
+            sys_dir.display(), names, needed);
     }
     Some(format!(
         "BIOS necessaria para este sistema nao encontrada.\n\nColoca um destes arquivos em:\n{}\n\nArquivos aceitos:\n{}",
         sys_dir.display(),
         needed.join("\n")
     ))
+}
+
+/// v0.8.24: heuristica robusta — checa por padrao de nome + tamanho minimo.
+/// Mais tolerante que match exato (case-insensitive, regional variants).
+fn bios_heuristic_check(core_filename: &str, sys_dir: &std::path::Path) -> bool {
+    let c = core_filename.to_ascii_lowercase();
+    let (prefixes, min_size): (&[&str], u64) = if c.contains("pcsx2") {
+        (&["scph", "ps2-", "ps2_", "ps2 ", "ps2bios"], 3_500_000)
+    } else if c.contains("flycast") {
+        (&["dc_boot", "dc-boot", "dcboot", "dreamcast_bios"], 1_500_000)
+    } else if c.contains("saturn") {
+        (&["sega_101", "mpr-17933", "saturn_bios", "sega 101"], 400_000)
+    } else if c.contains("opera") {
+        (&["panafz", "goldstar", "3do_bios"], 800_000)
+    } else if c.contains("swanstation") || c.contains("mednafen_psx") || c.contains("beetle_psx") {
+        (&["scph", "ps-", "ps1_", "psx_bios", "psone"], 400_000)
+    } else if c.contains("virtualjaguar") {
+        (&["jagboot", "jaguar_boot"], 100_000)
+    } else {
+        return false;
+    };
+    let Ok(entries) = std::fs::read_dir(sys_dir) else { return false; };
+    for e in entries.flatten() {
+        let p = e.path();
+        if !p.is_file() { continue; }
+        let Some(name) = p.file_name().and_then(|n| n.to_str()) else { continue; };
+        let name_lc = name.to_ascii_lowercase();
+        // Aceita .bin / .rom / .bios (extensoes BIOS comuns)
+        let is_bios_ext = name_lc.ends_with(".bin") || name_lc.ends_with(".rom")
+            || name_lc.ends_with(".bios");
+        if !is_bios_ext { continue; }
+        let matches_prefix = prefixes.iter().any(|prefix| name_lc.starts_with(prefix) || name_lc.contains(prefix));
+        if !matches_prefix { continue; }
+        let size = e.metadata().map(|m| m.len()).unwrap_or(0);
+        if size >= min_size {
+            return true;
+        }
+    }
+    false
 }
 
 /// Procura BIOS em paths conhecidos (PCSX2/bios, RetroArch/system, Documents/PCSX2,
