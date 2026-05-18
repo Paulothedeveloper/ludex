@@ -3958,7 +3958,9 @@ use secrets::{GUMROAD_PRODUCT_ID, GUMROAD_ACCESS_TOKEN, GUMROAD_PERMALINK, ADMIN
 use sha2::{Digest, Sha256};
 
 /// Maximo de PCs (uses count) que uma license aceita. Soft-enforce no backend.
-const GUMROAD_MAX_USES: u32 = 2;
+/// v0.8.25: aumentado de 2 -> 5 (Windows + Android + 2 spare em caso de
+/// reinstall/troca de hardware). Admin email bypassa esse check de qualquer jeito.
+const GUMROAD_MAX_USES: u32 = 5;
 /// Quantos dias de grace period offline antes de bloquear o app por falta de
 /// validacao online. 30 dias = user viaja sem internet sem perder acesso.
 const LICENSE_OFFLINE_GRACE_DAYS: u64 = 30;
@@ -4165,12 +4167,13 @@ async fn gumroad_verify(key: &str, increment_uses: bool) -> Result<LicenseInfo, 
     let uses = body.get("uses").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
     let buyer_email = body.pointer("/purchase/email")
         .and_then(|v| v.as_str()).map(String::from);
-    if uses > GUMROAD_MAX_USES {
-        return Err(format!("Limite de {} PCs ja atingido com essa license. Desative em outro PC ou compre outra.", GUMROAD_MAX_USES));
-    }
     let is_admin = buyer_email.as_deref()
         .map(|e| e.eq_ignore_ascii_case(ADMIN_EMAIL))
         .unwrap_or(false);
+    // v0.8.25: admin bypassa check de uses (uso ilimitado pra dev/owner)
+    if uses > GUMROAD_MAX_USES && !is_admin {
+        return Err(format!("Limite de {} PCs ja atingido com essa license. Desative em outro PC ou compre outra.", GUMROAD_MAX_USES));
+    }
     Ok(LicenseInfo {
         valid: true,
         message: "Licenca ativa".into(),
@@ -4552,12 +4555,47 @@ fn android_demo_status() -> AndroidDemoStatus {
 /// Valida com Gumroad e checa se email == ADMIN_EMAIL. Apenas Paulo libera.
 #[tauri::command]
 async fn android_demo_admin_unlock(license_key: String) -> Result<bool, String> {
-    let info = gumroad_verify(&license_key, false).await?;
-    if !info.is_admin {
+    // v0.8.25: admin email bypassa qualquer erro do Gumroad (incluindo limite
+    // de uses atingido). Faz fetch raw pra ler buyer_email mesmo se Gumroad
+    // retornar success=false por limite.
+    if GUMROAD_ACCESS_TOKEN == "PLACEHOLDER_ACCESS_TOKEN" {
+        return Err("Sistema de licenca nao configurado".into());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent("Ludex/0.8 (admin-unlock)")
+        .build()
+        .map_err(|e| format!("http client: {}", e))?;
+    let mut form = std::collections::HashMap::new();
+    form.insert("product_id", GUMROAD_PRODUCT_ID.to_string());
+    form.insert("license_key", license_key.trim().to_string());
+    form.insert("increment_uses_count", "false".to_string());
+    let resp = client.post("https://api.gumroad.com/v2/licenses/verify")
+        .bearer_auth(GUMROAD_ACCESS_TOKEN)
+        .form(&form)
+        .send().await
+        .map_err(|e| format!("gumroad request: {}", e))?;
+    let body: serde_json::Value = resp.json().await
+        .map_err(|e| format!("gumroad parse: {}", e))?;
+    // Tenta achar email mesmo se success=false (campo purchase.email pode vir)
+    let buyer_email = body.pointer("/purchase/email")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let is_admin = buyer_email.as_deref()
+        .map(|e| e.eq_ignore_ascii_case(ADMIN_EMAIL))
+        .unwrap_or(false);
+    if !is_admin {
+        // Se nao eh admin email, checa se eh resposta de "license invalida" mesmo
+        let success = body.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+        if !success {
+            let msg = body.get("message").and_then(|v| v.as_str()).unwrap_or("license invalida");
+            return Err(format!("Essa license nao e admin: {}", msg));
+        }
         return Err("Essa license nao e admin. APK ficara em modo demo (7 dias).".to_string());
     }
     let mut cfg = load_config();
     cfg.android_admin_unlock = true;
+    cfg.license_key = Some(license_key.trim().to_string());
     save_config(cfg)?;
     Ok(true)
 }
