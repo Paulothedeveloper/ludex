@@ -264,11 +264,10 @@ fn libretro_core_for(system_id: &str) -> String {
         "wii"  => "dolphin_libretro",
         "gc"   => "dolphin_libretro",
         "ps2"  => {
-            // PS2 (PCSX2 libretro) nao tem build ARM Android — desativa em Android
-            #[cfg(target_os = "android")]
-            { return String::new(); }
-            #[cfg(not(target_os = "android"))]
-            "pcsx2_libretro"
+            // v0.8.26: PS2 sempre via PCSX2 standalone (pcsx2-qt.exe).
+            // pcsx2_libretro era instavel (segfault em varios jogos), e nao tem
+            // ARM Android disponivel. Retorna empty -> fallback pra emulator_rel.
+            return String::new();
         }
         // novos em v0.7.0
         "dreamcast" => "flycast_libretro",
@@ -393,9 +392,10 @@ const EMULATORS: &[EmulatorConfig] = &[
         name: "PLAYSTATION 2",
         color: "#1d4ed8",
         folder_name: "PS2",
-        emulator_rel: "",  // libretro embarcado (pcsx2/lrps2) — v0.7.1 migrou de pcsx2-qt.exe
+        // v0.8.26: PCSX2 standalone (libretro era instavel, segfault em jogos)
+        emulator_rel: "PCSX2\\pcsx2-qt.exe",
         extensions: &["iso", "chd", "cue", "bin"],
-        launch_args: &[],
+        launch_args: &["-fullscreen", "-bigpicture", "--"],
         igdb_platform: 8,
     },
     EmulatorConfig {

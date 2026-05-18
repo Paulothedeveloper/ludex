@@ -1640,6 +1640,67 @@ function MobileEmulatorView({ system, game, onClose }) {
     if (autoPaused) setAutoPaused(false);
     invoke("libretro_set_input", { buttonId: id, pressed }).catch(() => {});
   }, [autoPaused]);
+
+  // v0.8.26: gamepad fisico (Bluetooth/USB) — Android WebView suporta nativo.
+  // Standard mapping -> libretro RetroPad (mesma logica do desktop).
+  const [gamepadConnected, setGamepadConnected] = useState(false);
+  useEffect(() => {
+    if (!info) return;
+    const PAD_MAP = {
+      0: 0,   // A (Xbox) -> B libretro (Nintendo style)
+      1: 8,   // B -> A
+      2: 1,   // X -> Y
+      3: 9,   // Y -> X
+      4: 10,  // LB -> L
+      5: 11,  // RB -> R
+      6: 12,  // LT -> L2
+      7: 13,  // RT -> R2
+      8: 2,   // Back/Select
+      9: 3,   // Start
+      10: 14, // L3
+      11: 15, // R3
+      12: 4,  // D-pad Up
+      13: 5,  // D-pad Down
+      14: 6,  // D-pad Left
+      15: 7,  // D-pad Right
+    };
+    const lastState = new Array(16).fill(false);
+    let raf;
+    function poll() {
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      let pad = null;
+      let connected = false;
+      for (const p of pads) { if (p) { pad = p; connected = true; break; } }
+      if (connected !== gamepadConnected) setGamepadConnected(connected);
+      if (pad) {
+        lastInputRef.current = Date.now();
+        if (autoPaused) setAutoPaused(false);
+        // Combo Select+Start = sair (igual desktop)
+        if (pad.buttons[8]?.pressed && pad.buttons[9]?.pressed) {
+          onClose();
+          return;
+        }
+        // Botoes
+        for (const [padIdx, libretroId] of Object.entries(PAD_MAP)) {
+          const pressed = pad.buttons[parseInt(padIdx)]?.pressed || false;
+          if (pressed !== lastState[libretroId]) {
+            lastState[libretroId] = pressed;
+            invoke("libretro_set_input", { buttonId: libretroId, pressed }).catch(() => {});
+          }
+        }
+        // Analog stick esquerdo -> D-pad (deadzone 0.4)
+        const ax = pad.axes[0] || 0; const ay = pad.axes[1] || 0;
+        const left = ax < -0.4, right = ax > 0.4, up = ay < -0.4, down = ay > 0.4;
+        if (left  !== lastState[6]) { lastState[6] = left;  invoke("libretro_set_input", { buttonId: 6, pressed: left  }).catch(() => {}); }
+        if (right !== lastState[7]) { lastState[7] = right; invoke("libretro_set_input", { buttonId: 7, pressed: right }).catch(() => {}); }
+        if (up    !== lastState[4]) { lastState[4] = up;    invoke("libretro_set_input", { buttonId: 4, pressed: up    }).catch(() => {}); }
+        if (down  !== lastState[5]) { lastState[5] = down;  invoke("libretro_set_input", { buttonId: 5, pressed: down  }).catch(() => {}); }
+      }
+      raf = requestAnimationFrame(poll);
+    }
+    raf = requestAnimationFrame(poll);
+    return () => { if (raf) cancelAnimationFrame(raf); };
+  }, [info, onClose, autoPaused, gamepadConnected]);
   const btnProps = (id) => ({
     onTouchStart: (e) => { e.preventDefault(); press(id, true); },
     onTouchEnd:   (e) => { e.preventDefault(); press(id, false); },
@@ -1847,8 +1908,12 @@ function MobileEmulatorView({ system, game, onClose }) {
           <div>Carregando emulador...</div>
         </div>
       )}
-      {/* Touch controls — layout customizado por sistema */}
-      <div className={`lmx-emu-controls ${editMode ? "lmx-emu-edit" : ""}`} data-face-count={layout.face.length}>
+      {/* Indicador gamepad fisico conectado */}
+      {gamepadConnected && !editMode && (
+        <div className="lmx-emu-gamepad-badge" title="Gamepad conectado">🎮 GAMEPAD</div>
+      )}
+      {/* Touch controls — layout customizado por sistema. Esconde se gamepad ativo */}
+      <div className={`lmx-emu-controls ${editMode ? "lmx-emu-edit" : ""} ${gamepadConnected && !editMode ? "lmx-emu-controls-dim" : ""}`} data-face-count={layout.face.length}>
         {/* D-pad esquerda (todos os sistemas tem D-pad) */}
         <div className="lmx-emu-dpad" style={groupStyle("dpad")}
              onTouchStart={editMode ? startDrag("dpad") : undefined}

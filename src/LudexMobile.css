@@ -1763,3 +1763,22 @@
     right: 60px;
   }
 }
+
+/* v0.8.26: Gamepad fisico indicator + dim controls quando conectado */
+.lmx-emu-gamepad-badge {
+  position: absolute;
+  top: env(safe-area-inset-top, 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+  padding: 4px 10px;
+  background: rgba(34, 197, 94, 0.85);
+  color: #fff;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+.lmx-emu-controls-dim { opacity: 0.25; transition: opacity 200ms; }
+.lmx-emu-controls-dim:active, .lmx-emu-controls-dim:hover { opacity: 1; }
