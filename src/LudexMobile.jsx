@@ -17,6 +17,19 @@ import React, { useEffect, useMemo, useState, useCallback, useRef } from "react"
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { sfx, playPlatformJingle, unlockAudio, haptic, setMuted as setSfxMuted, isMutedNow } from "./ludexMobileAudio";
+import {
+  loadRecents, pushRecent, trackSession, statsFor, totalPlayTime,
+  ACHIEVEMENTS, loadAchievements, checkAchievements, markTabVisited, unlockAchievement,
+  isChildModeOn, setChildMode as setChildModeStore, verifyChildPin, filterChildSafe,
+  exportConfig, importConfig,
+  saveThumbnail, loadThumbnail,
+  loadCustomCovers, setCustomCover,
+  loadCheats, setCheats as setCheatsStore,
+  addScreenshot, loadScreenshots,
+  isFirstRunDone, markFirstRunDone,
+  isAmbientOn, setAmbientOn,
+  formatPlayTime, formatRelative,
+} from "./ludexMobileFeatures";
 
 // ============================================================
 // === ICONES SVG (sem emojis, regra Paulo) ===================
@@ -142,6 +155,14 @@ export default function LudexMobile() {
   // v0.8.21: auto-update Android (banner obrigatorio quando ha versao nova)
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateState, setUpdateState] = useState({ stage: "idle", msg: "" }); // idle | downloading | installing | error
+  // v0.8.22: achievement toast + telemetria local
+  const [achievementToast, setAchievementToast] = useState(null);
+  const [recents, setRecents] = useState(() => loadRecents()); // [{ systemId, systemName, systemColor, gameName, gamePath, timestamp, playTime }]
+  const [childMode, setChildMode] = useState(() => {
+    try { return localStorage.getItem("ludex.childMode") === "1"; } catch { return false; }
+  });
+  // Wallpaper dinamico baseado no ultimo jogo aberto
+  const lastGameCover = recents[0] ? covers[recents[0].gamePath] : null;
   // v0.8.14: rastreia se app ja tem acesso a todos os arquivos (Android)
   const [hasFilesAccess, setHasFilesAccess] = useState(true);
   const requestFilesAccess = useCallback(async () => {
@@ -208,7 +229,10 @@ export default function LudexMobile() {
         const sys = await invoke("scan_roms", { romsRoot: null });
         // Filtra: APK so mostra sistemas com core libretro ARM (autenticos embedded).
         // Switch/Wii U/PS3/Xbox/etc nao tem core ARM = nao funcionam em Android.
-        const filtered = (sys || []).filter((s) => ANDROID_SUPPORTED.has(s.id));
+        // v0.8.22: child mode filtra ROMs adultas por keyword no nome
+        const filtered = (sys || [])
+          .filter((s) => ANDROID_SUPPORTED.has(s.id))
+          .map(s => ({ ...s, games: filterChildSafe(s.games || []) }));
         setSystems(filtered);
       } catch (e) { console.error("scan_roms", e); }
       setLoading(false);
@@ -226,12 +250,25 @@ export default function LudexMobile() {
     };
   }, []);
 
-  // Helper sons + haptic juntos (single source of truth pra interacao)
+  // Achievement unlock callback (toast)
+  const onUnlockAch = useCallback((ach) => {
+    setAchievementToast(ach);
+    sfx.achievement(); haptic([20, 40, 20]);
+    setTimeout(() => setAchievementToast(null), 4200);
+  }, []);
+
+  // Run achievement engine on mount + a cada mudanca em recents/stats
+  useEffect(() => { checkAchievements(onUnlockAch); }, [onUnlockAch, recents]);
+
+  // Helper sons + haptic juntos + tracking tabs (achievement all_categories)
   const changeTab = useCallback((newTab) => {
     if (newTab === activeTab) return;
     sfx.nav(); haptic(8);
     setActiveTab(newTab);
-  }, [activeTab]);
+    if (markTabVisited(newTab)) {
+      unlockAchievement("all_categories", onUnlockAch);
+    }
+  }, [activeTab, onUnlockAch]);
 
   // ============ FETCH COVERS PRO SISTEMA ABERTO ============
   useEffect(() => {
@@ -289,6 +326,7 @@ export default function LudexMobile() {
   // Android: so libretro embedded. Sistemas sem core ARM nao aparecem na lista
   // (filtrados por ANDROID_SUPPORTED). PS2/PS3/PS4/Vita/Xbox/Switch: nao suportados.
   const [playingGame, setPlayingGame] = useState(null);
+  const sessionStartRef = useRef(null);
   const launchGame = useCallback((system, game) => {
     if (!system.libretro_core) {
       alert(`Sistema "${system.name}" nao tem core libretro embedded pra Android.`);
@@ -296,8 +334,26 @@ export default function LudexMobile() {
     }
     playPlatformJingle(system.id);
     haptic(20);
+    sessionStartRef.current = Date.now();
+    pushRecent({
+      systemId: system.id, systemName: system.name, systemColor: system.color,
+      gameName: game.name, gamePath: game.path,
+    });
+    setRecents(loadRecents());
     setPlayingGame({ system, game });
   }, []);
+  const closeEmulator = useCallback(() => {
+    // Trackeia tempo de jogo + atualiza recents/achievements
+    if (sessionStartRef.current && playingGame) {
+      const dur = Math.floor((Date.now() - sessionStartRef.current) / 1000);
+      if (dur > 5) trackSession(playingGame.game.path, dur);
+      sessionStartRef.current = null;
+    }
+    setRecents(loadRecents());
+    checkAchievements(onUnlockAch);
+    sfx.shutdown(); haptic(30);
+    setPlayingGame(null);
+  }, [playingGame, onUnlockAch]);
 
   // ============ PICKER DE PASTA ROMS ============
   // tauri-plugin-dialog NAO suporta directory picker em Android.
@@ -403,7 +459,7 @@ export default function LudexMobile() {
       <MobileEmulatorView
         system={playingGame.system}
         game={playingGame.game}
-        onClose={() => { sfx.shutdown(); haptic(30); setPlayingGame(null); }}
+        onClose={closeEmulator}
       />
     );
   }
@@ -436,7 +492,7 @@ export default function LudexMobile() {
 
   // ============ APP NORMAL: tab bar + conteudo ============
   return (
-    <div className="lmx">
+    <div className="lmx" style={lastGameCover ? { backgroundImage: `linear-gradient(180deg, rgba(10,2,32,0.85) 0%, rgba(10,2,32,0.98) 70%), url(${lastGameCover})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>
       {!loading && launching && (
         <div className="lmx-loading-overlay">
           <div className="lmx-spinner" />
@@ -452,8 +508,14 @@ export default function LudexMobile() {
             activeProfile={activeProfile}
             androidDemo={androidDemo}
             loading={loading}
+            recents={recents}
             onPickSystem={(sys) => { playPlatformJingle(sys.id); haptic(12); setOpenSystem(sys); }}
             onPickGame={(system, game) => { sfx.open(); haptic(10); setOpenGame({ system, game }); }}
+            onResume={(rec) => {
+              const sys = systems.find(s => s.id === rec.systemId);
+              const game = sys?.games?.find(g => g.path === rec.gamePath);
+              if (sys && game) launchGame(sys, game);
+            }}
             onPickFolder={pickRomsFolder}
             hasFilesAccess={hasFilesAccess}
             onRequestAccess={requestFilesAccess}
@@ -493,6 +555,27 @@ export default function LudexMobile() {
         />
       )}
 
+      {/* Achievement toast global */}
+      {achievementToast && (
+        <div className="lmx-ach-toast">
+          <div className="lmx-ach-toast-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d={achievementToast.icon} />
+            </svg>
+          </div>
+          <div className="lmx-ach-toast-body">
+            <div className="lmx-ach-toast-label">Conquista desbloqueada</div>
+            <div className="lmx-ach-toast-name">{achievementToast.name}</div>
+            <div className="lmx-ach-toast-desc">{achievementToast.desc}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Tutorial first run */}
+      {!isFirstRunDone() && (
+        <TutorialOverlay onDone={() => { markFirstRunDone(); setActiveTab((t) => t); /* force rerender */ }} />
+      )}
+
       {/* Bottom tab bar (estilo iOS/Android nativo) */}
       <nav className="lmx-tabs">
         <TabBtn icon={<IconHome />} label="Inicio" active={activeTab === "home"} onClick={() => changeTab("home")} />
@@ -520,12 +603,12 @@ function TabBtn({ icon, label, active, onClick }) {
 // === HOME TAB ===============================================
 // Hero (perfil + DEMO) + Recentes + Carrossel por sistema
 // ============================================================
-function HomeTab({ systems, covers, activeProfile, androidDemo, loading, onPickSystem, onPickGame, onPickFolder, hasFilesAccess, onRequestAccess }) {
+function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents, onPickSystem, onPickGame, onResume, onPickFolder, hasFilesAccess, onRequestAccess }) {
   const nonEmptySystems = systems.filter((s) => s.games.length > 0);
   const topSystems = nonEmptySystems.slice(0, 6);
 
-  // Recentes: jogos mais recentes (limit 8)
-  const recents = useMemo(() => {
+  // Internal: jogos por modified_at (usado por carrosseis), distinto de recents (props - last played)
+  const recentByMtime = useMemo(() => {
     const all = [];
     for (const sys of systems) {
       for (const g of sys.games) {
@@ -559,6 +642,11 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, onPickS
         </div>
       )}
 
+      {/* v0.8.22: Continue onde parou (recents) */}
+      {recents && recents.length > 0 && (
+        <RecentsBanner recents={recents} covers={covers} onResume={onResume} />
+      )}
+
       {!loading && nonEmptySystems.length === 0 && (
         <div className="lmx-empty-state">
           <div className="lmx-empty-icon"><IconGrid /></div>
@@ -589,12 +677,12 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, onPickS
         </div>
       )}
 
-      {/* Recentes */}
-      {recents.length > 0 && (
+      {/* Adicionados recentemente (por modified_at do filesystem) */}
+      {recentByMtime.length > 0 && (
         <section className="lmx-section">
-          <h3 className="lmx-section-title">Recentes</h3>
+          <h3 className="lmx-section-title">Adicionados recentemente</h3>
           <div className="lmx-carousel">
-            {recents.map(({ system, game }) => (
+            {recentByMtime.map(({ system, game }) => (
               <GameCard
                 key={game.path}
                 system={system}
@@ -1007,6 +1095,12 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
         <UpdateChecker />
       </section>
 
+      <WhyWindowsCard />
+      <AchievementsCard />
+      <ChildModeCard />
+      <AmbientMusicToggle />
+      <BackupRestoreCard />
+
       <section className="lmx-settings-card">
         <div className="lmx-settings-label">Sons</div>
         <SoundToggle />
@@ -1014,7 +1108,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
 
       <section className="lmx-settings-card">
         <div className="lmx-settings-label">Sobre</div>
-        <div className="lmx-settings-value">Ludex Android v0.8.21</div>
+        <div className="lmx-settings-value">Ludex Android v0.8.22</div>
         <p className="lmx-settings-hint">
           A versao Windows tem auto-update, gamepad nativo, todos os sistemas embedded + Switch/Wii U/PS3/Xbox 360/PS Vita via emulador externo.
         </p>
@@ -1377,6 +1471,11 @@ function MobileEmulatorView({ system, game, onClose }) {
   const [editMode, setEditMode] = useState(false);
   const [offsets, setOffsets] = useState(() => loadCustomLayout(system.id) || {});
   const dragState = useRef(null);
+  // Sleep timer: pausa core se sem input por X min (v0.8.22)
+  const lastInputRef = useRef(Date.now());
+  const [autoPaused, setAutoPaused] = useState(false);
+  // Quick save/load via tap duplo no canto (v0.8.22)
+  const cornerTapRef = useRef({ tl: 0, tr: 0 });
 
   const startDrag = useCallback((groupKey) => (e) => {
     if (!editMode) return;
@@ -1524,8 +1623,10 @@ function MobileEmulatorView({ system, game, onClose }) {
 
   // Touch handlers: button id libretro (joypad)
   const press = useCallback((id, pressed) => {
+    lastInputRef.current = Date.now(); // reset sleep timer
+    if (autoPaused) setAutoPaused(false);
     invoke("libretro_set_input", { buttonId: id, pressed }).catch(() => {});
-  }, []);
+  }, [autoPaused]);
   const btnProps = (id) => ({
     onTouchStart: (e) => { e.preventDefault(); press(id, true); },
     onTouchEnd:   (e) => { e.preventDefault(); press(id, false); },
@@ -1547,14 +1648,22 @@ function MobileEmulatorView({ system, game, onClose }) {
     );
   }
 
-  // Save / Load state
+  // Save / Load state (com thumbnail v0.8.22)
   const saveState = useCallback(async (slot) => {
     try {
       await invoke("libretro_save_state", { slot });
+      // Captura thumbnail do canvas atual (data URL)
+      try {
+        if (canvasRef.current) {
+          const thumb = canvasRef.current.toDataURL("image/jpeg", 0.6);
+          saveThumbnail(system.id, slot, thumb);
+        }
+      } catch {}
+      try { unlockAchievement("first_save", () => {}); } catch {}
       setStateMsg(`Salvo no slot ${slot}`);
     } catch (e) { setStateMsg(`Falha ao salvar: ${e}`); }
     setTimeout(() => setStateMsg(null), 2500);
-  }, []);
+  }, [system.id]);
   const loadState = useCallback(async (slot) => {
     try {
       await invoke("libretro_load_state", { slot });
@@ -1563,12 +1672,61 @@ function MobileEmulatorView({ system, game, onClose }) {
     setTimeout(() => setStateMsg(null), 2500);
   }, []);
 
+  // Sleep timer: a cada 60s, checa idle > 30min e auto-pause (v0.8.22)
+  useEffect(() => {
+    const t = setInterval(() => {
+      const idleMs = Date.now() - lastInputRef.current;
+      if (idleMs > 30 * 60 * 1000 && !autoPaused) {
+        setAutoPaused(true);
+        setStateMsg("Pausado (30min sem input). Toque pra retomar.");
+      }
+    }, 60_000);
+    return () => clearInterval(t);
+  }, [autoPaused]);
+
+  // Quick save/load via tap duplo no canto (v0.8.22)
+  const cornerTap = useCallback((corner) => () => {
+    const now = Date.now();
+    const last = cornerTapRef.current[corner];
+    cornerTapRef.current[corner] = now;
+    lastInputRef.current = now;
+    if (autoPaused) setAutoPaused(false);
+    if (now - last < 400) {
+      // double-tap
+      if (corner === "tl") { saveState(0); haptic(15); }
+      else { loadState(0); haptic(15); }
+    }
+  }, [autoPaused, saveState, loadState]);
+
+  // Screenshot (captura canvas + salva em galeria local)
+  const takeScreenshot = useCallback(() => {
+    try {
+      if (!canvasRef.current) return;
+      const data = canvasRef.current.toDataURL("image/jpeg", 0.7);
+      addScreenshot(system.id, game.name, data);
+      setStateMsg("Screenshot salva (Ajustes -> Galeria)");
+      sfx.confirm(); haptic(15);
+      setTimeout(() => setStateMsg(null), 2500);
+    } catch {}
+  }, [system.id, game.name]);
+
   return (
     <div className="lmx-emu-root">
       <button className="lmx-emu-back" onClick={onClose} aria-label="Voltar"><IconArrowLeft /></button>
       <button className="lmx-emu-menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu">⚙</button>
       <div className={`lmx-emu-canvas-wrap lmx-emu-scale-${scaleMode}`}>
         <canvas ref={canvasRef} className="lmx-emu-canvas" />
+        {/* Corner tap zones: TL=quick save, TR=quick load (double tap) */}
+        <div className="lmx-emu-corner lmx-emu-corner-tl" onTouchEnd={cornerTap("tl")} onClick={cornerTap("tl")} aria-label="Tap duplo: save state 0" />
+        <div className="lmx-emu-corner lmx-emu-corner-tr" onTouchEnd={cornerTap("tr")} onClick={cornerTap("tr")} aria-label="Tap duplo: load state 0" />
+        {/* Watermark "Ludex Desktop" (paywall hint) */}
+        <div className="lmx-emu-watermark">Versao previa - Ludex Desktop tem mais</div>
+        {autoPaused && (
+          <div className="lmx-emu-autopause">
+            <h3>Pausado</h3>
+            <p>30min sem input. Toque pra retomar.</p>
+          </div>
+        )}
       </div>
       {stateMsg && <div className="lmx-emu-toast">{stateMsg}</div>}
       {menuOpen && (
@@ -1614,6 +1772,13 @@ function MobileEmulatorView({ system, game, onClose }) {
               </button>
               <button className="lmx-emu-menu-pill" onClick={resetLayout} style={{marginTop:6}}>
                 Resetar posicoes
+              </button>
+            </div>
+
+            <div className="lmx-emu-menu-section">
+              <div className="lmx-emu-menu-label">Captura</div>
+              <button className="lmx-emu-menu-pill" onClick={() => { takeScreenshot(); setMenuOpen(false); }}>
+                Tirar screenshot
               </button>
             </div>
 
@@ -1701,5 +1866,240 @@ function MobileEmulatorView({ system, game, onClose }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ============================================================
+// === RECENTS BANNER (continue onde parou) ===================
+// ============================================================
+function RecentsBanner({ recents, covers, onResume }) {
+  const top = recents[0];
+  if (!top) return null;
+  const cover = covers[top.gamePath];
+  const stats = statsFor(top.gamePath);
+  return (
+    <section className="lmx-recents">
+      <h3 className="lmx-section-title">Continue onde parou</h3>
+      <button className="lmx-recents-card" onClick={() => onResume(top)} style={{ "--sys-color": top.systemColor }}>
+        {cover && <img className="lmx-recents-bg" src={cover} alt="" aria-hidden />}
+        <div className="lmx-recents-overlay" />
+        <div className="lmx-recents-body">
+          <span className="lmx-recents-sys">{top.systemName}</span>
+          <h2 className="lmx-recents-name">{top.gameName}</h2>
+          <div className="lmx-recents-meta">
+            {stats.totalSec > 0 && <span>{formatPlayTime(stats.totalSec)} jogado</span>}
+            <span>{formatRelative(top.timestamp)}</span>
+          </div>
+          <span className="lmx-recents-cta">Continuar</span>
+        </div>
+      </button>
+      {recents.length > 1 && (
+        <div className="lmx-recents-others">
+          {recents.slice(1, 6).map(r => (
+            <button key={r.gamePath} className="lmx-recents-mini" onClick={() => onResume(r)}>
+              {covers[r.gamePath] ? <img src={covers[r.gamePath]} alt="" /> : <span>{r.systemName && r.systemName[0]}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ============================================================
+// === TUTORIAL OVERLAY (3 cards primeira vez) ================
+// ============================================================
+function TutorialOverlay({ onDone }) {
+  const steps = [
+    { title: "Bem-vindo ao Ludex Mobile", body: "Esta e a versao previa do Ludex. Joga retro/clasicos direto no celular.", icon: "M5 4a2 2 0 012-2h10a2 2 0 012 2v16a2 2 0 01-2 2H7a2 2 0 01-2-2zM12 18h.01" },
+    { title: "Adiciona ROMs", body: "Em Ajustes, clica 'Escolher pasta no celular' e aponta pra pasta com suas ROMs (.gba/.nes/.iso/etc).", icon: "M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" },
+    { title: "Quer tudo? Pega o Windows", body: "A versao Windows (paga) tem Switch, PS3, Xbox 360, gamepad nativo, musica ambiente, Discord rich presence e mais.", icon: "M21 9V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-4" },
+  ];
+  const [idx, setIdx] = useState(0);
+  const cur = steps[idx];
+  const next = () => {
+    if (idx + 1 >= steps.length) { onDone(); return; }
+    setIdx(idx + 1);
+  };
+  return (
+    <div className="lmx-tutorial-overlay" onClick={next}>
+      <div className="lmx-tutorial-card" onClick={(e) => e.stopPropagation()}>
+        <div className="lmx-tutorial-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d={cur.icon} />
+          </svg>
+        </div>
+        <h2>{cur.title}</h2>
+        <p>{cur.body}</p>
+        <div className="lmx-tutorial-dots">
+          {steps.map((_, i) => <span key={i} className={i === idx ? "active" : ""} />)}
+        </div>
+        <button className="lmx-settings-btn primary" onClick={next}>
+          {idx + 1 >= steps.length ? "Comecar" : "Proximo"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// === WHY WINDOWS CARD (paywall sutil) =======================
+// ============================================================
+function WhyWindowsCard() {
+  return (
+    <section className="lmx-settings-card lmx-why-windows">
+      <div className="lmx-settings-label">Por que comprar a versao Windows?</div>
+      <ul className="lmx-why-list">
+        <li>Switch, PS3, Xbox 360, PS Vita, Wii U via emuladores nativos</li>
+        <li>RetroAchievements (conquistas reais por jogo)</li>
+        <li>Discord Rich Presence</li>
+        <li>Musica ambiente com playlist + crossfade</li>
+        <li>Wallpapers customizados, perfis ilimitados</li>
+        <li>Gamepad nativo sem latencia</li>
+        <li>Auto-update do app + cores libretro</li>
+      </ul>
+      <a className="lmx-settings-btn primary" href="https://pauloadriel98.gumroad.com/l/ludex" target="_blank" rel="noopener">
+        Comprar Windows (R$ 49,90)
+      </a>
+    </section>
+  );
+}
+
+// ============================================================
+// === ACHIEVEMENTS LIST CARD =================================
+// ============================================================
+function AchievementsCard() {
+  const unlocked = loadAchievements();
+  return (
+    <section className="lmx-settings-card">
+      <div className="lmx-settings-label">Conquistas Ludex ({unlocked.length}/{ACHIEVEMENTS.length})</div>
+      <div className="lmx-ach-grid">
+        {ACHIEVEMENTS.map(a => {
+          const got = unlocked.includes(a.id);
+          return (
+            <div key={a.id} className={`lmx-ach-item ${got ? "got" : "locked"}`}>
+              <div className="lmx-ach-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d={a.icon} />
+                </svg>
+              </div>
+              <div className="lmx-ach-info">
+                <div className="lmx-ach-name">{a.name}</div>
+                <div className="lmx-ach-desc">{a.desc}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
+// === CHILD MODE TOGGLE (PIN) ================================
+// ============================================================
+function ChildModeCard() {
+  const [on, setOnState] = useState(isChildModeOn());
+  const [pinInput, setPinInput] = useState("");
+  const [setupOpen, setSetupOpen] = useState(false);
+  const enable = () => {
+    if (pinInput.length !== 4) { alert("PIN deve ter 4 digitos"); return; }
+    setChildModeStore(true, pinInput);
+    setOnState(true);
+    setPinInput("");
+    setSetupOpen(false);
+    sfx.confirm();
+  };
+  const disable = () => {
+    const pin = window.prompt("Digite o PIN pra desativar:");
+    if (!pin) return;
+    if (!verifyChildPin(pin)) { alert("PIN incorreto"); return; }
+    setChildModeStore(false);
+    setOnState(false);
+    sfx.confirm();
+  };
+  return (
+    <section className="lmx-settings-card">
+      <div className="lmx-settings-label">Modo crianca</div>
+      <p className="lmx-settings-hint">
+        Esconde ROMs com nomes contendo palavras-chave adultas (GTA, Resident Evil, Doom, etc).
+        Precisa PIN de 4 digitos pra desativar.
+      </p>
+      {on ? (
+        <button className="lmx-settings-btn ghost" onClick={disable}>Desativar Modo crianca</button>
+      ) : !setupOpen ? (
+        <button className="lmx-settings-btn primary" onClick={() => setSetupOpen(true)}>Ativar Modo crianca</button>
+      ) : (
+        <div className="lmx-settings-key">
+          <input
+            type="tel" inputMode="numeric" maxLength={4} placeholder="PIN 4 digitos"
+            value={pinInput} onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ""))}
+            autoFocus
+          />
+          <button className="lmx-settings-btn primary" onClick={enable} disabled={pinInput.length !== 4}>Confirmar</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ============================================================
+// === BACKUP / RESTORE CARD ==================================
+// ============================================================
+function BackupRestoreCard() {
+  const [msg, setMsg] = useState(null);
+  const doExport = () => {
+    const json = exportConfig();
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(json).then(() => {
+        setMsg({ kind: "ok", text: "Config copiada pro clipboard." });
+      }).catch(() => setMsg({ kind: "info", text: json.slice(0, 200) + "..." }));
+    }
+    sfx.confirm();
+    setTimeout(() => setMsg(null), 4000);
+  };
+  const doImport = () => {
+    const json = window.prompt("Cola o JSON da config exportada:");
+    if (!json) return;
+    if (importConfig(json)) {
+      setMsg({ kind: "ok", text: "Config importada. Reabra o app pra aplicar." });
+    } else {
+      setMsg({ kind: "error", text: "Falha ao importar." });
+    }
+    setTimeout(() => setMsg(null), 4000);
+  };
+  return (
+    <section className="lmx-settings-card">
+      <div className="lmx-settings-label">Backup / restore</div>
+      <p className="lmx-settings-hint">
+        Exporta recents, conquistas, stats, cheats e capas custom em JSON.
+      </p>
+      <button className="lmx-settings-btn primary" onClick={doExport}>Exportar config</button>
+      <button className="lmx-settings-btn ghost" onClick={doImport} style={{ marginTop: 8 }}>Importar config</button>
+      {msg && <p className={`lmx-settings-msg ${msg.kind}`}>{msg.text}</p>}
+    </section>
+  );
+}
+
+// ============================================================
+// === AMBIENT MUSIC TOGGLE ===================================
+// ============================================================
+function AmbientMusicToggle() {
+  const [on, setOnState] = useState(isAmbientOn());
+  useEffect(() => { if (on) setAmbientOn(true); /* eslint-disable-next-line */ }, []);
+  return (
+    <section className="lmx-settings-card">
+      <div className="lmx-settings-label">Musica ambiente (chiptune)</div>
+      <p className="lmx-settings-hint">
+        Loop chiptune gerado in-app (Web Audio API), entre menus.
+      </p>
+      <button className="lmx-settings-btn primary" onClick={() => {
+        const next = !on;
+        setAmbientOn(next);
+        setOnState(next);
+      }}>
+        {on ? "Desligar musica" : "Ligar musica"}
+      </button>
+    </section>
   );
 }
