@@ -138,10 +138,6 @@ struct RunningGameInfo {
 
 static RUNNING_GAME: OnceLock<Arc<StdMutex<Option<RunningGameInfo>>>> = OnceLock::new();
 static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
-/// Path do diretorio base do Ludex, cacheado durante setup() (quando JNI esta
-/// garantido no Android). v0.8.9: chamar app.path().app_data_dir() em runtime
-/// fora do setup quebrava o app antes da UI carregar.
-static LUDEX_BASE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 fn running_game_slot() -> Arc<StdMutex<Option<RunningGameInfo>>> {
     RUNNING_GAME
@@ -1763,20 +1759,15 @@ impl Default for AppConfig {
 }
 
 /// Diretorio base do Ludex (config + profiles + caches).
-/// Android: storage privado do app — /data/user/0/gg.ludex.app/files/.
-///   NAO usar /storage/emulated/0/ — exige MANAGE_EXTERNAL_STORAGE + user habilitar
-///   "Acesso a todos os arquivos" no Settings, senao create_dir_all falha (v0.8.7 bug).
-///   Cacheado em LUDEX_BASE_DIR durante setup() pra evitar JNI calls em runtime.
+/// Android: /data/data/gg.ludex.app/files/Ludex (storage privado do app, ZERO permissao,
+///   simbolico desde Android 1.0, sempre escrivel pelo proprio processo).
+///   NAO usar /storage/emulated/0/ — exige MANAGE_EXTERNAL_STORAGE (v0.8.7 bug).
+///   NAO usar tauri.path().app_data_dir() — JNI call em runtime crasha o app (v0.8.8/v0.8.9 bug).
 /// Desktop: %APPDATA%/Ludex/ ou ~/.local/share/Ludex/ via dirs::data_dir.
 fn ludex_base_dir() -> Option<PathBuf> {
-    if let Some(cached) = LUDEX_BASE_DIR.get() {
-        return Some(cached.clone());
-    }
     #[cfg(target_os = "android")]
     {
-        // Fallback se setup() ainda nao rodou: path hardcoded do package privado.
-        // (Tauri 2 invoca commands depois do setup, mas defensive.)
-        let p = PathBuf::from("/data/user/0/gg.ludex.app/files/Ludex");
+        let p = PathBuf::from("/data/data/gg.ludex.app/files/Ludex");
         std::fs::create_dir_all(&p).ok()?;
         return Some(p);
     }
@@ -1786,33 +1777,6 @@ fn ludex_base_dir() -> Option<PathBuf> {
         let dir = base.join("Ludex");
         std::fs::create_dir_all(&dir).ok()?;
         Some(dir)
-    }
-}
-
-/// Inicializa LUDEX_BASE_DIR durante setup(). Chamar apos APP_HANDLE.set().
-/// Desktop ja funciona via dirs::data_dir, mas Android precisa do AppHandle
-/// pra resolver app_data_dir() corretamente via JNI.
-fn init_ludex_base_dir(handle: &tauri::AppHandle) {
-    #[cfg(target_os = "android")]
-    {
-        // Tenta via Tauri (path real do package), fallback hardcoded
-        let base = handle.path().app_data_dir()
-            .ok()
-            .map(|p| p.join("Ludex"))
-            .unwrap_or_else(|| PathBuf::from("/data/user/0/gg.ludex.app/files/Ludex"));
-        if std::fs::create_dir_all(&base).is_ok() {
-            let _ = LUDEX_BASE_DIR.set(base);
-        }
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = handle; // silencia warning unused em desktop
-        if let Some(base) = dirs::data_dir() {
-            let dir = base.join("Ludex");
-            if std::fs::create_dir_all(&dir).is_ok() {
-                let _ = LUDEX_BASE_DIR.set(dir);
-            }
-        }
     }
 }
 
@@ -4362,7 +4326,6 @@ pub fn run() {
                     .build(),
             )?;
             let _ = APP_HANDLE.set(app.handle().clone());
-            init_ludex_base_dir(app.handle());
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
                 spawn_gamepad_hotkey_listener();
