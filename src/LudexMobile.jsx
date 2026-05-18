@@ -1108,11 +1108,65 @@ function DemoExpiredScreen({ demo, onUnlock }) {
 }
 
 // ============================================================
+// === LAYOUTS DE CONTROLE POR SISTEMA ========================
+// libretro RetroPad IDs:
+//   0=B, 1=Y, 2=SELECT, 3=START, 4=UP, 5=DOWN, 6=LEFT, 7=RIGHT,
+//   8=A, 9=X, 10=L, 11=R, 12=L2, 13=R2, 14=L3, 15=R3
+// Cada sistema mostra SO os botoes que ele realmente usa, com label correto.
+// ============================================================
+const SYSTEM_LAYOUTS = {
+  // ---- Nintendo handhelds + clasicos sem X/Y/L/R ----
+  nes:  { face: [{id:0,label:"B",color:"r"},{id:8,label:"A",color:"r"}], shoulders: false, selectStart: true },
+  gb:   { face: [{id:0,label:"B",color:"r"},{id:8,label:"A",color:"r"}], shoulders: false, selectStart: true },
+  gbc:  { face: [{id:0,label:"B",color:"r"},{id:8,label:"A",color:"r"}], shoulders: false, selectStart: true },
+  gba:  { face: [{id:0,label:"B",color:"r"},{id:8,label:"A",color:"r"}], shoulders: ["L","R"], selectStart: true },
+  // ---- SNES classico: A B X Y + L R ----
+  snes: { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"}], shoulders: ["L","R"], selectStart: true },
+  // ---- N64: A B + C-buttons (mapeados em Y/X/L2/R2 do RetroPad) + Z(L) Start ----
+  n64:  { face: [{id:9,label:"C↑",color:"y"},{id:1,label:"C←",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:13,label:"C↓",color:"y"},{id:14,label:"C→",color:"y"}], shoulders: ["Z","R"], selectStart: ["", "START"] },
+  // ---- Sega Genesis / Master System / GG ----
+  md:     { face: [{id:1,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:8,label:"C",color:"y"},{id:9,label:"X",color:"x"},{id:10,label:"Y",color:"y"},{id:11,label:"Z",color:"y"}], shoulders: false, selectStart: ["MODE","START"] },
+  sms:    { face: [{id:0,label:"1",color:"b"},{id:8,label:"2",color:"a"}], shoulders: false, selectStart: ["","START"] },
+  gg:     { face: [{id:0,label:"1",color:"b"},{id:8,label:"2",color:"a"}], shoulders: false, selectStart: ["","START"] },
+  segacd: { face: [{id:1,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:8,label:"C",color:"y"}], shoulders: false, selectStart: ["MODE","START"] },
+  // ---- Sega Dreamcast / Saturn ----
+  dreamcast: { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"}], shoulders: ["L","R"], selectStart: ["","START"] },
+  saturn:    { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:11,label:"Z",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:10,label:"C",color:"y"}], shoulders: false, selectStart: ["","START"] },
+  // ---- Sony PS1/PS2: triangle/square/circle/cross ----
+  ps1: { face: [{id:9,label:"△",color:"y"},{id:1,label:"□",color:"x"},{id:8,label:"◯",color:"a"},{id:0,label:"✕",color:"b"}], shoulders: ["L1","R1","L2","R2"], selectStart: true },
+  ps2: { face: [{id:9,label:"△",color:"y"},{id:1,label:"□",color:"x"},{id:8,label:"◯",color:"a"},{id:0,label:"✕",color:"b"}], shoulders: ["L1","R1","L2","R2"], selectStart: true },
+  // ---- Nintendo GameCube / Wii ----
+  gc:  { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:13,label:"Z",color:"y"}], shoulders: ["L","R"], selectStart: ["","START"] },
+  wii: { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:13,label:"Z",color:"y"}], shoulders: ["L","R"], selectStart: true },
+  // ---- 3DS / DS ----
+  ds:  { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"}], shoulders: ["L","R"], selectStart: true },
+  // ---- TG-16/PCE: 2 botoes ----
+  tg16: { face: [{id:0,label:"II",color:"b"},{id:8,label:"I",color:"a"}], shoulders: false, selectStart: ["SEL","RUN"] },
+  // ---- Atari 2600/Lynx/Jaguar ----
+  a2600:  { face: [{id:8,label:"FIRE",color:"a"}], shoulders: false, selectStart: ["RST","SEL"] },
+  lynx:   { face: [{id:0,label:"B",color:"b"},{id:8,label:"A",color:"a"}], shoulders: false, selectStart: ["OPT2","OPT1"] },
+  jaguar: { face: [{id:0,label:"B",color:"b"},{id:8,label:"A",color:"a"},{id:9,label:"C",color:"y"}], shoulders: false, selectStart: ["","#"] },
+  // ---- Outros (WS/NGPC/MSX/C64/ZX/Amiga/Arcade/VB/3DO): default minimal ----
+  ws:      { face: [{id:0,label:"B",color:"b"},{id:8,label:"A",color:"a"}], shoulders: false, selectStart: ["SEL","START"] },
+  ngpc:    { face: [{id:0,label:"B",color:"b"},{id:8,label:"A",color:"a"}], shoulders: false, selectStart: ["","OPT"] },
+  vb:      { face: [{id:0,label:"B",color:"b"},{id:8,label:"A",color:"a"}], shoulders: ["L","R"], selectStart: true },
+  msx:     { face: [{id:0,label:"B",color:"b"},{id:8,label:"A",color:"a"}], shoulders: false, selectStart: true },
+  c64:     { face: [{id:8,label:"FIRE",color:"a"}], shoulders: false, selectStart: true },
+  zx:      { face: [{id:8,label:"FIRE",color:"a"}], shoulders: false, selectStart: true },
+  amiga:   { face: [{id:0,label:"B",color:"b"},{id:8,label:"A",color:"a"}], shoulders: false, selectStart: true },
+  arcade:  { face: [{id:9,label:"4",color:"x"},{id:1,label:"3",color:"y"},{id:8,label:"2",color:"a"},{id:0,label:"1",color:"b"},{id:11,label:"6",color:"y"},{id:10,label:"5",color:"y"}], shoulders: false, selectStart: ["COIN","START"] },
+  threedo: { face: [{id:0,label:"B",color:"b"},{id:8,label:"A",color:"a"},{id:9,label:"C",color:"y"}], shoulders: ["L","R"], selectStart: ["","P"] },
+};
+// Default: SNES-like (A/B/X/Y + L/R + Start/Select)
+const DEFAULT_LAYOUT = SYSTEM_LAYOUTS.snes;
+
+// ============================================================
 // === MOBILE EMULATOR VIEW (canvas libretro + touch controls)
 // Versao mobile do EmulatorView do desktop. Frame loop, audio,
-// touch D-pad esquerda + A/B/X/Y direita + Start/Select topo.
+// touch controls customizados por sistema (cada console tem layout proprio).
 // ============================================================
 function MobileEmulatorView({ system, game, onClose }) {
+  const layout = SYSTEM_LAYOUTS[system.id] || DEFAULT_LAYOUT;
   const canvasRef = useRef(null);
   const [info, setInfo] = useState(null);
   const [error, setError] = useState(null);
@@ -1244,32 +1298,56 @@ function MobileEmulatorView({ system, game, onClose }) {
           <div>Carregando emulador...</div>
         </div>
       )}
-      {/* Touch controls */}
-      <div className="lmx-emu-controls">
-        {/* D-pad esquerda */}
+      {/* Touch controls — layout customizado por sistema */}
+      <div className="lmx-emu-controls" data-face-count={layout.face.length}>
+        {/* D-pad esquerda (todos os sistemas tem D-pad) */}
         <div className="lmx-emu-dpad">
           <button className="lmx-emu-dpad-up"    {...btnProps(4)}>▲</button>
           <button className="lmx-emu-dpad-left"  {...btnProps(6)}>◀</button>
           <button className="lmx-emu-dpad-right" {...btnProps(7)}>▶</button>
           <button className="lmx-emu-dpad-down"  {...btnProps(5)}>▼</button>
         </div>
-        {/* Botoes direita: A/B/X/Y (libretro: 0=B, 1=Y, 8=A, 9=X) */}
-        <div className="lmx-emu-abxy">
-          <button className="lmx-emu-btn lmx-emu-btn-x" {...btnProps(9)}>X</button>
-          <button className="lmx-emu-btn lmx-emu-btn-y" {...btnProps(1)}>Y</button>
-          <button className="lmx-emu-btn lmx-emu-btn-a" {...btnProps(8)}>A</button>
-          <button className="lmx-emu-btn lmx-emu-btn-b" {...btnProps(0)}>B</button>
+        {/* Face buttons (A/B/X/Y/C/etc — varia por sistema) */}
+        <div className={`lmx-emu-face lmx-emu-face-${layout.face.length}`}>
+          {layout.face.map((btn, i) => (
+            <button
+              key={btn.id}
+              className={`lmx-emu-btn lmx-emu-face-pos-${i} lmx-emu-color-${btn.color}`}
+              {...btnProps(btn.id)}
+            >{btn.label}</button>
+          ))}
         </div>
         {/* Start / Select topo (libretro: 2=SELECT, 3=START) */}
-        <div className="lmx-emu-system">
-          <button className="lmx-emu-btn lmx-emu-btn-select" {...btnProps(2)}>SELECT</button>
-          <button className="lmx-emu-btn lmx-emu-btn-start"  {...btnProps(3)}>START</button>
-        </div>
-        {/* L/R ombros (libretro: 10=L, 11=R) */}
-        <div className="lmx-emu-shoulders">
-          <button className="lmx-emu-btn lmx-emu-btn-l" {...btnProps(10)}>L</button>
-          <button className="lmx-emu-btn lmx-emu-btn-r" {...btnProps(11)}>R</button>
-        </div>
+        {layout.selectStart && (() => {
+          // selectStart pode ser true (Select/Start) ou ["LeftLabel","RightLabel"]
+          // Label "" = oculta esse botao
+          const labels = Array.isArray(layout.selectStart) ? layout.selectStart : ["SELECT", "START"];
+          return (
+            <div className="lmx-emu-system">
+              {labels[0] && <button className="lmx-emu-btn lmx-emu-btn-select" {...btnProps(2)}>{labels[0]}</button>}
+              {labels[1] && <button className="lmx-emu-btn lmx-emu-btn-start"  {...btnProps(3)}>{labels[1]}</button>}
+            </div>
+          );
+        })()}
+        {/* Shoulders: false | ["L","R"] | ["L1","R1","L2","R2"] | ["Z","R"] */}
+        {layout.shoulders && (() => {
+          const sh = layout.shoulders;
+          const map = { L: 10, R: 11, L1: 10, R1: 11, L2: 12, R2: 13, Z: 10 };
+          return (
+            <div className="lmx-emu-shoulders">
+              <div className="lmx-emu-shoulders-l">
+                {sh.filter(l => /^L|^Z/.test(l)).map(l => (
+                  <button key={l} className="lmx-emu-btn lmx-emu-btn-l" {...btnProps(map[l])}>{l}</button>
+                ))}
+              </div>
+              <div className="lmx-emu-shoulders-r">
+                {sh.filter(l => /^R/.test(l)).map(l => (
+                  <button key={l} className="lmx-emu-btn lmx-emu-btn-r" {...btnProps(map[l])}>{l}</button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

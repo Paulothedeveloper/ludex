@@ -1147,7 +1147,8 @@
 .lmx-emu-dpad-right { grid-column: 3; grid-row: 2; border-radius: 0 8px 8px 0; }
 .lmx-emu-dpad-down  { grid-column: 2; grid-row: 3; border-radius: 0 0 8px 8px; }
 
-.lmx-emu-abxy {
+/* Face buttons -- container que abriga 1 a 6 botoes */
+.lmx-emu-face {
   position: absolute;
   bottom: 28px;
   right: 24px;
@@ -1169,10 +1170,43 @@
   justify-content: center;
 }
 .lmx-emu-btn:active { background: rgba(236, 72, 153, 0.65); }
-.lmx-emu-btn-x { top: 0;   left: 50px; background: rgba(59, 130, 246, 0.18); }
-.lmx-emu-btn-y { top: 50px; left: 0;   background: rgba(34, 197, 94, 0.18); }
-.lmx-emu-btn-a { top: 50px; right: 0;  background: rgba(239, 68, 68, 0.18); }
-.lmx-emu-btn-b { top: 100px; left: 50px; background: rgba(250, 204, 21, 0.18); }
+
+/* Cores semanticas: a=vermelho (Nintendo A), b=amarelo (Nintendo B),
+   x=azul (SNES X), y=verde (SNES Y / Sega C / N64 C / PS triangle) */
+.lmx-emu-color-a { background: rgba(239, 68, 68, 0.22); }
+.lmx-emu-color-b { background: rgba(250, 204, 21, 0.22); }
+.lmx-emu-color-x { background: rgba(59, 130, 246, 0.22); }
+.lmx-emu-color-y { background: rgba(34, 197, 94, 0.22); }
+
+/* Posicoes: layout em diamond/L/V conforme num de botoes */
+/* 1 botao: centro */
+.lmx-emu-face-1 .lmx-emu-face-pos-0 { top: 50px; right: 50px; }
+/* 2 botoes: horizontais (NES style) */
+.lmx-emu-face-2 .lmx-emu-face-pos-0 { top: 50px; left: 0;   }  /* B */
+.lmx-emu-face-2 .lmx-emu-face-pos-1 { top: 50px; right: 0;  }  /* A */
+/* 3 botoes: linha (Genesis 3-btn, Saturn ABC, 3DO) */
+.lmx-emu-face-3 .lmx-emu-face-pos-0 { top: 50px; left: 0;   }
+.lmx-emu-face-3 .lmx-emu-face-pos-1 { top: 50px; left: 50px; }
+.lmx-emu-face-3 .lmx-emu-face-pos-2 { top: 50px; right: 0;  }
+/* 4 botoes: diamond (SNES/PS/Dreamcast/etc) */
+.lmx-emu-face-4 .lmx-emu-face-pos-0 { top: 0;    left: 50px; }  /* topo */
+.lmx-emu-face-4 .lmx-emu-face-pos-1 { top: 50px; left: 0;    }  /* esq */
+.lmx-emu-face-4 .lmx-emu-face-pos-2 { top: 50px; right: 0;   }  /* dir */
+.lmx-emu-face-4 .lmx-emu-face-pos-3 { top: 100px; left: 50px; } /* baixo */
+/* 5 botoes: diamond + GC Z no canto */
+.lmx-emu-face-5 .lmx-emu-face-pos-0 { top: 0;    left: 50px; }
+.lmx-emu-face-5 .lmx-emu-face-pos-1 { top: 50px; left: 0;    }
+.lmx-emu-face-5 .lmx-emu-face-pos-2 { top: 50px; right: 0;   }
+.lmx-emu-face-5 .lmx-emu-face-pos-3 { top: 100px; left: 50px; }
+.lmx-emu-face-5 .lmx-emu-face-pos-4 { top: -20px; right: -10px; width: 40px; height: 40px; font-size: 11px; } /* Z */
+/* 6 botoes: hexagonal/Genesis 6-button + N64 C-buttons */
+.lmx-emu-face-6 { width: 180px; height: 156px; }
+.lmx-emu-face-6 .lmx-emu-face-pos-0 { top: 0;    left: 65px; }   /* topo central */
+.lmx-emu-face-6 .lmx-emu-face-pos-1 { top: 0;    left: 0;    }   /* topo esq */
+.lmx-emu-face-6 .lmx-emu-face-pos-2 { top: 70px; left: 0;    }   /* meio esq */
+.lmx-emu-face-6 .lmx-emu-face-pos-3 { top: 70px; left: 65px; }   /* meio centro */
+.lmx-emu-face-6 .lmx-emu-face-pos-4 { top: 70px; right: 0;   }   /* meio dir */
+.lmx-emu-face-6 .lmx-emu-face-pos-5 { top: 0;    right: 0;   }   /* topo dir */
 
 .lmx-emu-system {
   position: absolute;
@@ -1199,6 +1233,11 @@
   display: flex;
   justify-content: space-between;
   pointer-events: none;
+}
+.lmx-emu-shoulders-l, .lmx-emu-shoulders-r {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
 }
 .lmx-emu-shoulders .lmx-emu-btn {
   position: relative;
