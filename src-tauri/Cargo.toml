@@ -1,6 +1,6 @@
 [package]
 name = "ludex"
-version = "0.8.27"
+version = "0.8.28"
 description = "Ludex - Sua biblioteca retro em um lugar so"
 authors = ["Paulo Batista"]
 license = ""

@@ -24,6 +24,13 @@ pub const RETRO_ENVIRONMENT_GET_VARIABLE:        u32 = 15;
 pub const RETRO_ENVIRONMENT_SET_VARIABLES:       u32 = 16;
 pub const RETRO_ENVIRONMENT_GET_LOG_INTERFACE:   u32 = 27;
 pub const RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:  u32 = 31;
+pub const RETRO_ENVIRONMENT_GET_LANGUAGE:        u32 = 39;
+pub const RETRO_ENVIRONMENT_GET_USERNAME:        u32 = 38;
+pub const RETRO_ENVIRONMENT_GET_CORE_ASSETS_DIR: u32 = 30;
+pub const RETRO_ENVIRONMENT_GET_INPUT_BITMASKS:  u32 = 51;
+pub const RETRO_ENVIRONMENT_GET_FASTFORWARDING:  u32 = 64;
+pub const RETRO_ENVIRONMENT_SET_GEOMETRY:        u32 = 37;
+pub const RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO:  u32 = 32;
 pub const RETRO_ENVIRONMENT_GET_CAN_DUPE:        u32 = 3;
 pub const RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: u32 = 17;
 pub const RETRO_ENVIRONMENT_SHUTDOWN:            u32 = 7;
@@ -185,17 +192,65 @@ extern "C" fn cb_environment(cmd: c_uint, data: *mut c_void) -> bool {
             *(data as *mut RetroLogCallback) = RetroLogCallback { log: cb_log };
             true
         },
-        _ => false,
+        // v0.8.28: handlers extras que cores grandes esperam
+        RETRO_ENVIRONMENT_GET_CORE_ASSETS_DIR => unsafe {
+            if data.is_null() { return false; }
+            *(data as *mut *const c_char) = g.system_dir.as_ptr();
+            true
+        },
+        RETRO_ENVIRONMENT_GET_LANGUAGE => unsafe {
+            if data.is_null() { return false; }
+            *(data as *mut u32) = 8; // RETRO_LANGUAGE_PORTUGUESE_BRAZIL
+            true
+        },
+        RETRO_ENVIRONMENT_GET_USERNAME => unsafe {
+            if data.is_null() { return false; }
+            static USERNAME: &[u8] = b"Player\0";
+            *(data as *mut *const c_char) = USERNAME.as_ptr() as *const c_char;
+            true
+        },
+        RETRO_ENVIRONMENT_GET_INPUT_BITMASKS => true, // Suporte: poll retorna bitmask
+        RETRO_ENVIRONMENT_GET_FASTFORWARDING => unsafe {
+            if data.is_null() { return false; }
+            *(data as *mut bool) = false; // Ludex faz FF via skip_frames
+            true
+        },
+        // SET_GEOMETRY / SET_SYSTEM_AV_INFO: core informa novo tamanho/fps, aceita
+        RETRO_ENVIRONMENT_SET_GEOMETRY => unsafe {
+            if data.is_null() { return false; }
+            let geom = data as *const RetroGameGeometry;
+            log::info!("[libretro] SET_GEOMETRY {}x{}", (*geom).base_width, (*geom).base_height);
+            true
+        },
+        RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO => unsafe {
+            if data.is_null() { return false; }
+            let av = data as *const RetroSystemAvInfo;
+            log::info!("[libretro] SET_AV_INFO {}x{} fps={}", (*av).geometry.base_width, (*av).geometry.base_height, (*av).timing.fps);
+            g.av_info = Some(std::ptr::read(av));
+            true
+        },
+        // Outros cmds que retornam unhandled mas com log debug
+        unknown => {
+            log::debug!("[libretro] env cmd {} ignorado", unknown);
+            false
+        }
     }
 }
 
-// v0.8.27: log callback — recebe printf-style do core. Imprime em stderr (logcat
-// no Android, stderr no desktop). Variadic ignoramos (so o fmt string), suficiente.
+// v0.8.27: log callback — recebe printf-style do core.
+// v0.8.28: usa log::warn pra aparecer no Ludex.log (Windows GUI suprime stderr).
 extern "C" fn cb_log(level: c_uint, fmt: *const c_char) {
     if fmt.is_null() { return; }
     let msg = unsafe { CStr::from_ptr(fmt).to_string_lossy() };
-    let lvl = match level { 0 => "DEBUG", 1 => "INFO", 2 => "WARN", 3 => "ERROR", _ => "?" };
-    eprintln!("[libretro/{}] {}", lvl, msg.trim_end());
+    let trimmed = msg.trim_end();
+    match level {
+        0 => log::debug!(target: "libretro", "{}", trimmed),
+        1 => log::info!(target: "libretro", "{}", trimmed),
+        2 => log::warn!(target: "libretro", "{}", trimmed),
+        3 => log::error!(target: "libretro", "{}", trimmed),
+        _ => log::info!(target: "libretro", "{}", trimmed),
+    }
+    eprintln!("[libretro/{}] {}", level, trimmed);
 }
 
 extern "C" fn cb_video_refresh(data: *const c_void, width: c_uint, height: c_uint, pitch: usize) {
