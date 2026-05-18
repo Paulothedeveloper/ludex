@@ -177,8 +177,25 @@ extern "C" fn cb_environment(cmd: c_uint, data: *mut c_void) -> bool {
             if !data.is_null() { *(data as *mut bool) = false; }
             true
         },
+        // v0.8.27: LOG_INTERFACE — cores como PCSX2 segfaultam se nao tiver
+        RETRO_ENVIRONMENT_GET_LOG_INTERFACE => unsafe {
+            if data.is_null() { return false; }
+            #[repr(C)]
+            struct RetroLogCallback { log: extern "C" fn(level: c_uint, fmt: *const c_char) }
+            *(data as *mut RetroLogCallback) = RetroLogCallback { log: cb_log };
+            true
+        },
         _ => false,
     }
+}
+
+// v0.8.27: log callback — recebe printf-style do core. Imprime em stderr (logcat
+// no Android, stderr no desktop). Variadic ignoramos (so o fmt string), suficiente.
+extern "C" fn cb_log(level: c_uint, fmt: *const c_char) {
+    if fmt.is_null() { return; }
+    let msg = unsafe { CStr::from_ptr(fmt).to_string_lossy() };
+    let lvl = match level { 0 => "DEBUG", 1 => "INFO", 2 => "WARN", 3 => "ERROR", _ => "?" };
+    eprintln!("[libretro/{}] {}", lvl, msg.trim_end());
 }
 
 extern "C" fn cb_video_refresh(data: *const c_void, width: c_uint, height: c_uint, pitch: usize) {
@@ -334,21 +351,42 @@ impl LibretroCore {
     pub unsafe fn load_game(&self, rom_path: &Path) -> Result<RetroSystemAvInfo, String> {
         type LoadFn = extern "C" fn(*const RetroGameInfo) -> bool;
         type AvFn   = extern "C" fn(*mut RetroSystemAvInfo);
+        type SysFn  = extern "C" fn(*mut RetroSystemInfo);
 
-        // Le ROM em memoria (way mais simples que need_fullpath)
-        let bytes = std::fs::read(rom_path).map_err(|e| format!("ler ROM: {}", e))?;
+        // v0.8.27: respeitar need_fullpath (PCSX2/Flycast/Dolphin/etc precisam
+        // do path no disco direto — load em memoria de ISO 4GB faz segfault).
         let path_c = CString::new(rom_path.to_string_lossy().as_ref()).map_err(|e| e.to_string())?;
+        let sys_info_fn: Symbol<SysFn> = self.lib.get(b"retro_get_system_info").map_err(|e| e.to_string())?;
+        let mut sys_info = RetroSystemInfo {
+            library_name: std::ptr::null(),
+            library_version: std::ptr::null(),
+            valid_extensions: std::ptr::null(),
+            need_fullpath: false,
+            block_extract: false,
+        };
+        sys_info_fn(&mut sys_info as *mut _);
+
+        // Carrega bytes so se nao precisar fullpath (ROMs pequenas GBA/SNES/etc)
+        let bytes_holder: Option<Vec<u8>> = if sys_info.need_fullpath {
+            None
+        } else {
+            Some(std::fs::read(rom_path).map_err(|e| format!("ler ROM: {}", e))?)
+        };
+        let (data_ptr, data_size): (*const c_void, usize) = match &bytes_holder {
+            Some(b) => (b.as_ptr() as *const c_void, b.len()),
+            None    => (std::ptr::null(), 0),
+        };
 
         let info = RetroGameInfo {
             path: path_c.as_ptr(),
-            data: bytes.as_ptr() as *const c_void,
-            size: bytes.len(),
+            data: data_ptr,
+            size: data_size,
             meta: std::ptr::null(),
         };
 
         let load: Symbol<LoadFn> = self.lib.get(b"retro_load_game").map_err(|e| e.to_string())?;
         if !load(&info as *const _) {
-            return Err("retro_load_game retornou false".into());
+            return Err(format!("retro_load_game retornou false (need_fullpath={})", sys_info.need_fullpath));
         }
 
         let av: Symbol<AvFn> = self.lib.get(b"retro_get_system_av_info").map_err(|e| e.to_string())?;
