@@ -127,5 +127,37 @@ class Permissions {
                 true
             } catch (_: Throwable) { false }
         }
+
+        /**
+         * Dispara o installer do Android pra um .apk previamente baixado.
+         * Path deve estar no cache_dir do app pra FileProvider conseguir expor.
+         */
+        @JvmStatic
+        fun installApk(activity: Activity, apkAbsPath: String): Boolean {
+            return try {
+                val file = File(apkAbsPath)
+                if (!file.exists() || file.length() < 1024) return false
+                val uri = FileProvider.getUriForFile(
+                    activity, activity.packageName + ".update", file
+                )
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "application/vnd.android.package-archive")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                }
+                activity.startActivity(intent)
+                true
+            } catch (_: Throwable) { false }
+        }
+
+        /**
+         * Path absoluto do cache_dir/updates onde o APK e baixado.
+         */
+        @JvmStatic
+        fun updateCacheDir(activity: Activity): String {
+            val dir = File(activity.cacheDir, "updates")
+            try { dir.mkdirs() } catch (_: Throwable) {}
+            return dir.absolutePath
+        }
     }
 }

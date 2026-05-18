@@ -1559,3 +1559,91 @@
     animation: none !important;
   }
 }
+
+/* ===== UPDATE REQUIRED (blocking) ===== */
+.lmx-update-required {
+  position: fixed;
+  inset: 0;
+  background: var(--lmx-bg);
+  background-image:
+    radial-gradient(circle at top right, rgba(124, 58, 237, 0.25), transparent 50%),
+    radial-gradient(circle at bottom left, rgba(236, 72, 153, 0.18), transparent 60%);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: lmx-fade-in 280ms ease-out;
+}
+.lmx-update-card {
+  max-width: 420px;
+  width: 100%;
+  background: var(--lmx-surface-2);
+  border: 1px solid var(--lmx-border);
+  border-radius: var(--lmx-radius-lg);
+  padding: 28px;
+  text-align: center;
+  animation: lmx-slide-up 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lmx-update-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  background: var(--lmx-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.lmx-update-icon svg { width: 36px; height: 36px; }
+.lmx-update-card h1 {
+  margin: 0 0 12px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.lmx-update-version {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--lmx-surface);
+  border-radius: var(--lmx-radius-pill);
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  color: var(--lmx-text-muted);
+}
+.lmx-update-arrow {
+  font-size: 14px;
+  color: var(--lmx-accent);
+}
+.lmx-update-target {
+  color: var(--lmx-accent);
+}
+.lmx-update-notes {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--lmx-text-muted);
+  margin: 0 0 20px;
+  max-height: 200px;
+  overflow-y: auto;
+  text-align: left;
+  padding: 0 4px;
+}
+.lmx-update-required-text {
+  font-size: 12px;
+  color: var(--lmx-text-dim);
+  margin: 0 0 18px;
+  line-height: 1.4;
+}
+.lmx-update-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--lmx-text-muted);
+  padding: 12px;
+}

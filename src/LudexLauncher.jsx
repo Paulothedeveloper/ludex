@@ -3672,6 +3672,10 @@ export default function LudexLauncher() {
   const [launchMsg, setLaunchMsg] = useState(null);
   const [covers, setCovers] = useState({});
   const [splashDone, setSplashDone] = useState(false);
+  // v0.8.21: update banner (desktop nao bloqueia, user pode adiar)
+  const [updateBanner, setUpdateBanner] = useState(null); // { version, update } | null
+  const [updateInstalling, setUpdateInstalling] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsClosing, setSettingsClosing] = useState(false);
   const [profilesOpen, setProfilesOpen] = useState(false);
@@ -3890,6 +3894,17 @@ export default function LudexLauncher() {
     () => config.profiles.find((p) => p.id === config.active_profile_id),
     [config]
   );
+
+  // v0.8.21: auto-check de update no startup desktop (background, banner se houver)
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      try {
+        const update = await checkUpdate();
+        if (update) setUpdateBanner({ version: update.version, update });
+      } catch (e) { console.warn("update check", e); }
+    }, 2500);
+    return () => clearTimeout(t);
+  }, []);
 
   // splash boot + intro music
   useEffect(() => {
@@ -5431,6 +5446,36 @@ export default function LudexLauncher() {
       )}
 
       {!splashDone && <SplashScreen profileName={activeProfile?.name} />}
+
+      {/* v0.8.21: update banner (nao bloqueia, user adia se quiser) */}
+      {updateBanner && !updateInstalling && (
+        <div className="pb-update-banner">
+          <div className="pb-update-banner-text">
+            <strong>Atualizacao disponivel: v{updateBanner.version}</strong>
+            <span>Reinicie depois da instalacao pra usar a versao nova.</span>
+          </div>
+          <button className="pb-btn pb-btn-primary" onClick={async () => {
+            setUpdateInstalling(true);
+            try {
+              let downloaded = 0; let total = 0;
+              await updateBanner.update.downloadAndInstall((ev) => {
+                if (ev.event === "Started") total = ev.data.contentLength || 0;
+                if (ev.event === "Progress") {
+                  downloaded += ev.data.chunkLength || 0;
+                  setUpdateProgress(total ? Math.round((downloaded / total) * 100) : 0);
+                }
+              });
+              await relaunch();
+            } catch (e) { alert("Falha update: " + e); setUpdateInstalling(false); }
+          }}>Atualizar</button>
+          <button className="pb-btn" onClick={() => setUpdateBanner(null)}>Depois</button>
+        </div>
+      )}
+      {updateInstalling && (
+        <div className="pb-update-banner pb-update-installing">
+          <strong>Baixando atualizacao... {updateProgress}%</strong>
+        </div>
+      )}
 
       <header className="pb-top" data-tour="topbar">
         <div className="pb-top-left">

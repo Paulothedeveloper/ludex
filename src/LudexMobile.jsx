@@ -139,6 +139,9 @@ export default function LudexMobile() {
   const [search, setSearch] = useState("");
   const [androidDemo, setAndroidDemo] = useState(null);
   const [launching, setLaunching] = useState(false);
+  // v0.8.21: auto-update Android (banner obrigatorio quando ha versao nova)
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [updateState, setUpdateState] = useState({ stage: "idle", msg: "" }); // idle | downloading | installing | error
   // v0.8.14: rastreia se app ja tem acesso a todos os arquivos (Android)
   const [hasFilesAccess, setHasFilesAccess] = useState(true);
   const requestFilesAccess = useCallback(async () => {
@@ -193,6 +196,13 @@ export default function LudexMobile() {
         const has = await invoke("android_has_all_files_access");
         setHasFilesAccess(has);
       } catch { setHasFilesAccess(true); /* desktop = sempre true */ }
+
+      // v0.8.21: auto-check de update no startup (background, nao bloqueia UI)
+      setTimeout(() => {
+        invoke("check_update_info")
+          .then((info) => { if (info?.available) setUpdateInfo(info); })
+          .catch((e) => console.warn("update check", e));
+      }, 1500);
 
       try {
         const sys = await invoke("scan_roms", { romsRoot: null });
@@ -359,6 +369,28 @@ export default function LudexMobile() {
       alert(`Falha: ${e}`);
     }
   }, [dbg]);
+
+  // ============ UPDATE OBRIGATORIO (bloqueia tudo) ============
+  // v0.8.21: nao deixa user usar app desatualizado em mobile
+  if (updateInfo?.available) {
+    return (
+      <UpdateRequiredScreen
+        info={updateInfo}
+        state={updateState}
+        onInstall={async () => {
+          setUpdateState({ stage: "downloading", msg: "Baixando atualizacao..." });
+          try {
+            const path = await invoke("android_download_apk", { apkUrl: updateInfo.apk_url });
+            setUpdateState({ stage: "installing", msg: "Abrindo instalador..." });
+            const ok = await invoke("android_install_apk", { apkPath: path });
+            if (!ok) setUpdateState({ stage: "error", msg: "Falha ao abrir instalador. Habilita 'Instalar de fontes desconhecidas' nas Configuracoes." });
+          } catch (e) {
+            setUpdateState({ stage: "error", msg: `Falha: ${e}` });
+          }
+        }}
+      />
+    );
+  }
 
   // ============ DEMO EXPIRED (bloqueia) ============
   if (androidDemo?.expired && !androidDemo?.is_admin_unlocked) {
@@ -747,6 +779,85 @@ function SearchTab({ systems, covers, search, setSearch, onPickGame }) {
 // ============================================================
 // === SETTINGS TAB ===========================================
 // ============================================================
+// ============================================================
+// === UPDATE REQUIRED SCREEN (bloqueio total)
+// ============================================================
+function UpdateRequiredScreen({ info, state, onInstall }) {
+  return (
+    <div className="lmx-update-required">
+      <div className="lmx-update-card">
+        <div className="lmx-update-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <polyline points="3 17 9 11 13 15 21 7" />
+            <polyline points="14 7 21 7 21 14" />
+          </svg>
+        </div>
+        <h1>Atualizacao disponivel</h1>
+        <div className="lmx-update-version">
+          <span>v{info.current}</span>
+          <span className="lmx-update-arrow">→</span>
+          <span className="lmx-update-target">v{info.latest}</span>
+        </div>
+        <p className="lmx-update-notes">{info.notes}</p>
+        <p className="lmx-update-required-text">
+          Atualizacao obrigatoria pra usar o Ludex.<br />
+          A versao Windows e gratuita pra quem comprou.
+        </p>
+        {state.stage === "downloading" && (
+          <div className="lmx-update-loading">
+            <div className="lmx-spinner" />
+            <span>{state.msg}</span>
+          </div>
+        )}
+        {state.stage === "installing" && (
+          <div className="lmx-update-loading">
+            <div className="lmx-spinner" />
+            <span>{state.msg}</span>
+          </div>
+        )}
+        {state.stage === "error" && (
+          <p className="lmx-settings-msg error">{state.msg}</p>
+        )}
+        {state.stage !== "downloading" && state.stage !== "installing" && (
+          <button className="lmx-settings-btn primary" onClick={onInstall}>
+            Atualizar agora
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UpdateChecker() {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const check = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const info = await invoke("check_update_info");
+      if (info?.available) {
+        setMsg({ kind: "info", text: `Nova versao v${info.latest} disponivel! Reinicie o app pra ver o prompt de atualizacao.` });
+      } else {
+        setMsg({ kind: "ok", text: `Voce ja esta na versao mais recente (v${info?.current || "?"}).` });
+      }
+    } catch (e) {
+      setMsg({ kind: "error", text: `Erro: ${e}` });
+    } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <p className="lmx-settings-hint">
+        O Ludex verifica automaticamente no inicio. Se houver versao nova, aparece
+        prompt obrigatorio pra atualizar.
+      </p>
+      <button className="lmx-settings-btn primary" onClick={check} disabled={busy}>
+        {busy ? "Verificando..." : "Verificar atualizacao"}
+      </button>
+      {msg && <p className={`lmx-settings-msg ${msg.kind}`}>{msg.text}</p>}
+    </>
+  );
+}
+
 function SoundToggle() {
   const [muted, setMutedState] = useState(() => isMutedNow());
   return (
@@ -892,13 +1003,18 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
       </section>
 
       <section className="lmx-settings-card">
+        <div className="lmx-settings-label">Atualizacao</div>
+        <UpdateChecker />
+      </section>
+
+      <section className="lmx-settings-card">
         <div className="lmx-settings-label">Sons</div>
         <SoundToggle />
       </section>
 
       <section className="lmx-settings-card">
         <div className="lmx-settings-label">Sobre</div>
-        <div className="lmx-settings-value">Ludex Android v0.8.19</div>
+        <div className="lmx-settings-value">Ludex Android v0.8.21</div>
         <p className="lmx-settings-hint">
           A versao Windows tem auto-update, gamepad nativo, todos os sistemas embedded + Switch/Wii U/PS3/Xbox 360/PS Vita via emulador externo.
         </p>

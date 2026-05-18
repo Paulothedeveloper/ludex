@@ -6388,3 +6388,35 @@ html[data-android="true"] body {
     padding-top: calc(8px + env(safe-area-inset-top, 0px));
   }
 }
+
+/* ===== v0.8.21: update banner desktop ===== */
+.pb-update-banner {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: rgba(20, 10, 40, 0.95);
+  border: 1px solid rgba(124, 58, 237, 0.6);
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 640px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.pb-update-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #fff;
+  font-size: 13px;
+}
+.pb-update-banner-text strong { font-weight: 700; }
+.pb-update-banner-text span { color: rgba(255,255,255,0.6); font-size: 11px; }
+.pb-update-installing {
+  justify-content: center;
+}

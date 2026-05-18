@@ -3111,6 +3111,112 @@ fn android_ludex_base_path() -> String {
         .unwrap_or_default()
 }
 
+// ============================================================
+// === AUTO-UPDATE Android (manual via latest.json + APK install)
+// ============================================================
+// Tauri updater plugin nao suporta Android. Implementacao propria:
+// 1. check_update_info: fetch latest.json do GitHub Releases, compara versao
+// 2. download_apk_to_cache: baixa Ludex_X.X.X.apk pro app cache_dir
+// 3. android_install_apk: dispara intent ACTION_VIEW via Permissions.installApk
+
+#[derive(Serialize, Default)]
+struct UpdateInfo {
+    available: bool,
+    current: String,
+    latest: String,
+    notes: String,
+    apk_url: String,
+    exe_url: String,
+}
+
+#[tauri::command]
+async fn check_update_info() -> Result<UpdateInfo, String> {
+    const ENDPOINT: &str = "https://github.com/EllaeMyApp/ludex/releases/latest/download/latest.json";
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client.get(ENDPOINT).send().await.map_err(|e| format!("fetch latest.json: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    let json: serde_json::Value = resp.json().await.map_err(|e| format!("parse json: {}", e))?;
+    let latest = json["version"].as_str().unwrap_or("").to_string();
+    let notes  = json["notes"].as_str().unwrap_or("").to_string();
+    let exe_url = json["platforms"]["windows-x86_64"]["url"].as_str().unwrap_or("").to_string();
+    // APK url segue convencao: substitui Ludex_X.X.X_x64-setup.exe -> Ludex_X.X.X.apk
+    let apk_url = if !latest.is_empty() {
+        format!("https://github.com/EllaeMyApp/ludex/releases/download/v{0}/Ludex_{0}.apk", latest)
+    } else { String::new() };
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    let available = !latest.is_empty() && version_is_newer(&latest, &current);
+    Ok(UpdateInfo { available, current, latest, notes, apk_url, exe_url })
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+async fn android_download_apk(apk_url: String) -> Result<String, String> {
+    // Cache dir do app via Kotlin
+    let cache_dir = android_update_cache_dir_inner()?;
+    let dest_path = format!("{}/ludex-update.apk", cache_dir);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(600))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client.get(&apk_url).send().await.map_err(|e| format!("download: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    let bytes = resp.bytes().await.map_err(|e| format!("read body: {}", e))?;
+    std::fs::write(&dest_path, &bytes).map_err(|e| format!("write apk: {}", e))?;
+    Ok(dest_path)
+}
+
+#[cfg(target_os = "android")]
+fn android_update_cache_dir_inner() -> Result<String, String> {
+    use jni::objects::JObject;
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.map_err(|e| e.to_string())?;
+    let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+    let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+    let result = env.call_static_method(
+        "gg/ludex/app/Permissions",
+        "updateCacheDir",
+        "(Landroid/app/Activity;)Ljava/lang/String;",
+        &[(&activity).into()],
+    ).map_err(|e| format!("JNI cacheDir: {}", e))?;
+    let jstr: jni::objects::JString = result.l().map_err(|e| e.to_string())?.into();
+    let rust_str: String = env.get_string(&jstr).map_err(|e| e.to_string())?.into();
+    Ok(rust_str)
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn android_install_apk(apk_path: String) -> Result<bool, String> {
+    use jni::objects::{JObject, JString};
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.map_err(|e| e.to_string())?;
+    let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+    let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+    let jpath: JString = env.new_string(&apk_path).map_err(|e| e.to_string())?;
+    let ok = env.call_static_method(
+        "gg/ludex/app/Permissions",
+        "installApk",
+        "(Landroid/app/Activity;Ljava/lang/String;)Z",
+        &[(&activity).into(), (&jpath).into()],
+    ).map_err(|e| format!("JNI installApk: {}", e))?
+     .z().map_err(|e| e.to_string())?;
+    Ok(ok)
+}
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+async fn android_download_apk(_apk_url: String) -> Result<String, String> { Ok(String::new()) }
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+fn android_install_apk(_apk_path: String) -> Result<bool, String> { Ok(false) }
+
 #[tauri::command]
 fn clear_app_logs() -> Result<u32, String> {
     let dir = app_log_dir().ok_or("data dir indisponivel")?;
@@ -4813,6 +4919,9 @@ pub fn run() {
             android_ludex_base_path,
             bios_try_auto_import,
             open_system_folder,
+            check_update_info,
+            android_download_apk,
+            android_install_apk,
             load_config,
             save_config,
             reset_config,
