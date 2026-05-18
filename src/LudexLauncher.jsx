@@ -2825,6 +2825,27 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
         <div className="pb-emulator-error">
           <strong>Erro ao carregar:</strong>
           <code>{error}</code>
+          {/* Se erro mencionar BIOS: oferece abrir pasta + re-tentar import + retry */}
+          {String(error).toLowerCase().includes("bios") && (
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", justifyContent: "center" }}>
+              <button className="pb-btn pb-btn-primary" onClick={async () => {
+                try { await invoke("open_system_folder"); }
+                catch (e) { alert("Falha ao abrir pasta: " + e); }
+              }}>Abrir pasta system\</button>
+              <button className="pb-btn" onClick={async () => {
+                try {
+                  const n = await invoke("bios_try_auto_import");
+                  if (n > 0) {
+                    alert(`Importei ${n} BIOS — tentando de novo...`);
+                    setError(null);
+                    autoLoadDoneRef.current = false;
+                  } else {
+                    alert("Nenhuma BIOS encontrada em PCSX2/bios, RetroArch/system, Documents, Downloads. Cola o .bin manualmente na pasta system\\");
+                  }
+                } catch (e) { alert("Falha: " + e); }
+              }}>Auto-import BIOS</button>
+            </div>
+          )}
           <button className="pb-btn pb-btn-primary" onClick={onClose}>Voltar</button>
         </div>
       ) : (

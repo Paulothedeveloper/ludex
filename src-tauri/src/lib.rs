@@ -2533,11 +2533,114 @@ fn check_required_bios(core_filename: &str) -> Option<String> {
     let sys_dir = libretro_system_dir();
     let any_present = needed.iter().any(|f| sys_dir.join(f).is_file());
     if any_present { return None; }
+    // Tenta auto-import de paths conhecidos antes de desistir
+    if bios_auto_import_into_system(needed) {
+        let any_now = needed.iter().any(|f| sys_dir.join(f).is_file());
+        if any_now { return None; }
+    }
     Some(format!(
         "BIOS necessaria para este sistema nao encontrada.\n\nColoca um destes arquivos em:\n{}\n\nArquivos aceitos:\n{}",
         sys_dir.display(),
         needed.join("\n")
     ))
+}
+
+/// Procura BIOS em paths conhecidos (PCSX2/bios, RetroArch/system, Documents/PCSX2,
+/// Downloads, etc) e copia pra ludex_base_dir/system/ se encontrar.
+/// Retorna true se copiou pelo menos 1 arquivo.
+fn bios_auto_import_into_system(needed: &[&str]) -> bool {
+    let sys_dir = libretro_system_dir();
+    let mut copied = 0;
+    // Paths candidatos (cobre PCSX2, RetroArch, Documents, Downloads, raiz BIOS)
+    let candidates: Vec<PathBuf> = bios_search_paths();
+    for cand_dir in &candidates {
+        if !cand_dir.is_dir() { continue; }
+        // Procura cada nome BIOS necessario nesta pasta (case-insensitive)
+        if let Ok(entries) = std::fs::read_dir(cand_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_file() { continue; }
+                let Some(fname) = path.file_name().and_then(|n| n.to_str()) else { continue; };
+                let fname_lc = fname.to_ascii_lowercase();
+                for &target in needed {
+                    if fname_lc == target.to_ascii_lowercase() {
+                        let dest = sys_dir.join(target);
+                        if dest.is_file() { continue; }
+                        if std::fs::copy(&path, &dest).is_ok() {
+                            log::info!("BIOS auto-import: {} -> {}", path.display(), dest.display());
+                            copied += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    copied > 0
+}
+
+fn bios_search_paths() -> Vec<PathBuf> {
+    let mut paths: Vec<PathBuf> = Vec::new();
+    // 1. Emulators do Ludex (PCSX2 bios, RetroArch system, etc)
+    let emu_root = current_emulators_root();
+    paths.push(emu_root.join("PCSX2").join("bios"));
+    paths.push(emu_root.join("RETROARCH").join("system"));
+    paths.push(emu_root.join("DUCKSTATION").join("bios"));
+    paths.push(emu_root.join("FLYCAST").join("data"));
+    // 2. Roots comuns BIOS
+    paths.push(PathBuf::from("D:\\BIOS"));
+    paths.push(PathBuf::from("C:\\BIOS"));
+    // 3. Documents (PCSX2 standard install)
+    if let Some(d) = dirs::document_dir() {
+        paths.push(d.join("PCSX2").join("bios"));
+        paths.push(d.join("PCSX2_QT").join("bios"));
+        paths.push(d.join("RetroArch").join("system"));
+    }
+    // 4. Downloads (fallback)
+    if let Some(d) = dirs::download_dir() {
+        paths.push(d.clone());
+        paths.push(d.join("BIOS"));
+        paths.push(d.join("ps2-bios"));
+        paths.push(d.join("PS2"));
+    }
+    paths
+}
+
+#[tauri::command]
+fn bios_try_auto_import() -> Result<u32, String> {
+    // Importa BIOS de todos os sistemas que conhecemos (PS2, Saturn, Dreamcast, etc)
+    let all_needed: Vec<&str> = required_bios_files("pcsx2_libretro").iter()
+        .chain(required_bios_files("flycast_libretro").iter())
+        .chain(required_bios_files("mednafen_saturn_libretro").iter())
+        .chain(required_bios_files("opera_libretro").iter())
+        .chain(required_bios_files("swanstation_libretro").iter())
+        .chain(required_bios_files("virtualjaguar_libretro").iter())
+        .copied()
+        .collect();
+    let sys_dir = libretro_system_dir();
+    let before = all_needed.iter().filter(|f| sys_dir.join(f).is_file()).count();
+    bios_auto_import_into_system(&all_needed);
+    let after = all_needed.iter().filter(|f| sys_dir.join(f).is_file()).count();
+    Ok((after.saturating_sub(before)) as u32)
+}
+
+#[tauri::command]
+fn open_system_folder() -> Result<(), String> {
+    let dir = libretro_system_dir();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        Command::new("explorer.exe")
+            .arg(&dir)
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    { Command::new("open").arg(&dir).spawn().map_err(|e| e.to_string())?; }
+    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
+    { Command::new("xdg-open").arg(&dir).spawn().map_err(|e| e.to_string())?; }
+    Ok(())
 }
 
 #[tauri::command]
@@ -4659,6 +4762,12 @@ pub fn run() {
             let _ = APP_HANDLE.set(app.handle().clone());
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
+                // Tenta importar BIOS conhecidas pra system/ no startup (PS2/Saturn/etc).
+                // Procura em Ludex/emulators/PCSX2/bios, RetroArch/system, Documents,
+                // Downloads e copia o que existir.
+                std::thread::spawn(|| {
+                    let _ = bios_try_auto_import();
+                });
                 spawn_gamepad_hotkey_listener();
                 // Tenta conectar Discord no startup (sem-op se nao tem app_id ou Discord nao esta rodando)
                 std::thread::spawn(|| {
@@ -4702,6 +4811,8 @@ pub fn run() {
             android_open_play_store,
             android_is_package_installed,
             android_ludex_base_path,
+            bios_try_auto_import,
+            open_system_folder,
             load_config,
             save_config,
             reset_config,
