@@ -653,8 +653,88 @@ export default function SettingsPanel({
           <p className="pb-settings-hint">Útil quando algum jogo não abre — mostra as últimas 200 linhas do log.</p>
         </div>
 
-        <footer className="pb-settings-footer">Ludex · v0.4</footer>
+        {/* v0.9.1: Sincroniza perfil + conquistas + favoritos + game_meta + recents
+            entre PC <-> Celular via export/import manual de JSON. Mesma license
+            unlock em ambos = mesmo direito de usar; sync de dados via copy/paste. */}
+        <DesktopBackupRestoreSection sfx={sfx} />
+
+        <footer className="pb-settings-footer">Ludex · v0.9</footer>
       </aside>
     </>
+  );
+}
+
+/**
+ * v0.9.1: Export/Import config (desktop equivalente do BackupRestoreCard do mobile).
+ * Exporta o config.json inteiro (profiles + game_meta + favorites + play_time +
+ * achievements + sessions) como string. Import faz merge no profile ativo.
+ *
+ * Use case: user usa Ludex no Windows E no celular com a MESMA license.
+ * Quer conquista, favoritos e tempo de jogo sincronizados entre dispositivos.
+ * Como nao temos backend (Gumroad nao guarda dados), sync e manual:
+ *   - PC: copia config (Export). Cola no celular > Ajustes > Backup > Importar.
+ *   - Celular -> PC: idem na direcao inversa.
+ */
+function DesktopBackupRestoreSection({ sfx }) {
+  const [msg, setMsg] = useState(null);
+
+  const doExport = async () => {
+    try {
+      const cfg = await invoke("load_config");
+      const json = JSON.stringify(cfg, null, 2);
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(json);
+        setMsg({ kind: "ok", text: `Config copiada (${(json.length / 1024).toFixed(1)} KB). Cola no celular > Ajustes > Backup > Importar.` });
+      } else {
+        setMsg({ kind: "info", text: "Clipboard indisponivel. Veja console pra JSON." });
+        console.log(json);
+      }
+      try { sfx.confirm(); } catch {}
+    } catch (e) {
+      setMsg({ kind: "error", text: `Falha: ${e}` });
+    }
+    setTimeout(() => setMsg(null), 8000);
+  };
+
+  const doImport = async () => {
+    const json = window.prompt("Cola aqui o JSON da config exportada (do celular ou de outro PC):");
+    if (!json) return;
+    try {
+      const cfg = JSON.parse(json);
+      if (!cfg.profiles || !Array.isArray(cfg.profiles)) {
+        throw new Error("JSON invalido — falta 'profiles'");
+      }
+      await invoke("save_config", { config: cfg });
+      setMsg({ kind: "ok", text: "Config importada! Reinicie o app pra ver perfil/conquistas atualizados." });
+      try { sfx.confirm(); } catch {}
+    } catch (e) {
+      setMsg({ kind: "error", text: `Falha ao importar: ${e.message || e}` });
+    }
+    setTimeout(() => setMsg(null), 8000);
+  };
+
+  return (
+    <div className="pb-settings-section">
+      <h3>Backup / Sync com Celular</h3>
+      <p className="pb-settings-hint">
+        Exporta perfil + conquistas + favoritos + tempo de jogo como JSON. No
+        celular, abre Ajustes &gt; Backup e cola pra ter o mesmo progresso.
+        (Sync automatico via license key exigiria servidor — ainda nao implementado.)
+      </p>
+      <button className="pb-settings-btn" onClick={doExport}>
+        Copiar config (Export)
+      </button>
+      <button className="pb-settings-btn" onClick={doImport}>
+        Colar config (Import)
+      </button>
+      {msg && (
+        <p style={{
+          marginTop: 8, padding: "8px 10px", borderRadius: 6, fontSize: "0.85em",
+          background: msg.kind === "ok" ? "rgba(34,197,94,0.15)" : msg.kind === "error" ? "rgba(239,68,68,0.15)" : "rgba(96,165,250,0.15)",
+          color: msg.kind === "ok" ? "#22c55e" : msg.kind === "error" ? "#ef4444" : "#60a5fa",
+          border: `1px solid ${msg.kind === "ok" ? "rgba(34,197,94,0.3)" : msg.kind === "error" ? "rgba(239,68,68,0.3)" : "rgba(96,165,250,0.3)"}`,
+        }}>{msg.text}</p>
+      )}
+    </div>
   );
 }

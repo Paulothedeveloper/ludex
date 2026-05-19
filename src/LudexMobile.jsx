@@ -21,7 +21,7 @@ import {
   loadRecents, pushRecent, trackSession, statsFor, totalPlayTime,
   ACHIEVEMENTS, loadAchievements, checkAchievements, markTabVisited, unlockAchievement,
   isChildModeOn, setChildMode as setChildModeStore, verifyChildPin, filterChildSafe,
-  exportConfig, importConfig,
+  exportConfig, importConfig, notifyBackupMade,
   saveThumbnail, loadThumbnail,
   loadCustomCovers, setCustomCover,
   loadCheats, setCheats as setCheatsStore,
@@ -212,6 +212,22 @@ export default function LudexMobile() {
       try {
         const demo = await invoke("android_demo_status");
         setAndroidDemo(demo);
+        // v0.9.1: se license ativada, revalida com Gumroad (semanal, sync com desktop).
+        // android_demo_status ja le cfg.android_admin_unlock + valida grace period offline.
+        // Aqui pedimos check ativo se ja ativou: detecta revogacao, atualiza uses count.
+        if (demo?.is_admin_unlocked) {
+          try {
+            const info = await invoke("license_validate");
+            if (!info?.valid) {
+              // License invalidada -> volta pro modo demo
+              const updated = await invoke("android_demo_status");
+              setAndroidDemo(updated);
+            }
+          } catch (e) {
+            // Sem internet ou outro problema - mantem cached state (grace period 30d)
+            console.warn("license_validate", e);
+          }
+        }
       } catch (e) { /* desktop ou erro -- ignora */ }
 
       // v0.8.14: checa permissao logo no startup (sem esperar scan retornar 0)
@@ -2224,21 +2240,22 @@ function BackupRestoreCard() {
     const json = exportConfig();
     if (navigator.clipboard) {
       navigator.clipboard.writeText(json).then(() => {
-        setMsg({ kind: "ok", text: "Config copiada pro clipboard." });
+        setMsg({ kind: "ok", text: "Config copiada pro clipboard. Cola no outro dispositivo em 'Importar'." });
       }).catch(() => setMsg({ kind: "info", text: json.slice(0, 200) + "..." }));
     }
+    try { notifyBackupMade && notifyBackupMade(() => {}); } catch {}
     sfx.confirm();
-    setTimeout(() => setMsg(null), 4000);
+    setTimeout(() => setMsg(null), 6000);
   };
   const doImport = () => {
-    const json = window.prompt("Cola o JSON da config exportada:");
+    const json = window.prompt("Cola o JSON da config exportada (do Windows ou de outro celular):");
     if (!json) return;
     if (importConfig(json)) {
-      setMsg({ kind: "ok", text: "Config importada. Reabra o app pra aplicar." });
+      setMsg({ kind: "ok", text: "Config importada com sucesso. Reabra o app pra aplicar — perfil, conquistas, recents, favoritos e custom covers vieram do outro dispositivo." });
     } else {
-      setMsg({ kind: "error", text: "Falha ao importar." });
+      setMsg({ kind: "error", text: "Falha ao importar. Verifica se o JSON ta completo." });
     }
-    setTimeout(() => setMsg(null), 4000);
+    setTimeout(() => setMsg(null), 6000);
   };
   return (
     <section className="lmx-settings-card">
