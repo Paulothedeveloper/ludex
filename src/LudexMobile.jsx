@@ -30,7 +30,7 @@ import {
   isAmbientOn, setAmbientOn,
   formatPlayTime, formatRelative,
 } from "./ludexMobileFeatures";
-import { SystemSettingsModal } from "./LudexExtras"; // v0.8.38: settings in-game
+import { SystemSettingsModal, SuggestionsModal } from "./LudexExtras"; // v0.9.1: + SuggestionsModal pra paridade com desktop
 import { hasOptionsForSystem, applySystemOptions, effectivePadMap } from "./ludexSystemOptions";
 
 // ============================================================
@@ -1119,6 +1119,9 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
         <UpdateChecker />
       </section>
 
+      {/* v0.9.1: paridade com Windows - sites guide + logs viewer */}
+      <SourcesGuideCard />
+      <LogsViewerCard />
       <WhyWindowsCard />
       <AchievementsCard />
       <ChildModeCard />
@@ -2289,6 +2292,83 @@ function AmbientMusicToggle() {
       }}>
         {on ? "Desligar musica" : "Ligar musica"}
       </button>
+    </section>
+  );
+}
+
+// ============================================================
+// === SOURCES GUIDE CARD (v0.9.1 - paridade Windows) =========
+// ============================================================
+// "Onde baixar jogos / DLCs / Mods" - mesmo SuggestionsModal usado no
+// LudexLauncher desktop. Lista catalogada: Vimm's Lair, Myrient, CDRomance,
+// Romhacking.net, GameBanana, NoPayStation, etc. Aviso legal explicito.
+function SourcesGuideCard() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <section className="lmx-settings-card">
+        <div className="lmx-settings-label">Onde baixar jogos / DLCs / Mods</div>
+        <p className="lmx-settings-hint">
+          Lista de sites populares por categoria — ROMs (Vimm's, Myrient,
+          CDRomance), patches PT-BR (Tradu-Roms, Romhacking), DLCs (NoPayStation,
+          Hshop). Mesma lista do Windows.
+        </p>
+        <button className="lmx-settings-btn primary" onClick={() => { sfx.confirm(); setOpen(true); }}>
+          Abrir guia de fontes
+        </button>
+      </section>
+      <SuggestionsModal open={open} onClose={() => setOpen(false)} defaultTab="roms" />
+    </>
+  );
+}
+
+// ============================================================
+// === LOGS VIEWER CARD (v0.9.1 - paridade Windows) ===========
+// ============================================================
+// Mostra ultimas 200 linhas do app log. Util quando algum jogo nao abre
+// ou app trava - copia o log e me manda. Backend ja tem read_app_logs.
+function LogsViewerCard() {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("Carregando...");
+  const [busy, setBusy] = useState(false);
+  const load = async () => {
+    setBusy(true);
+    try {
+      const t = await invoke("read_app_logs", { maxLines: 200 });
+      setText(t || "(log vazio)");
+    } catch (e) {
+      setText("Erro: " + String(e));
+    } finally { setBusy(false); }
+  };
+  const copy = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+    }
+  };
+  return (
+    <section className="lmx-settings-card">
+      <div className="lmx-settings-label">Logs do app</div>
+      <p className="lmx-settings-hint">
+        Ultimas 200 linhas. Util quando algum jogo nao abre — copia e me manda.
+      </p>
+      <button className="lmx-settings-btn primary" onClick={() => { sfx.click(); load(); setOpen(true); }}>
+        Abrir logs
+      </button>
+      {open && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 9999, padding: 16, display: "flex", flexDirection: "column" }} onClick={() => setOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ flex: 1, background: "#0a0420", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", maxHeight: "90vh" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+              <strong style={{ color: "#c4b5fd" }}>Logs do Ludex</strong>
+              <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "#fff", fontSize: 24, cursor: "pointer" }}>×</button>
+            </div>
+            <pre style={{ flex: 1, overflow: "auto", fontSize: 10, color: "#ddd", whiteSpace: "pre-wrap", margin: 0 }}>{text}</pre>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button className="lmx-settings-btn" onClick={load} disabled={busy}>{busy ? "Recarregando..." : "Recarregar"}</button>
+              <button className="lmx-settings-btn primary" onClick={copy}>Copiar tudo</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
