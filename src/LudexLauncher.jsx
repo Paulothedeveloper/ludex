@@ -12,12 +12,19 @@ import LudexLicenseGate from "./LudexLicenseGate";
 import LudexAdminPanel from "./LudexAdminPanel";
 import {
   EmptyStateSystem, SuggestionsModal, ControlsTipModal,
+  SystemSettingsModal,
   FolderIcon as LxFolderIcon,
   GiftIcon as LxGiftIcon,
   ToolsIcon as LxToolsIcon,
   GlobeIcon as LxGlobeIcon,
   GamepadIcon as LxGamepadIcon,
 } from "./LudexExtras";
+import {
+  SYSTEM_OPTIONS, getOptionsForSystem, hasOptionsForSystem,
+  loadSystemOptions, saveSystemOptions, clearSystemOptions,
+  applySystemOptions, applyAllSavedOptions,
+  effectivePadMap,
+} from "./ludexSystemOptions";
 
 // === Captura global de erros JS -> log do Rust ===
 // Garante que crashes do frontend chegam ao arquivo de log lido pelo LogsViewerModal.
@@ -1413,6 +1420,14 @@ function SettingsPanel({
   const [updateBusy, setUpdateBusy] = useState(false);
   const [appVersion, setAppVersion] = useState("");
   useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
+  // v0.8.37: Restaura opcoes salvas do user (per-system Settings) no boot.
+  // v0.8.39: defer pra fora do mount inicial — sequencia de invokes nao pode
+  // atrasar o setup do polling de gamepad nem do RAF do launcher.
+  useEffect(() => {
+    // v0.8.45: 0ms (era 250ms paranoia, ja descartada — gamepad bug era outro)
+    const t = setTimeout(() => { applyAllSavedOptions().catch(() => {}); }, 0);
+    return () => clearTimeout(t);
+  }, []);
   // RetroAchievements
   const [raUser, setRaUser] = useState(config.ra_username || "");
   const [raKey, setRaKey] = useState(config.ra_api_key || "");
@@ -2476,6 +2491,9 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
   const [slotsOpen, setSlotsOpen] = useState(false);
   const [slots, setSlots] = useState([]);
   const [slotsBusy, setSlotsBusy] = useState(false);
+  const [emuSettingsOpen, setEmuSettingsOpen] = useState(false); // v0.8.38: settings in-game
+  const [discInfo, setDiscInfo] = useState(null); // v0.8.46: multi-disc info
+  const [discMenuOpen, setDiscMenuOpen] = useState(false);
   const audioCtxRef = useRef(null);
   const audioNextTimeRef = useRef(0);
   const audioRateRef = useRef(32040);
@@ -2509,10 +2527,17 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
           setError(`Sistema "${system.name}" sem core libretro configurado`);
           return;
         }
+        // v0.8.37: aplica opcoes salvas do user (UI Settings) antes de load_game
+        try { await applySystemOptions(system.id); } catch {}
         const result = await invoke("libretro_load_game", { coreFilename: coreFile, romPath: game.path });
         if (cancelled) return;
         setInfo(result);
         audioRateRef.current = result.sample_rate || 32040;
+        // v0.8.46: pega disc info do core (multi-disc PS1/Saturn)
+        try {
+          const di = await invoke("libretro_get_disc_info");
+          if (di && di.supported && di.num_images > 1) setDiscInfo(di);
+        } catch {}
         // Ajusta tamanho do canvas
         if (canvasRef.current) {
           canvasRef.current.width = result.base_width;
@@ -2547,18 +2572,32 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
     if (!info) return;
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
-    let lastTime = performance.now();
-    const targetFrameMs = 1000 / (info.fps || 60);
+    // v0.8.45/46: throttle preciso. v0.8.46: integra FF dividindo targetMs por ff
+    // (cap em 144fps render — emula extras via libretro_skip_frames).
+    let nextFrame = performance.now();
+    const baseFps = info.fps || 60;
+    const baseTargetMs = 1000 / baseFps;
 
     async function tick() {
       const now = performance.now();
-      if (now - lastTime >= targetFrameMs - 1) {
-        lastTime = now;
+      const ff = Math.max(1, ffEffectiveRef.current || 1);
+      // Emulamos baseFps*ff frames/seg. Renderizamos no min(emuRate, 144fps).
+      // Diferenca vai pra skip_frames antes do run.
+      const emuRate = baseFps * ff;
+      const renderRate = Math.min(emuRate, 144); // limite display
+      const targetFrameMs = 1000 / renderRate;
+      const framesPerRender = Math.max(1, Math.round(emuRate / renderRate));
+      if (now < nextFrame) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      nextFrame += targetFrameMs;
+      if (now - nextFrame > targetFrameMs * 4) nextFrame = now + targetFrameMs;
+      {
         try {
-          // v0.8.23: fast-forward — roda N-1 frames extras sem coletar buffer
-          const ff = ffEffectiveRef.current;
-          if (ff > 1) {
-            try { await invoke("libretro_skip_frames", { n: ff - 1 }); } catch {}
+          // v0.8.46: skip_frames cobre toda emulacao extra (FF + render cap)
+          if (framesPerRender > 1) {
+            try { await invoke("libretro_skip_frames", { n: framesPerRender - 1 }); } catch {}
           }
           // Response binario: 4 bytes width LE + 4 bytes height LE + rgba
           const buf = await invoke("libretro_run_frame");
@@ -2600,9 +2639,13 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
               const source = actx.createBufferSource();
               source.buffer = audioBufNode;
               source.connect(actx.destination);
-              // Anti-glitch: se atrasou, ressincroniza
-              if (audioNextTimeRef.current < actx.currentTime + 0.02) {
-                audioNextTimeRef.current = actx.currentTime + 0.05;
+              // v0.8.38: resync APENAS em underrun real (nextTime < currentTime).
+              // Antes resyncava a cada frame menos de 20ms a frente -> gerava
+              // gap de 30ms constante em jogos lentos. Agora deixa buffer
+              // absorver jitter naturalmente e so corrige quando ja perdeu.
+              const ct = actx.currentTime;
+              if (audioNextTimeRef.current < ct) {
+                audioNextTimeRef.current = ct + 0.15; // 150ms cushion pra recuperar
               }
               source.start(audioNextTimeRef.current);
               audioNextTimeRef.current += frames / sampleRate;
@@ -2771,57 +2814,89 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
   useEffect(() => {
     if (!info) return;
     let raf;
-    // Mapeamento std gamepad button -> libretro id
-    // Standard mapping: 0=A, 1=B, 2=X, 3=Y, 4=LB, 5=RB, 6=LT, 7=RT, 8=Back, 9=Start, 10=L3, 11=R3, 12=Up, 13=Down, 14=Left, 15=Right
-    const PAD_MAP = {
-      0: 0,    // A -> B(libretro)
-      1: 8,    // B -> A
-      2: 1,    // X -> Y
-      3: 9,    // Y -> X
-      4: 10,   // LB -> L
-      5: 11,   // RB -> R
-      6: 12,   // LT -> L2
-      7: 13,   // RT -> R2
-      8: 2,    // Back -> SELECT
-      9: 3,    // Start -> START
-      10: 14,  // L3
-      11: 15,  // R3
-      12: 4,   // Up
-      13: 5,   // Down
-      14: 6,   // Left
-      15: 7,   // Right
-    };
+    // v0.8.42: Pega mapa do user (Settings > Controle), fallback default.
+    // Re-le toda vez que abre jogo — mudanca no settings aplica no proximo load.
+    const PAD_MAP = effectivePadMap(system.id);
     const lastState = new Array(16).fill(false);
+    const lastAnalog = [0, 0, 0, 0]; // v0.8.45: L_x, L_y, R_x, R_y
+    const lastComboRef = { save: false, load: false }; // v0.8.47: edge detection combos
 
     function poll() {
       const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      // v0.8.42: Igual launcher — prefere mapping=standard pra evitar phantoms do Steam
       let pad = null;
-      for (const p of pads) { if (p) { pad = p; break; } }
+      const all = [];
+      for (const p of pads) { if (p) all.push(p); }
+      for (const p of all) { if (p.mapping === "standard") { pad = p; break; } }
+      if (!pad && all.length > 0) pad = all[0];
       if (pad) {
         // Combo Select+Start = sair
         if (pad.buttons[8]?.pressed && pad.buttons[9]?.pressed) {
           onClose();
           return;
         }
-        // Botoes
+        // v0.8.47: Combos gamepad pra save state quick.
+        // Select+L1 = save slot 0, Select+R1 = load slot 0.
+        // Suprime LB/RB pro core quando Select segurado (combo).
+        const selectHeld = !!pad.buttons[8]?.pressed;
+        const lbDown = !!pad.buttons[4]?.pressed;
+        const rbDown = !!pad.buttons[5]?.pressed;
+        if (selectHeld && lbDown && !lastComboRef.save) {
+          lastComboRef.save = true;
+          saveState(0);
+        } else if (!lbDown || !selectHeld) {
+          lastComboRef.save = false;
+        }
+        if (selectHeld && rbDown && !lastComboRef.load) {
+          lastComboRef.load = true;
+          loadState(0);
+        } else if (!rbDown || !selectHeld) {
+          lastComboRef.load = false;
+        }
+        // v0.8.46: D-pad unificado — buttons[12-15] OU hat axes 6/7 OU stick L (0/1).
+        // Cobre pads padrao (buttons), DInput/retro adapters (hat), e fallback stick.
+        const ax = pad.axes[0] || 0;
+        const ay = pad.axes[1] || 0;
+        const hatX = pad.axes[6] || 0;
+        const hatY = pad.axes[7] || 0;
+        const dpUp    = !!pad.buttons[12]?.pressed || hatY < -0.5 || ay < -0.5;
+        const dpDown  = !!pad.buttons[13]?.pressed || hatY > 0.5  || ay > 0.5;
+        const dpLeft  = !!pad.buttons[14]?.pressed || hatX < -0.5 || ax < -0.5;
+        const dpRight = !!pad.buttons[15]?.pressed || hatX > 0.5  || ax > 0.5;
+
+        // Botoes (loop generico). D-pad indices 12-15 usam state unificado.
         for (const [padIdx, libretroId] of Object.entries(PAD_MAP)) {
-          const pressed = pad.buttons[parseInt(padIdx)]?.pressed || false;
+          const idx = parseInt(padIdx);
+          let pressed;
+          // v0.8.47: enquanto Select segurado, suprime LB/RB/Select pra nao
+          // vazar pro core junto com o combo de save/load
+          if (selectHeld && (idx === 4 || idx === 5 || idx === 8)) {
+            pressed = false;
+          } else switch (idx) {
+            case 12: pressed = dpUp; break;
+            case 13: pressed = dpDown; break;
+            case 14: pressed = dpLeft; break;
+            case 15: pressed = dpRight; break;
+            default: pressed = !!pad.buttons[idx]?.pressed;
+          }
           if (pressed !== lastState[libretroId]) {
             lastState[libretroId] = pressed;
             invoke("libretro_set_input", { buttonId: libretroId, pressed }).catch(() => {});
           }
         }
-        // Stick analogico esquerdo -> dpad
-        const ax = pad.axes[0] || 0;
-        const ay = pad.axes[1] || 0;
-        const left  = ax < -0.5;
-        const right = ax > 0.5;
-        const up    = ay < -0.5;
-        const down  = ay > 0.5;
-        if (left !== lastState[6]) { lastState[6] = left; invoke("libretro_set_input", { buttonId: 6, pressed: left }).catch(() => {}); }
-        if (right !== lastState[7]) { lastState[7] = right; invoke("libretro_set_input", { buttonId: 7, pressed: right }).catch(() => {}); }
-        if (up !== lastState[4]) { lastState[4] = up; invoke("libretro_set_input", { buttonId: 4, pressed: up }).catch(() => {}); }
-        if (down !== lastState[5]) { lastState[5] = down; invoke("libretro_set_input", { buttonId: 5, pressed: down }).catch(() => {}); }
+        // v0.8.45: Stick analogico real (PCSX2/Dolphin/PSP/N64). Converte [-1,1] -> [-32767, 32767]
+        const lx = Math.round((pad.axes[0] || 0) * 32767);
+        const ly = Math.round((pad.axes[1] || 0) * 32767);
+        const rx = Math.round((pad.axes[2] || 0) * 32767);
+        const ry = Math.round((pad.axes[3] || 0) * 32767);
+        if (lx !== lastAnalog[0] || ly !== lastAnalog[1]) {
+          lastAnalog[0] = lx; lastAnalog[1] = ly;
+          invoke("libretro_set_analog", { stick: 0, x: lx, y: ly }).catch(() => {});
+        }
+        if (rx !== lastAnalog[2] || ry !== lastAnalog[3]) {
+          lastAnalog[2] = rx; lastAnalog[3] = ry;
+          invoke("libretro_set_analog", { stick: 1, x: rx, y: ry }).catch(() => {});
+        }
       }
       raf = requestAnimationFrame(poll);
     }
@@ -2834,6 +2909,71 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
       <button className="pb-emulator-close" onClick={onClose} title="Sair (Esc / Select+Start)">
         <CloseIcon />
       </button>
+      {hasOptionsForSystem(system.id) && (
+        <button
+          className="pb-emulator-settings"
+          onClick={() => setEmuSettingsOpen(true)}
+          title="Opções do emulador (resolução, performance, etc) — efeito no próximo jogo"
+        >
+          <LxToolsIcon />
+        </button>
+      )}
+      {discInfo && discInfo.supported && discInfo.num_images > 1 && (
+        <button
+          className="pb-emulator-disc"
+          onClick={() => setDiscMenuOpen(true)}
+          title={`Trocar disco (${discInfo.num_images} discos detectados)`}
+        >
+          DISC
+        </button>
+      )}
+      {discMenuOpen && discInfo && (
+        <div className="lx-modal-overlay" onClick={() => setDiscMenuOpen(false)}>
+          <div className="lx-modal" onClick={(e) => e.stopPropagation()} role="dialog" style={{ maxWidth: 420 }}>
+            <div className="lx-modal-header">
+              <h2>Trocar Disco</h2>
+              <button className="lx-modal-close" onClick={() => setDiscMenuOpen(false)} aria-label="Fechar">×</button>
+            </div>
+            <div className="lx-settings-body">
+              <p className="lx-settings-hint">
+                {discInfo.num_images} discos detectados. Disco atual: <b>{discInfo.current_image + 1}</b>
+              </p>
+              <div className="lx-settings-rows">
+                {Array.from({ length: discInfo.num_images }, (_, i) => (
+                  <button
+                    key={i}
+                    className={`lx-settings-btn ${i === discInfo.current_image ? "lx-settings-btn-primary" : "lx-settings-btn-ghost"}`}
+                    onClick={async () => {
+                      try {
+                        await invoke("libretro_swap_disc", { idx: i });
+                        const fresh = await invoke("libretro_get_disc_info");
+                        setDiscInfo(fresh);
+                      } catch (e) { console.error(e); }
+                    }}
+                  >Disco {i + 1}{i === discInfo.current_image ? " (atual)" : ""}</button>
+                ))}
+              </div>
+              <button
+                className="lx-settings-btn lx-settings-btn-ghost"
+                style={{ marginTop: 14 }}
+                onClick={async () => {
+                  try {
+                    const picked = await openDialog({
+                      multiple: false,
+                      filters: [{ name: "ISO/CHD/BIN/CUE/MDF", extensions: ["iso","chd","bin","cue","mdf","img"] }],
+                    });
+                    if (picked) {
+                      await invoke("libretro_replace_disc", { path: picked });
+                      const fresh = await invoke("libretro_get_disc_info");
+                      setDiscInfo(fresh);
+                    }
+                  } catch (e) { console.error(e); }
+                }}
+              >Carregar Disco de Arquivo...</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="pb-emulator-info">
         <span className="pb-emulator-icon" style={{ color: system.color }}><SystemIcon id={system.id} /></span>
         <span className="pb-emulator-game">{game.name}</span>
@@ -2841,7 +2981,14 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
       </div>
       <div className="pb-emulator-hints">
         <kbd>Tab</kbd> Slots · <kbd>F5</kbd>/<kbd>F8</kbd> Quick · <kbd>Space</kbd> FF · <kbd>+</kbd>/<kbd>-</kbd> Speed · <kbd>Esc</kbd> Sair
+        <span style={{ opacity: 0.5, marginLeft: 8 }}>· Pad: Select+L1 Save · Select+R1 Load · Select+Start Sair</span>
       </div>
+      <SystemSettingsModal
+        open={emuSettingsOpen}
+        systemId={system.id}
+        systemName={system.name}
+        onClose={() => setEmuSettingsOpen(false)}
+      />
       {(ffHold || ffSpeed > 1) && (
         <div className="pb-emulator-ff-indicator">
           ▶▶ {ffHold ? Math.max(ffSpeed, 2) : ffSpeed}x
@@ -3727,6 +3874,7 @@ export default function LudexLauncher() {
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [suggestionsTab, setSuggestionsTab] = useState("roms");
   const [controlsTip, setControlsTip] = useState(null); // { system } | null
+  const [settingsModal, setSettingsModal] = useState(null); // { systemId } | null — v0.8.37
   // Bottom-bar acessivel por D-pad direito ao final dos sistemas. -1 = inativo,
   // 0 = botao Configuracoes, 1 = botao Sair. Quando >= 0, focusZone vira "util".
   const [utilIdx, setUtilIdx] = useState(-1);
@@ -4805,6 +4953,10 @@ export default function LudexLauncher() {
     padCtxRef.current.closeSearch = closeSearch;
     padCtxRef.current.previewOpen = !!previewPopup;
     padCtxRef.current.openPreviewPopup = openPreviewPopup;
+    padCtxRef.current.systemSettingsOpen = !!settingsModal; // v0.8.39
+    padCtxRef.current.closeSystemSettings = () => setSettingsModal(null); // v0.8.39
+    padCtxRef.current.selectedCategoryId = selectedCategoryId; // v0.8.41
+    padCtxRef.current.setSelectedCategoryId = setSelectedCategoryId; // v0.8.41
   });
 
   useEffect(() => {
@@ -4816,6 +4968,7 @@ export default function LudexLauncher() {
       prevLeft: false, prevRight: false, prevUp: false, prevDown: false,
       prevA: false, prevB: false, prevX: false, prevY: false,
       prevLB: false, prevRB: false, prevStart: false, prevSelect: false,
+      prevLT: false, prevRT: false, // v0.8.41: triggers pra categoria
       // auto-repeat
       heldDir: null, heldSince: 0, lastRepeat: 0,
       // identificacao do controle ja anunciada
@@ -4835,6 +4988,18 @@ export default function LudexLauncher() {
       const ctx = padCtxRef.current;
       sfx.nav();
       setSelectedSystemIdx((i) => Math.max(0, Math.min(ctx.displayedSystems.length - 1, i + delta)));
+    }
+    // v0.8.41: navega categorias com LT/RT (L2/R2/ZL/ZR — botoes [6]/[7])
+    function navCategory(delta) {
+      const ctx = padCtxRef.current;
+      const cats = SYSTEM_CATEGORIES;
+      const cur = cats.findIndex(c => c.id === ctx.selectedCategoryId);
+      if (cur < 0) return;
+      const next = Math.max(0, Math.min(cats.length - 1, cur + delta));
+      if (next !== cur) {
+        sfx.nav();
+        ctx.setSelectedCategoryId(cats[next].id);
+      }
     }
     // Roteamento por zona: na zona "games", LEFT/RIGHT navega jogos, DOWN vai pra systems.
     // Na zona "systems", LEFT/RIGHT navega sistemas, UP volta pra games.
@@ -4867,16 +5032,29 @@ export default function LudexLauncher() {
         }
         const ctx = padCtxRef.current;
         const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-        // Pega o primeiro pad com pelo menos 1 botao OU eixo nao-zero (filtra phantoms)
+        // v0.8.40: Selecao inteligente de pad — Steam Input cria controle virtual
+        // que aparece primeiro mas sem mapping "standard" ou sem botoes. Antes
+        // pegavamos o primeiro pad nao-null e ja era. Agora:
+        //   1) Prioriza pads com mapping="standard" (Xbox/DS4 via XInput)
+        //   2) Se ja temos um "ativo" (teve input recente), mantem ele
+        //   3) Senao pega primeiro standard, fallback pra primeiro qualquer
         let pad = null;
-        for (const p of pads) {
-          if (!p) continue;
-          // Se ainda nao identificou nenhum, pega esse mesmo
-          pad = p;
-          break;
+        const allConnected = [];
+        for (const p of pads) { if (p) allConnected.push(p); }
+        // Tenta primeiro standard
+        for (const p of allConnected) {
+          if (p.mapping === "standard") { pad = p; break; }
+        }
+        // Fallback: primeiro qualquer
+        if (!pad && allConnected.length > 0) pad = allConnected[0];
+        // Log uma vez quando aparece um pad novo (debug)
+        if (pad && st.announcedId !== pad.id) {
+          console.log("[gamepad]", pad.id, "mapping=", pad.mapping,
+            "buttons=", pad.buttons.length, "axes=", pad.axes.length,
+            "(", allConnected.length, "total connected)");
+          st.announcedId = pad.id;
         }
         setGamepadConnected(!!pad);
-        // Publica diagnostico no window pra overlay ler
         window.__pbGamepad = pad;
         // Pausa polling quando emulador embarcado roda (input deve ir pro libretro).
         if (!pad || ctx.emulatorOpen) {
@@ -4885,7 +5063,9 @@ export default function LudexLauncher() {
         }
         // Quando ha modal aberto: input vai pro modal handler.
         // Modal handler retorna true se consumiu o input.
-        const modalActive = ctx.settingsOpen || ctx.profilesOpen || ctx.searchOpen || ctx.previewOpen;
+        // v0.8.39: inclui systemSettingsOpen — sem isso o gamepad navegava o
+        // launcher por tras do modal de Opcoes do emulador, dando bug visual.
+        const modalActive = ctx.settingsOpen || ctx.profilesOpen || ctx.searchOpen || ctx.previewOpen || ctx.systemSettingsOpen;
         if (modalActive) {
           const isStandardM = pad.mapping === "standard";
           const ax = pad.axes[0] || 0;
@@ -4936,6 +5116,7 @@ export default function LudexLauncher() {
               if (ctx.searchOpen) ctx.closeSearch();
               else if (ctx.profilesOpen) ctx.closeProfiles();
               else if (ctx.settingsOpen) ctx.closeSettings();
+              else if (ctx.systemSettingsOpen) ctx.closeSystemSettings(); // v0.8.39
             }
           }
           if (xBtn && !st.prevX) modalGamepadRef.current?.("x");
@@ -4986,21 +5167,21 @@ export default function LudexLauncher() {
         const now = performance.now();
         const ax = pad.axes[0] || 0;
         const ay = pad.axes[1] || 0;
-        // D-pad como botoes SO confia se mapping for standard (Xbox via XInput)
-        const dpRight = isStandard && !!pad.buttons[15]?.pressed;
-        const dpLeft  = isStandard && !!pad.buttons[14]?.pressed;
-        const dpDown  = isStandard && !!pad.buttons[13]?.pressed;
-        const dpUp    = isStandard && !!pad.buttons[12]?.pressed;
+        // v0.8.40: D-pad/shoulder buttons tentam standard indices em QUALQUER pad
+        // (era so isStandard). Indices 12-15 sao convencao quase universal.
+        const dpRight = !!pad.buttons[15]?.pressed;
+        const dpLeft  = !!pad.buttons[14]?.pressed;
+        const dpDown  = !!pad.buttons[13]?.pressed;
+        const dpUp    = !!pad.buttons[12]?.pressed;
         // Em controles non-standard, alguns mapeiam D-pad como axes[6]/axes[7] (HAT)
-        // axes[9] em alguns DS4: -1=up, -0.71=up-right, etc. Detecta via valores discretos
         const hatX = pad.axes[6] || 0;
         const hatY = pad.axes[7] || 0;
         const right = dpRight || ax > DEADZONE || hatX > 0.5;
         const left  = dpLeft  || ax < -DEADZONE || hatX < -0.5;
         const down  = dpDown  || ay > DEADZONE || hatY > 0.5;
         const up    = dpUp    || ay < -DEADZONE || hatY < -0.5;
-        const lb    = isStandard && !!pad.buttons[4]?.pressed;
-        const rb    = isStandard && !!pad.buttons[5]?.pressed;
+        const lb    = !!pad.buttons[4]?.pressed;
+        const rb    = !!pad.buttons[5]?.pressed;
 
         // edge: dispara so na transicao false->true
         let firedNow = null;
@@ -5036,9 +5217,21 @@ export default function LudexLauncher() {
         st.prevRight = right; st.prevLeft = left; st.prevDown = down; st.prevUp = up;
         st.prevLB = lb; st.prevRB = rb;
 
-        // botoes: edge detection (1 press = 1 acao). So aceita botoes em controle standard
-        // pra evitar disparar acoes erradas em controle generico mal-mapeado.
-        if (isStandard) {
+        // v0.8.41: triggers LT/RT (L2/R2/ZL/ZR) navegam CATEGORIAS (TODOS/NINTENDO/SONY/SEGA/etc).
+        // No standard W3C gamepad: [6]=LT/L2/ZL, [7]=RT/R2/ZR. Detecta tanto digital
+        // (pressed) quanto analogico (value>0.5) pra cobrir pads que so reportam value.
+        const ltVal = pad.buttons[6]?.value || 0;
+        const rtVal = pad.buttons[7]?.value || 0;
+        const lt = !!pad.buttons[6]?.pressed || ltVal > 0.5;
+        const rt = !!pad.buttons[7]?.pressed || rtVal > 0.5;
+        if (lt && !st.prevLT) navCategory(-1);
+        if (rt && !st.prevRT) navCategory(1);
+        st.prevLT = lt; st.prevRT = rt;
+
+        // v0.8.40: Aceita botoes em QUALQUER pad (era so standard). Steam Input,
+        // DInput, e alguns pads BT reportam mapping="" mas seguem convencao
+        // [0]=A/X, [1]=B/O, [9]=Start. Se errado, user adapta — melhor que dead.
+        {
           const a = !!pad.buttons[0]?.pressed;
           const b = !!pad.buttons[1]?.pressed;
           const x = !!pad.buttons[2]?.pressed;
@@ -5586,6 +5779,15 @@ export default function LudexLauncher() {
               >
                 <LxGlobeIcon /><span>Sites</span>
               </button>
+              {hasOptionsForSystem(selected.id) && (
+                <button
+                  className="lx-top-sys-btn"
+                  title="Configurar opções do emulador (resolução, performance, etc)"
+                  onClick={() => { sfx.open(); setSettingsModal({ systemId: selected.id }); }}
+                >
+                  <LxToolsIcon /><span>Opções</span>
+                </button>
+              )}
               <button
                 className="lx-top-sys-btn"
                 title="Configurar controle deste emulador"
@@ -6106,6 +6308,12 @@ export default function LudexLauncher() {
         open={!!controlsTip}
         system={controlsTip?.system}
         onClose={() => setControlsTip(null)}
+      />
+      <SystemSettingsModal
+        open={!!settingsModal}
+        systemId={settingsModal?.systemId}
+        systemName={settingsModal ? (displayedSystems.find(s => s.id === settingsModal.systemId)?.name || settingsModal.systemId) : ""}
+        onClose={() => setSettingsModal(null)}
       />
 
       {/* First-run onboarding: tour spotlight + criacao de perfil. Fica em

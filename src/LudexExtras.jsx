@@ -1,5 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  getOptionsForSystem, loadSystemOptions, saveSystemOptions, clearSystemOptions,
+  LIBRETRO_BUTTONS, DEFAULT_PAD_MAP, effectivePadMap,
+  remapPadButton, clearPadMap, padIdxLabel, padIdxForLibretroBtn,
+} from "./ludexSystemOptions";
 
 /* SVG icons inline — sem emoji em UI de producao. Stroke 1.6, 18x18 default. */
 const ic = (size = 18) => ({
@@ -308,6 +313,302 @@ export function ControlsTipModal({ open, onClose, system }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * v0.8.37: Modal de configurações por sistema (Resolução, Performance, etc).
+ * Lê opções do manifest SYSTEM_OPTIONS, persiste em localStorage e envia ao
+ * Rust via libretro_set_option. Apply real só no próximo load_game.
+ */
+const CATEGORY_LABELS = {
+  video: "Vídeo",
+  performance: "Performance",
+  audio: "Áudio",
+  sistema: "Sistema",
+  input: "Controle",
+};
+
+export function SystemSettingsModal({ open, onClose, systemId, systemName }) {
+  const options = useMemo(() => (systemId ? getOptionsForSystem(systemId) : null), [systemId]);
+  const [values, setValues] = useState({});
+  const [activeTab, setActiveTab] = useState("opcoes"); // 'opcoes' | 'controle'
+
+  useEffect(() => {
+    if (!open || !systemId) return;
+    setValues(loadSystemOptions(systemId) || {});
+    setActiveTab("opcoes");
+  }, [open, systemId]);
+
+  // v0.8.39: Esc fecha modal (era so click-fora antes)
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); onClose && onClose(); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open || !systemId) return null;
+
+  const hasOpts = !!options;
+
+  return (
+    <div className="lx-modal-overlay" onClick={onClose}>
+      <div className="lx-modal" onClick={(e) => e.stopPropagation()} role="dialog" style={{ maxWidth: 680 }}>
+        <div className="lx-modal-header">
+          <h2>Configurações — {systemName}</h2>
+          <button className="lx-modal-close" onClick={onClose} aria-label="Fechar"><CloseIconLx /></button>
+        </div>
+
+        <div className="lx-settings-tabs">
+          {hasOpts && (
+            <button
+              className={`lx-settings-tab ${activeTab === "opcoes" ? "active" : ""}`}
+              onClick={() => setActiveTab("opcoes")}
+            >Vídeo / Performance</button>
+          )}
+          <button
+            className={`lx-settings-tab ${activeTab === "controle" ? "active" : ""}`}
+            onClick={() => setActiveTab("controle")}
+          >Controle</button>
+        </div>
+
+        {activeTab === "opcoes" && hasOpts && (
+          <SystemOptionsPanel
+            systemId={systemId}
+            options={options}
+            values={values}
+            setValues={setValues}
+          />
+        )}
+        {activeTab === "opcoes" && !hasOpts && (
+          <div className="lx-settings-body">
+            <p className="lx-settings-hint">
+              Esse sistema usa defaults canônicos do libretro e ainda não tem opções configuráveis. A aba "Controle" funciona para todos.
+            </p>
+          </div>
+        )}
+        {activeTab === "controle" && (
+          <ControllerRemapPanel systemId={systemId} />
+        )}
+
+        <div className="lx-settings-footer">
+          <button
+            className="lx-settings-btn lx-settings-btn-ghost"
+            title="Abrir pasta onde ficam saves/memory cards desse sistema"
+            onClick={async () => {
+              try {
+                const folders = await invoke("get_system_folders", { systemId });
+                if (folders?.saves_path) {
+                  await invoke("open_folder", { path: folders.saves_path });
+                }
+              } catch (e) { console.error("open saves folder", e); }
+            }}
+          >Pasta Saves</button>
+          <button className="lx-settings-btn lx-settings-btn-primary" onClick={onClose}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SystemOptionsPanel({ systemId, options, values, setValues }) {
+  const byCategory = {};
+  for (const opt of options) {
+    if (!byCategory[opt.category]) byCategory[opt.category] = [];
+    byCategory[opt.category].push(opt);
+  }
+  const categories = Object.keys(byCategory);
+
+  const onChange = async (key, value) => {
+    const next = { ...values, [key]: value };
+    setValues(next);
+    saveSystemOptions(systemId, next);
+    try { await invoke("libretro_set_option", { key, value }); } catch (e) { console.error(e); }
+  };
+
+  const resetAll = async () => {
+    setValues({});
+    clearSystemOptions(systemId);
+    for (const opt of options) {
+      try { await invoke("libretro_set_option", { key: opt.key, value: opt.default }); } catch {}
+    }
+  };
+
+  return (
+    <div className="lx-settings-body">
+      {categories.map((cat) => (
+        <section key={cat} className="lx-settings-section">
+          <h4 className="lx-settings-cat">{CATEGORY_LABELS[cat] || cat}</h4>
+          <div className="lx-settings-rows">
+            {byCategory[cat].map((opt) => {
+              const current = values[opt.key] ?? opt.default;
+              return (
+                <div key={opt.key} className="lx-settings-row">
+                  <label className="lx-settings-label" title={opt.key}>{opt.label}</label>
+                  <select
+                    className="lx-settings-select"
+                    value={current}
+                    onChange={(e) => onChange(opt.key, e.target.value)}
+                  >
+                    {opt.options.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+      <button className="lx-settings-btn lx-settings-btn-ghost" onClick={resetAll}
+        style={{ marginTop: 8 }}>Restaurar Defaults de Vídeo/Performance</button>
+    </div>
+  );
+}
+
+/**
+ * v0.8.42: UI de remap de controle por sistema.
+ * Lista botoes libretro (B/A/Y/X/L1/R1/L2/R2/L3/R3/Start/Select) com o pad btn
+ * atualmente mapeado pra cada. Click em "Remapear" entra em modo escuta:
+ * proximo botao do pad pressionado vira o novo mapeamento.
+ */
+function ControllerRemapPanel({ systemId }) {
+  const [map, setMap] = useState(() => effectivePadMap(systemId));
+  const [listening, setListening] = useState(null); // libretroId que esta esperando press
+  const [padStyle, setPadStyle] = useState("xbox"); // xbox | ps | switch | generic
+
+  // Recarrega ao trocar de sistema
+  useEffect(() => { setMap(effectivePadMap(systemId)); setListening(null); }, [systemId]);
+
+  // Modo escuta: poll do gamepad e detecta edge press
+  useEffect(() => {
+    if (listening == null) return;
+    let raf;
+    const prev = new Array(20).fill(false);
+    // marca estado inicial pra nao capturar botoes ja segurados
+    const pads0 = navigator.getGamepads ? navigator.getGamepads() : [];
+    let pad0 = null;
+    for (const p of pads0) {
+      if (!p) continue;
+      if (p.mapping === "standard") { pad0 = p; break; }
+      if (!pad0) pad0 = p;
+    }
+    if (pad0) for (let i = 0; i < pad0.buttons.length && i < prev.length; i++) {
+      prev[i] = !!pad0.buttons[i]?.pressed || (pad0.buttons[i]?.value || 0) > 0.5;
+    }
+
+    function listen() {
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      let pad = null;
+      for (const p of pads) {
+        if (!p) continue;
+        if (p.mapping === "standard") { pad = p; break; }
+        if (!pad) pad = p;
+      }
+      if (pad) {
+        for (let i = 0; i < pad.buttons.length && i < prev.length; i++) {
+          const pressed = !!pad.buttons[i]?.pressed || (pad.buttons[i]?.value || 0) > 0.5;
+          if (pressed && !prev[i]) {
+            // Edge fired: remapeia
+            const newMap = remapPadButton(systemId, i, listening);
+            setMap(newMap);
+            setListening(null);
+            return;
+          }
+          prev[i] = pressed;
+        }
+      }
+      raf = requestAnimationFrame(listen);
+    }
+    raf = requestAnimationFrame(listen);
+    return () => { if (raf) cancelAnimationFrame(raf); };
+  }, [listening, systemId]);
+
+  const onReset = () => {
+    clearPadMap(systemId);
+    setMap({ ...DEFAULT_PAD_MAP });
+    setListening(null);
+  };
+
+  const swapAB = () => {
+    // Troca o pad btn de B (libretro 0) com A (libretro 8)
+    const m = { ...map };
+    let padB = padIdxForLibretroBtn(m, 0);
+    let padA = padIdxForLibretroBtn(m, 8);
+    if (padB != null && padA != null) {
+      m[padB] = 8; m[padA] = 0;
+    }
+    const newMap = { ...DEFAULT_PAD_MAP, ...m };
+    saveSystemOptions; // no-op pra evitar warning
+    // Salva via remap
+    const merged = newMap;
+    localStorage.setItem("ludex.padmap." + systemId, JSON.stringify(merged));
+    setMap(merged);
+  };
+  const swapXY = () => {
+    const m = { ...map };
+    let padY = padIdxForLibretroBtn(m, 1);
+    let padX = padIdxForLibretroBtn(m, 9);
+    if (padY != null && padX != null) {
+      m[padY] = 9; m[padX] = 1;
+    }
+    const merged = { ...DEFAULT_PAD_MAP, ...m };
+    localStorage.setItem("ludex.padmap." + systemId, JSON.stringify(merged));
+    setMap(merged);
+  };
+
+  return (
+    <div className="lx-settings-body">
+      <p className="lx-settings-hint">
+        Mapeia cada botão do <b>jogo (libretro)</b> pra um botão do seu controle.
+        Clique em "Remapear" e pressione o botão do controle que quer usar.
+      </p>
+
+      <div className="lx-pad-style-row">
+        <label>Mostrar nomes pra controle:</label>
+        <select className="lx-settings-select" value={padStyle} onChange={(e) => setPadStyle(e.target.value)}>
+          <option value="xbox">Xbox (A/B/X/Y)</option>
+          <option value="ps">PlayStation (×/○/□/△)</option>
+          <option value="switch">Nintendo Switch (B/A/Y/X)</option>
+          <option value="generic">Genérico (btn0–btn3)</option>
+        </select>
+      </div>
+
+      <div className="lx-pad-presets">
+        <button className="lx-settings-btn lx-settings-btn-ghost" onClick={swapAB}>Trocar B ↔ A</button>
+        <button className="lx-settings-btn lx-settings-btn-ghost" onClick={swapXY}>Trocar Y ↔ X</button>
+        <button className="lx-settings-btn lx-settings-btn-ghost" onClick={onReset}>Resetar Default</button>
+      </div>
+
+      <div className="lx-pad-grid">
+        {LIBRETRO_BUTTONS.map((btn) => {
+          const padIdx = padIdxForLibretroBtn(map, btn.id);
+          const padName = padIdx != null ? padIdxLabel(padIdx, padStyle) : "—";
+          const isListening = listening === btn.id;
+          return (
+            <div key={btn.id} className={`lx-pad-row ${isListening ? "listening" : ""}`}>
+              <div className="lx-pad-col-libretro">
+                <div className="lx-pad-libretro-name">{btn.label}</div>
+                {btn.hint && <div className="lx-pad-libretro-hint">{btn.hint}</div>}
+              </div>
+              <div className="lx-pad-arrow">→</div>
+              <div className="lx-pad-col-pad">{padName}</div>
+              <button
+                className="lx-settings-btn lx-settings-btn-ghost lx-pad-remap-btn"
+                onClick={() => setListening(isListening ? null : btn.id)}
+              >
+                {isListening ? "Aguardando..." : "Remapear"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <p className="lx-settings-hint" style={{ marginTop: 14 }}>
+        D-pad (cima/baixo/esquerda/direita) e stick analógico são fixos.
+        Combo <b>Select+Start</b> sai do jogo (não remapeável).
+      </p>
     </div>
   );
 }

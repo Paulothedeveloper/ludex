@@ -1314,6 +1314,45 @@
 }
 .pb-emulator-view:hover .pb-emulator-close { opacity: 1; }
 .pb-emulator-close svg { width: 18px; height: 18px; }
+/* v0.8.38: Settings button in-game (gear) */
+.pb-emulator-settings {
+  position: absolute;
+  top: 18px;
+  right: 66px;
+  z-index: 2;
+  width: 40px; height: 40px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: 0.4;
+  transition: opacity 0.2s, background 0.2s;
+}
+.pb-emulator-view:hover .pb-emulator-settings { opacity: 1; }
+.pb-emulator-settings:hover { background: rgba(124, 92, 255, 0.4); }
+.pb-emulator-settings svg { width: 18px; height: 18px; }
+/* v0.8.46: botao DISC (multi-disc swap) */
+.pb-emulator-disc {
+  position: absolute;
+  top: 18px;
+  right: 114px;
+  z-index: 2;
+  height: 40px;
+  padding: 0 14px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(255, 230, 128, 0.6);
+  border-radius: 20px;
+  color: #ffe680;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity 0.2s, background 0.2s;
+}
+.pb-emulator-view:hover .pb-emulator-disc { opacity: 1; }
+.pb-emulator-disc:hover { background: rgba(255, 230, 128, 0.15); }
 .pb-emulator-info {
   position: absolute;
   top: 18px;
@@ -6443,3 +6482,101 @@ html[data-android="true"] body {
   0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
   50%      { opacity: 0.85; transform: translateX(-50%) scale(1.04); }
 }
+
+/* v0.8.37: SystemSettingsModal */
+.lx-settings-body { padding: 0 24px 16px; max-height: 65vh; overflow-y: auto; }
+.lx-settings-hint {
+  font-size: 12.5px; color: rgba(229, 222, 244, 0.72); margin: 0 0 16px;
+  padding: 10px 12px; background: rgba(124, 92, 255, 0.08);
+  border: 1px solid rgba(124, 92, 255, 0.18); border-radius: 8px;
+}
+.lx-settings-section { margin-bottom: 18px; }
+.lx-settings-cat {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(180, 160, 240, 0.92); margin: 0 0 10px; padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.lx-settings-rows { display: flex; flex-direction: column; gap: 8px; }
+.lx-settings-row {
+  display: grid; grid-template-columns: 1fr 1.2fr; gap: 14px; align-items: center;
+  padding: 8px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.03);
+}
+.lx-settings-row:hover { background: rgba(255, 255, 255, 0.05); }
+.lx-settings-label { font-size: 13px; color: rgba(232, 226, 250, 0.96); }
+.lx-settings-select {
+  font-size: 13px; padding: 8px 10px; background: rgba(20, 16, 38, 0.72);
+  color: #efeaff; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px;
+  cursor: pointer; outline: none;
+}
+.lx-settings-select:focus { border-color: rgba(124, 92, 255, 0.7); }
+.lx-settings-footer {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 14px 24px 18px; border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.lx-settings-btn {
+  font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 8px;
+  cursor: pointer; border: none; transition: background 0.15s;
+}
+.lx-settings-btn-ghost { background: rgba(255, 255, 255, 0.06); color: rgba(220, 210, 240, 0.85); }
+.lx-settings-btn-ghost:hover { background: rgba(255, 255, 255, 0.1); }
+.lx-settings-btn-primary { background: linear-gradient(135deg, #7c5cff, #5d3df0); color: #fff; }
+.lx-settings-btn-primary:hover { background: linear-gradient(135deg, #8a6dff, #6e4ef5); }
+
+/* v0.8.42: Tabs + Controller remap UI */
+.lx-settings-tabs {
+  display: flex; gap: 4px; padding: 0 24px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.lx-settings-tab {
+  background: transparent; border: none; color: rgba(220, 210, 240, 0.6);
+  font-size: 13px; font-weight: 600; padding: 10px 16px; cursor: pointer;
+  border-radius: 6px 6px 0 0; border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.lx-settings-tab:hover { color: rgba(232, 226, 250, 0.9); }
+.lx-settings-tab.active { color: #efeaff; border-bottom-color: #7c5cff; }
+
+.lx-settings-foot-hint { font-size: 12px; color: rgba(180, 170, 210, 0.6); }
+
+.lx-pad-style-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px; font-size: 13px; color: rgba(229, 222, 244, 0.85);
+}
+.lx-pad-style-row select { flex: 1; max-width: 220px; }
+
+.lx-pad-presets {
+  display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap;
+}
+.lx-pad-presets .lx-settings-btn { padding: 7px 12px; font-size: 12px; }
+
+.lx-pad-grid {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.lx-pad-row {
+  display: grid; grid-template-columns: 1.4fr auto 1fr auto;
+  gap: 10px; align-items: center;
+  padding: 8px 12px; background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px; border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+.lx-pad-row:hover { background: rgba(255, 255, 255, 0.06); }
+.lx-pad-row.listening {
+  background: rgba(124, 92, 255, 0.16);
+  border-color: rgba(124, 92, 255, 0.55);
+  animation: pb-pad-listen 1.2s ease-in-out infinite;
+}
+@keyframes pb-pad-listen {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 92, 255, 0); }
+  50%      { box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.2); }
+}
+.lx-pad-col-libretro { display: flex; flex-direction: column; gap: 2px; }
+.lx-pad-libretro-name { font-size: 13px; font-weight: 700; color: #efeaff; }
+.lx-pad-libretro-hint { font-size: 11px; color: rgba(180, 170, 210, 0.6); }
+.lx-pad-arrow { color: rgba(180, 170, 210, 0.5); font-size: 16px; }
+.lx-pad-col-pad {
+  font-size: 13px; font-weight: 600; color: #ffe680;
+  padding: 4px 10px; background: rgba(255, 230, 128, 0.08);
+  border: 1px solid rgba(255, 230, 128, 0.18); border-radius: 6px;
+  text-align: center;
+}
+.lx-pad-remap-btn { padding: 6px 12px; font-size: 11px; }

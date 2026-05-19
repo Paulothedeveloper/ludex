@@ -1,4 +1,6 @@
 mod libretro;
+#[cfg(windows)]
+mod gl_context;
 use libretro::LibretroCore;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -86,11 +88,11 @@ fn discord_set_activity(game_name: String, system_name: String) -> Result<(), St
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
     let details_text = format!("Jogando {}", game_name);
-    let state_text = format!("via Playbox · {}", system_name);
+    let state_text = format!("via Ludex · {}", system_name);
     let activity = Activity::new()
         .details(&details_text)
         .state(&state_text)
-        .assets(Assets::new().large_image("playbox").large_text("Playbox Launcher"))
+        .assets(Assets::new().large_image("ludex").large_text("Ludex Launcher"))
         .timestamps(Timestamps::new().start(now));
     if let Err(e) = client.set_activity(activity) {
         eprintln!("discord set_activity: {}", e);
@@ -278,6 +280,8 @@ fn libretro_core_for(system_id: &str) -> String {
         "psp"       => "ppsspp_libretro",
         "ds"        => "melonds_libretro",
         "saturn"    => "mednafen_saturn_libretro",
+        // v0.8.33: 3DS migrado de Citra externo pra libretro embedded
+        "3ds"       => "citra_libretro",
         // Sega extras reusam o core do MD (cobre SMS/GG/SegaCD/SG-1000)
         "sms"       => "genesis_plus_gx_libretro",
         "gg"        => "genesis_plus_gx_libretro",
@@ -326,8 +330,8 @@ const EMULATORS: &[EmulatorConfig] = &[
         name: "NINTENDO 3DS",
         color: "#d4145a",
         folder_name: "3DS",
-        emulator_rel: "CITRA\\citra-qt.exe",
-        extensions: &["3ds", "cci", "cxi", "3dsx", "app", "elf", "axf"],
+        emulator_rel: "",  // v0.8.33: libretro embarcado (citra) — migrado de Citra externo
+        extensions: &["3ds", "cci", "cxi", "3dsx", "app", "elf", "axf", "cia"],
         launch_args: &[],
         igdb_platform: 37,
     },
@@ -2787,10 +2791,8 @@ fn libretro_skip_frames(n: u32) -> Result<(), String> {
         for _ in 0..n.min(16) {
             unsafe { let _ = core.run(); }
         }
-        // Limpa audio buffer pra evitar acumulo (drena tudo)
-        let s = libretro::state();
-        let mut state = s.lock().unwrap();
-        state.audio_buf.clear();
+        // v0.8.35: audio_buf agora em mutex separado
+        libretro::audio_buf().lock().unwrap().clear();
     }
     Ok(())
 }
@@ -2819,18 +2821,39 @@ fn libretro_run_frame() -> tauri::ipc::Response {
     }
 }
 
+/// v0.8.37: Override de opcao libretro (user UI > defaults).
+/// Aplicado no proximo GET_VARIABLE — pra ter efeito imediato, recarregar core.
+#[tauri::command]
+fn libretro_set_option(key: String, value: String) {
+    log::info!("[libretro] user set option {} = {}", key, value);
+    libretro::set_option_override(key, value);
+}
+
+/// Le valor atual de uma opcao (override ou default). Usado pelo UI.
+#[tauri::command]
+fn libretro_get_option(key: String) -> Option<String> {
+    let overrides = libretro::option_overrides().lock().unwrap();
+    overrides.get(&key).and_then(|c| c.to_str().ok().map(String::from))
+}
+
+/// Limpa todos overrides (volta aos defaults). Usado pelo botao "Restaurar".
+#[tauri::command]
+fn libretro_clear_options() {
+    let mut overrides = libretro::option_overrides().lock().unwrap();
+    overrides.clear();
+    log::info!("[libretro] overrides limpos");
+}
+
 /// Dreno do buffer de audio. Retorna bytes raw (i16 LE interleaved L,R,L,R...).
 #[tauri::command]
 fn libretro_take_audio() -> tauri::ipc::Response {
-    let s = libretro::state();
-    let mut g = s.lock().unwrap();
-    if g.audio_buf.is_empty() {
+    let mut g = libretro::audio_buf().lock().unwrap();
+    if g.is_empty() {
         return tauri::ipc::Response::new(Vec::new());
     }
-    // Drena tudo
-    let n = g.audio_buf.len();
+    let n = g.len();
     let mut buf = Vec::with_capacity(n * 2);
-    for sample in g.audio_buf.drain(..) {
+    for sample in g.drain(..) {
         buf.extend_from_slice(&sample.to_le_bytes());
     }
     tauri::ipc::Response::new(buf)
@@ -2842,6 +2865,90 @@ fn libretro_set_input(button_id: u32, pressed: bool) {
     let s = libretro::state();
     let mut g = s.lock().unwrap();
     g.input_state[button_id as usize] = pressed;
+}
+
+/// v0.8.45: stick analogico. stick: 0=L, 1=R. x/y em [-32767, 32767]
+#[tauri::command]
+fn libretro_set_analog(stick: u32, x: i32, y: i32) {
+    if stick >= 2 { return; }
+    let s = libretro::state();
+    let mut g = s.lock().unwrap();
+    let slot = (stick as usize) * 2;
+    g.analog_state[slot] = x.clamp(-32767, 32767) as i16;
+    g.analog_state[slot + 1] = y.clamp(-32767, 32767) as i16;
+}
+
+/// v0.8.46: Info de discos do core (multi-disc PS1/Saturn/SegaCD).
+/// Retorna { num_images, current_image, supported } via JSON.
+#[derive(serde::Serialize)]
+struct DiscInfo { supported: bool, num_images: u32, current_image: u32, ejected: bool }
+
+#[tauri::command]
+fn libretro_get_disc_info() -> DiscInfo {
+    let s = libretro::state();
+    let g = s.lock().unwrap();
+    let Some(ptr) = g.disk_control else {
+        return DiscInfo { supported: false, num_images: 0, current_image: 0, ejected: false };
+    };
+    unsafe {
+        let cb = &*ptr;
+        let n  = cb.get_num_images.map(|f| f()).unwrap_or(0);
+        let i  = cb.get_image_index.map(|f| f()).unwrap_or(0);
+        let ej = cb.get_eject_state.map(|f| f()).unwrap_or(false);
+        DiscInfo { supported: true, num_images: n, current_image: i, ejected: ej }
+    }
+}
+
+/// v0.8.46: Trocar pra outro disco da lista atual (multi-disc games).
+/// idx: indice do disco (0..num_images-1)
+#[tauri::command]
+fn libretro_swap_disc(idx: u32) -> Result<(), String> {
+    let s = libretro::state();
+    let g = s.lock().unwrap();
+    let Some(ptr) = g.disk_control else { return Err("Core nao suporta troca de disco".into()); };
+    unsafe {
+        let cb = &*ptr;
+        let eject = cb.set_eject_state.ok_or("set_eject_state ausente")?;
+        let set_idx = cb.set_image_index.ok_or("set_image_index ausente")?;
+        eject(true);
+        if !set_idx(idx) {
+            eject(false);
+            return Err(format!("set_image_index({}) falhou", idx));
+        }
+        eject(false);
+    }
+    log::info!("[libretro] swap disc -> idx {}", idx);
+    Ok(())
+}
+
+/// v0.8.46: Substitui o arquivo do disco atual por outro (carregar disco 2 de outro ISO).
+#[tauri::command]
+fn libretro_replace_disc(path: String) -> Result<(), String> {
+    let s = libretro::state();
+    let g = s.lock().unwrap();
+    let Some(ptr) = g.disk_control else { return Err("Core nao suporta troca de disco".into()); };
+    unsafe {
+        let cb = &*ptr;
+        let eject       = cb.set_eject_state.ok_or("set_eject_state ausente")?;
+        let get_idx     = cb.get_image_index.ok_or("get_image_index ausente")?;
+        let replace_idx = cb.replace_image_index.ok_or("replace_image_index ausente")?;
+        let cur = get_idx();
+        let path_cs = std::ffi::CString::new(path.clone()).map_err(|e| e.to_string())?;
+        let info = libretro::RetroGameInfo {
+            path: path_cs.as_ptr(),
+            data: std::ptr::null(),
+            size: 0,
+            meta: std::ptr::null(),
+        };
+        eject(true);
+        if !replace_idx(cur, &info as *const _) {
+            eject(false);
+            return Err(format!("replace_image_index({}) falhou", cur));
+        }
+        eject(false);
+    }
+    log::info!("[libretro] replaced disc -> {}", path);
+    Ok(())
 }
 
 fn save_state_path(rom_path: &str, slot: u32) -> Option<PathBuf> {
@@ -2960,7 +3067,8 @@ fn libretro_unload() {
     let mut sg = s.lock().unwrap();
     sg.frame = None;
     sg.input_state = [false; 16];
-    sg.audio_buf.clear();
+    drop(sg);
+    libretro::audio_buf().lock().unwrap().clear();
 }
 
 #[tauri::command]
@@ -3377,6 +3485,7 @@ struct SystemFolders {
     roms_path: String,
     dlc_path: String,
     mods_path: String,
+    saves_path: String, // v0.8.47: pasta de saves/memory cards libretro
 }
 
 #[tauri::command]
@@ -3391,12 +3500,18 @@ fn get_system_folders(system_id: String) -> Result<SystemFolders, String> {
     let _ = std::fs::create_dir_all(&base);
     let _ = std::fs::create_dir_all(&dlc);
     let _ = std::fs::create_dir_all(&mods);
+    // v0.8.47: saves libretro ficam em <data>/Ludex/saves-libretro/
+    let saves_dir = dirs::data_dir()
+        .map(|d| d.join("Ludex").join("saves-libretro"))
+        .unwrap_or_else(|| PathBuf::from("."));
+    let _ = std::fs::create_dir_all(&saves_dir);
     Ok(SystemFolders {
         system_id: cfg.id.to_string(),
         system_name: cfg.name.to_string(),
         roms_path: base.to_string_lossy().to_string(),
         dlc_path: dlc.to_string_lossy().to_string(),
         mods_path: mods.to_string_lossy().to_string(),
+        saves_path: saves_dir.to_string_lossy().to_string(),
     })
 }
 
@@ -5019,6 +5134,10 @@ pub fn run() {
             libretro_skip_frames,
             libretro_take_audio,
             libretro_set_input,
+            libretro_set_analog,
+            libretro_get_disc_info,
+            libretro_swap_disc,
+            libretro_replace_disc,
             libretro_save_state,
             libretro_load_state,
             libretro_state_exists,
@@ -5085,7 +5204,10 @@ pub fn run() {
             admin_dashboard_url,
             android_demo_status,
             android_demo_admin_unlock,
-            android_check_update
+            android_check_update,
+            libretro_set_option,
+            libretro_get_option,
+            libretro_clear_options
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,6 +1,6 @@
 [package]
 name = "ludex"
-version = "0.8.31"
+version = "0.8.48"
 description = "Ludex - Sua biblioteca retro em um lugar so"
 authors = ["Paulo Batista"]
 license = ""
@@ -43,6 +43,9 @@ tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+# v0.8.32: hw_render context pra PCSX2 libretro (OpenGL via Win32+WGL)
+winapi = { version = "0.3", features = ["winuser", "wingdi", "libloaderapi", "errhandlingapi"] }
+gl = "0.14"
 
 # Android-only: JNI pra chamar Kotlin Permissions (MANAGE_EXTERNAL_STORAGE).
 [target.'cfg(target_os = "android")'.dependencies]

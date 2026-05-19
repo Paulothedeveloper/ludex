@@ -30,6 +30,8 @@ import {
   isAmbientOn, setAmbientOn,
   formatPlayTime, formatRelative,
 } from "./ludexMobileFeatures";
+import { SystemSettingsModal } from "./LudexExtras"; // v0.8.38: settings in-game
+import { hasOptionsForSystem, applySystemOptions, effectivePadMap } from "./ludexSystemOptions";
 
 // ============================================================
 // === ICONES SVG (sem emojis, regra Paulo) ===================
@@ -1456,6 +1458,7 @@ function saveCustomLayout(systemId, offsets) {
 function MobileEmulatorView({ system, game, onClose }) {
   const layout = SYSTEM_LAYOUTS[system.id] || DEFAULT_LAYOUT;
   const [menuOpen, setMenuOpen] = useState(false);
+  const [emuSettingsOpen, setEmuSettingsOpen] = useState(false); // v0.8.38: settings in-game
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false);
   useEffect(() => { mutedRef.current = muted; }, [muted]);
@@ -1550,6 +1553,8 @@ function MobileEmulatorView({ system, game, onClose }) {
       try {
         const coreFile = system.libretro_core;
         if (!coreFile) { setError(`Sistema "${system.name}" sem core libretro`); return; }
+        // v0.8.38: aplica opcoes salvas do user antes de carregar
+        try { await applySystemOptions(system.id); } catch {}
         const result = await invoke("libretro_load_game", { coreFilename: coreFile, romPath: game.path });
         if (cancelled) return;
         setInfo(result);
@@ -1584,20 +1589,30 @@ function MobileEmulatorView({ system, game, onClose }) {
     if (!info) return;
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
-    let lastTime = performance.now();
-    const targetFrameMs = 1000 / (info.fps || 60);
+    // v0.8.45/46: throttle preciso + FF integrado (vide LudexLauncher)
+    let nextFrame = performance.now();
+    const baseFps = info.fps || 60;
+    const baseTargetMs = 1000 / baseFps;
     let raf = null;
 
     async function tick() {
       if (stoppedRef.current) return;
       const now = performance.now();
-      if (now - lastTime >= targetFrameMs - 1) {
-        lastTime = now;
+      const ff = Math.max(1, ffEffectiveRef.current || 1);
+      const emuRate = baseFps * ff;
+      const renderRate = Math.min(emuRate, 144);
+      const targetFrameMs = 1000 / renderRate;
+      const framesPerRender = Math.max(1, Math.round(emuRate / renderRate));
+      if (now < nextFrame) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      nextFrame += targetFrameMs;
+      if (now - nextFrame > targetFrameMs * 4) nextFrame = now + targetFrameMs;
+      {
         try {
-          // Fast-forward: roda N-1 frames extras sem coletar buffer (rapido)
-          const ff = ffEffectiveRef.current;
-          if (ff > 1) {
-            try { await invoke("libretro_skip_frames", { n: ff - 1 }); } catch {}
+          if (framesPerRender > 1) {
+            try { await invoke("libretro_skip_frames", { n: framesPerRender - 1 }); } catch {}
           }
           const buf = await invoke("libretro_run_frame");
           if (buf && buf.byteLength >= 8) {
@@ -1621,7 +1636,9 @@ function MobileEmulatorView({ system, game, onClose }) {
               const L = node.getChannelData(0); const R = node.getChannelData(1);
               for (let i = 0; i < frames; i++) { L[i] = i16[i*2]/32768; R[i] = i16[i*2+1]/32768; }
               const src = actx.createBufferSource(); src.buffer = node; src.connect(actx.destination);
-              if (audioNextTimeRef.current < actx.currentTime + 0.02) audioNextTimeRef.current = actx.currentTime + 0.05;
+              // v0.8.38: resync so em underrun real (era 20ms a frente -> gap constante)
+              const ct = actx.currentTime;
+              if (audioNextTimeRef.current < ct) audioNextTimeRef.current = ct + 0.15;
               src.start(audioNextTimeRef.current);
               audioNextTimeRef.current += frames / sampleRate;
             }
@@ -1646,31 +1663,21 @@ function MobileEmulatorView({ system, game, onClose }) {
   const [gamepadConnected, setGamepadConnected] = useState(false);
   useEffect(() => {
     if (!info) return;
-    const PAD_MAP = {
-      0: 0,   // A (Xbox) -> B libretro (Nintendo style)
-      1: 8,   // B -> A
-      2: 1,   // X -> Y
-      3: 9,   // Y -> X
-      4: 10,  // LB -> L
-      5: 11,  // RB -> R
-      6: 12,  // LT -> L2
-      7: 13,  // RT -> R2
-      8: 2,   // Back/Select
-      9: 3,   // Start
-      10: 14, // L3
-      11: 15, // R3
-      12: 4,  // D-pad Up
-      13: 5,  // D-pad Down
-      14: 6,  // D-pad Left
-      15: 7,  // D-pad Right
-    };
+    // v0.8.42: usa mapa salvo do user (Settings > Controle), fallback default
+    const PAD_MAP = effectivePadMap(system.id);
     const lastState = new Array(16).fill(false);
+    const lastAnalog = [0, 0, 0, 0]; // v0.8.45
     let raf;
     function poll() {
       const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      // v0.8.42: prefere mapping=standard (evita phantoms)
       let pad = null;
       let connected = false;
-      for (const p of pads) { if (p) { pad = p; connected = true; break; } }
+      const all = [];
+      for (const p of pads) { if (p) all.push(p); }
+      for (const p of all) { if (p.mapping === "standard") { pad = p; break; } }
+      if (!pad && all.length > 0) pad = all[0];
+      connected = !!pad;
       if (connected !== gamepadConnected) setGamepadConnected(connected);
       if (pad) {
         lastInputRef.current = Date.now();
@@ -1680,21 +1687,41 @@ function MobileEmulatorView({ system, game, onClose }) {
           onClose();
           return;
         }
-        // Botoes
+        // v0.8.46: D-pad unificado — buttons[12-15] OU hat 6/7 OU stick L (0/1)
+        const ax = pad.axes[0] || 0; const ay = pad.axes[1] || 0;
+        const hatX = pad.axes[6] || 0; const hatY = pad.axes[7] || 0;
+        const dpUp    = !!pad.buttons[12]?.pressed || hatY < -0.4 || ay < -0.4;
+        const dpDown  = !!pad.buttons[13]?.pressed || hatY > 0.4  || ay > 0.4;
+        const dpLeft  = !!pad.buttons[14]?.pressed || hatX < -0.4 || ax < -0.4;
+        const dpRight = !!pad.buttons[15]?.pressed || hatX > 0.4  || ax > 0.4;
         for (const [padIdx, libretroId] of Object.entries(PAD_MAP)) {
-          const pressed = pad.buttons[parseInt(padIdx)]?.pressed || false;
+          const idx = parseInt(padIdx);
+          let pressed;
+          switch (idx) {
+            case 12: pressed = dpUp; break;
+            case 13: pressed = dpDown; break;
+            case 14: pressed = dpLeft; break;
+            case 15: pressed = dpRight; break;
+            default: pressed = !!pad.buttons[idx]?.pressed;
+          }
           if (pressed !== lastState[libretroId]) {
             lastState[libretroId] = pressed;
             invoke("libretro_set_input", { buttonId: libretroId, pressed }).catch(() => {});
           }
         }
-        // Analog stick esquerdo -> D-pad (deadzone 0.4)
-        const ax = pad.axes[0] || 0; const ay = pad.axes[1] || 0;
-        const left = ax < -0.4, right = ax > 0.4, up = ay < -0.4, down = ay > 0.4;
-        if (left  !== lastState[6]) { lastState[6] = left;  invoke("libretro_set_input", { buttonId: 6, pressed: left  }).catch(() => {}); }
-        if (right !== lastState[7]) { lastState[7] = right; invoke("libretro_set_input", { buttonId: 7, pressed: right }).catch(() => {}); }
-        if (up    !== lastState[4]) { lastState[4] = up;    invoke("libretro_set_input", { buttonId: 4, pressed: up    }).catch(() => {}); }
-        if (down  !== lastState[5]) { lastState[5] = down;  invoke("libretro_set_input", { buttonId: 5, pressed: down  }).catch(() => {}); }
+        // v0.8.45: stick analogico real
+        const lx = Math.round((pad.axes[0] || 0) * 32767);
+        const ly = Math.round((pad.axes[1] || 0) * 32767);
+        const rx = Math.round((pad.axes[2] || 0) * 32767);
+        const ry = Math.round((pad.axes[3] || 0) * 32767);
+        if (lx !== lastAnalog[0] || ly !== lastAnalog[1]) {
+          lastAnalog[0] = lx; lastAnalog[1] = ly;
+          invoke("libretro_set_analog", { stick: 0, x: lx, y: ly }).catch(() => {});
+        }
+        if (rx !== lastAnalog[2] || ry !== lastAnalog[3]) {
+          lastAnalog[2] = rx; lastAnalog[3] = ry;
+          invoke("libretro_set_analog", { stick: 1, x: rx, y: ry }).catch(() => {});
+        }
       }
       raf = requestAnimationFrame(poll);
     }
@@ -1897,11 +1924,32 @@ function MobileEmulatorView({ system, game, onClose }) {
               </button>
             </div>
 
+            {hasOptionsForSystem(system.id) && (
+              <div className="lmx-emu-menu-section">
+                <div className="lmx-emu-menu-label">Opções do Emulador</div>
+                <button
+                  className="lmx-emu-menu-pill"
+                  onClick={() => { setEmuSettingsOpen(true); setMenuOpen(false); }}
+                >
+                  Resolução, Performance, etc
+                </button>
+                <p className="lmx-settings-hint" style={{ marginTop: 6 }}>
+                  Mudanças aplicam ao abrir o jogo de novo.
+                </p>
+              </div>
+            )}
+
             <button className="lmx-settings-btn primary" onClick={() => setMenuOpen(false)}>Fechar</button>
             <button className="lmx-settings-btn ghost" onClick={() => { onClose(); }} style={{marginTop: 8}}>Sair do jogo</button>
           </div>
         </div>
       )}
+      <SystemSettingsModal
+        open={emuSettingsOpen}
+        systemId={system.id}
+        systemName={system.name}
+        onClose={() => setEmuSettingsOpen(false)}
+      />
       {!info && (
         <div className="lmx-emu-loading">
           <div className="lmx-spinner" />

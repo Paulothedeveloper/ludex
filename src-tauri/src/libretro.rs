@@ -18,6 +18,7 @@ pub const RETRO_PIXEL_FORMAT_XRGB8888: u32 = 1;
 pub const RETRO_PIXEL_FORMAT_RGB565:   u32 = 2;
 
 // Environment commands (subset essencial)
+pub const RETRO_ENVIRONMENT_SET_HW_RENDER:       u32 = 14;
 pub const RETRO_ENVIRONMENT_SET_PIXEL_FORMAT:    u32 = 10;
 pub const RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY: u32 = 9;
 pub const RETRO_ENVIRONMENT_GET_VARIABLE:        u32 = 15;
@@ -34,12 +35,31 @@ pub const RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO:  u32 = 32;
 pub const RETRO_ENVIRONMENT_GET_CAN_DUPE:        u32 = 3;
 pub const RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: u32 = 17;
 pub const RETRO_ENVIRONMENT_SHUTDOWN:            u32 = 7;
+// v0.8.44: env cmds que cores informam ao frontend — auto-acknowledge (return true)
+pub const RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS: u32 = 19;
+pub const RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME:   u32 = 18;
+pub const RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK: u32 = 12;
+pub const RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE: u32 = 13;
+pub const RETRO_ENVIRONMENT_SET_FRAME_TIME_CALLBACK: u32 = 21;
+pub const RETRO_ENVIRONMENT_SET_AUDIO_CALLBACK:    u32 = 22;
+pub const RETRO_ENVIRONMENT_SET_CONTROLLER_INFO:   u32 = 35;
+pub const RETRO_ENVIRONMENT_SET_MEMORY_MAPS:       u32 = 36;
+pub const RETRO_ENVIRONMENT_SET_MESSAGE:           u32 = 6;
+pub const RETRO_ENVIRONMENT_SET_PROC_ADDRESS_CALLBACK: u32 = 33;
 
 // Devices
 pub const RETRO_DEVICE_NONE:     u32 = 0;
 pub const RETRO_DEVICE_JOYPAD:   u32 = 1;
+pub const RETRO_DEVICE_ANALOG:   u32 = 5;
+// Analog indices
+pub const RETRO_DEVICE_INDEX_ANALOG_LEFT:  u32 = 0;
+pub const RETRO_DEVICE_INDEX_ANALOG_RIGHT: u32 = 1;
+// Analog axes
+pub const RETRO_DEVICE_ID_ANALOG_X: u32 = 0;
+pub const RETRO_DEVICE_ID_ANALOG_Y: u32 = 1;
 
 // Joypad button IDs
+pub const RETRO_DEVICE_ID_JOYPAD_MASK:   u32 = 256; // v0.8.43: requisicao de bitmask
 pub const RETRO_DEVICE_ID_JOYPAD_B:      u32 = 0;
 pub const RETRO_DEVICE_ID_JOYPAD_Y:      u32 = 1;
 pub const RETRO_DEVICE_ID_JOYPAD_SELECT: u32 = 2;
@@ -95,6 +115,47 @@ pub struct RetroGameInfo {
     pub meta: *const c_char,
 }
 
+// ----- hw_render (v0.8.32) -----
+// Pra cores HW-rendered (PCSX2, Dolphin, Flycast). Frontend prove contexto GL
+// e callbacks de framebuffer + proc_address. Core chama context_reset apos a
+// gente registrar isso E load_game ter sucesso.
+
+pub type RetroHwContextResetT = extern "C" fn();
+pub type RetroHwGetCurrentFramebufferT = extern "C" fn() -> usize;
+pub type RetroHwGetProcAddressT = extern "C" fn(*const c_char) -> *const c_void;
+
+#[repr(C)]
+pub struct RetroHwRenderCallback {
+    pub context_type: c_uint,
+    pub context_reset: Option<RetroHwContextResetT>,
+    pub get_current_framebuffer: Option<RetroHwGetCurrentFramebufferT>,
+    pub get_proc_address: Option<RetroHwGetProcAddressT>,
+    pub depth: bool,
+    pub stencil: bool,
+    pub bottom_left_origin: bool,
+    pub version_major: c_uint,
+    pub version_minor: c_uint,
+    pub cache_context: bool,
+    pub context_destroy: Option<RetroHwContextResetT>,
+    pub debug_context: bool,
+}
+
+/// Marker que cores HW passam pra video_refresh quando frame esta no FBO
+/// (ao inves de buffer RAM). Eh literalmente o ponteiro (void*)-1.
+pub const RETRO_HW_FRAME_BUFFER_VALID: isize = -1;
+
+// v0.8.46: Disk control interface — multi-disc PS1/Saturn/SegaCD
+#[repr(C)]
+pub struct RetroDiskControlCallback {
+    pub set_eject_state:     Option<extern "C" fn(bool) -> bool>,
+    pub get_eject_state:     Option<extern "C" fn() -> bool>,
+    pub get_image_index:     Option<extern "C" fn() -> c_uint>,
+    pub set_image_index:     Option<extern "C" fn(c_uint) -> bool>,
+    pub get_num_images:      Option<extern "C" fn() -> c_uint>,
+    pub replace_image_index: Option<extern "C" fn(c_uint, *const RetroGameInfo) -> bool>,
+    pub add_image_index:     Option<extern "C" fn() -> bool>,
+}
+
 // ----- Tipos de callback -----
 
 pub type RetroEnvironmentT  = extern "C" fn(cmd: c_uint, data: *mut c_void) -> bool;
@@ -115,12 +176,85 @@ pub struct Frame {
 pub struct LibretroState {
     pub library: Option<Library>,
     pub frame:   Option<Frame>,
+    pub frame_pool: Vec<u8>, // v0.8.35: reusa buffer entre frames (evita alloc 60x/seg)
     pub pixel_format: u32, // 0RGB1555, XRGB8888 ou RGB565
     pub system_dir: CString,
     pub save_dir:   CString,
     pub input_state: [bool; 16], // botoes do joypad porta 0
+    pub analog_state: [i16; 4], // v0.8.45: [L_x, L_y, R_x, R_y] em [-32767, 32767]
     pub av_info: Option<RetroSystemAvInfo>,
-    pub audio_buf: std::collections::VecDeque<i16>, // samples interleaved L,R,L,R...
+    // v0.8.32 hw_render: callbacks que o core registrou
+    pub hw_context_reset:   Option<RetroHwContextResetT>,
+    pub hw_context_destroy: Option<RetroHwContextResetT>,
+    pub hw_bottom_left:     bool, // GL origem bottom-left? (true pra OpenGL)
+    pub hw_active:          bool, // core esta usando hw_render?
+    // v0.8.46: disk control + current ROM (pra BIOS region detection)
+    pub disk_control:       Option<*const RetroDiskControlCallback>,
+    pub current_rom_path:   Option<String>,
+}
+
+// SAFETY: disk_control aponta pra struct do core que vive enquanto o core
+// estiver carregado. So usamos sob lock + zeramos em unload_game.
+unsafe impl Send for LibretroState {}
+
+// v0.8.35: audio em mutex SEPARADO. cb_audio_sample (single-sample) pode ser
+// chamado 96000x/seg — locks no state principal contendem com video_refresh.
+// Mutex dedicado isola contensao. VecDeque permite drop FIFO em overflow.
+pub static AUDIO_BUF: OnceLock<StdMutex<std::collections::VecDeque<i16>>> = OnceLock::new();
+pub fn audio_buf() -> &'static StdMutex<std::collections::VecDeque<i16>> {
+    AUDIO_BUF.get_or_init(|| StdMutex::new(std::collections::VecDeque::with_capacity(48000)))
+}
+
+// v0.8.37: OVERRIDES de opcoes libretro setadas pelo user no UI.
+// Tem prioridade sobre LIBRETRO_DEFAULTS no GET_VARIABLE handler.
+// Box::leak pra dar 'static aos CStrings (memoria leak limitado por # de mudancas).
+// v0.8.46: cache de CStrings auto-detectadas (BIOS region etc).
+// Inicia uma vez por chave, leakado pra vida do app — bounded.
+pub static AUTO_VARS: OnceLock<StdMutex<std::collections::HashMap<String, &'static CString>>> = OnceLock::new();
+fn auto_vars() -> &'static StdMutex<std::collections::HashMap<String, &'static CString>> {
+    AUTO_VARS.get_or_init(|| StdMutex::new(std::collections::HashMap::new()))
+}
+fn set_auto_var(key: &str, value: &str) -> &'static CString {
+    let mut m = auto_vars().lock().unwrap();
+    if let Some(existing) = m.get(key) {
+        if existing.to_str().ok() == Some(value) { return *existing; }
+    }
+    let Ok(cs) = CString::new(value) else { return Box::leak(Box::new(CString::default())); };
+    let leaked: &'static CString = Box::leak(Box::new(cs));
+    m.insert(key.to_string(), leaked);
+    leaked
+}
+
+/// v0.8.46: Detecta BIOS PS2 ideal pra ROM. NTSC-U/BR=scph39001, PAL=scph30004r/scph70004, NTSC-J=scph10000.
+/// Olha hints no filename (USA/EU/PAL/JP). Fallback NTSC-U/BR.
+fn detect_ps2_bios(rom_path: Option<&str>) -> &'static str {
+    let Some(path) = rom_path else { return "scph39001.bin"; };
+    let lower = path.to_lowercase();
+    // PAL Europa
+    if lower.contains("(europe)") || lower.contains("(eu)") || lower.contains("(pal)")
+        || lower.contains("(e)") || lower.contains("[eu]") || lower.contains("[pal]") {
+        // Prefere scph30004r (early PAL), fallback scph70004 (slim PAL)
+        return "scph30004r.bin";
+    }
+    // NTSC-J (Japan)
+    if lower.contains("(japan)") || lower.contains("(jp)") || lower.contains("(j)")
+        || lower.contains("[jp]") || lower.contains("[ja]") {
+        return "scph10000.bin";
+    }
+    // Default NTSC-U/Brazil
+    "scph39001.bin"
+}
+
+pub static OPTION_OVERRIDES: OnceLock<StdMutex<std::collections::HashMap<String, &'static CString>>> = OnceLock::new();
+pub fn option_overrides() -> &'static StdMutex<std::collections::HashMap<String, &'static CString>> {
+    OPTION_OVERRIDES.get_or_init(|| StdMutex::new(std::collections::HashMap::new()))
+}
+pub fn set_option_override(key: String, value: String) {
+    if let Ok(cs) = CString::new(value) {
+        let leaked: &'static CString = Box::leak(Box::new(cs));
+        let mut m = option_overrides().lock().unwrap();
+        m.insert(key, leaked);
+    }
 }
 
 static STATE: OnceLock<Arc<StdMutex<LibretroState>>> = OnceLock::new();
@@ -158,15 +292,42 @@ pub fn state() -> Arc<StdMutex<LibretroState>> {
                 }
             }
         }
+        // v0.8.45: Mirror BIOS Dreamcast pra system/dc/ (Flycast tenta ambos paths)
+        let dc_bios_dir = sys_dir.join("dc");
+        if std::fs::create_dir_all(&dc_bios_dir).is_ok() {
+            for name in &["dc_boot.bin", "dc_flash.bin", "dc_bios.bin",
+                          "naomi_boot.bin", "naomi.bin", "awbios.zip"] {
+                let src = sys_dir.join(name);
+                let dst = dc_bios_dir.join(name);
+                if src.exists() && !dst.exists() { let _ = std::fs::copy(&src, &dst); }
+            }
+        }
+        // v0.8.45: Saturn BIOSes ficam em system/ raiz (mednafen padrao).
+        // Apenas garante presenca — se user botou na pasta dc, copia de volta pra raiz.
+        for name in &["sega_101.bin", "mpr-17933.bin", "mpr-18811-mx.ic1",
+                      "mpr-19367-mx.ic1", "stvbios.zip"] {
+            let dc_path = dc_bios_dir.join(name);
+            let root_path = sys_dir.join(name);
+            if dc_path.exists() && !root_path.exists() {
+                let _ = std::fs::copy(&dc_path, &root_path);
+            }
+        }
         Arc::new(StdMutex::new(LibretroState {
             library: None,
             frame:   None,
+            frame_pool: Vec::with_capacity(1920 * 1080 * 4),
             pixel_format: RETRO_PIXEL_FORMAT_0RGB1555,
             system_dir: CString::new(sys_dir.to_string_lossy().as_ref()).unwrap_or_default(),
             save_dir:   CString::new(save_dir.to_string_lossy().as_ref()).unwrap_or_default(),
             input_state: [false; 16],
+            analog_state: [0; 4], // v0.8.45
             av_info: None,
-            audio_buf: std::collections::VecDeque::with_capacity(48000 * 2),
+            hw_context_reset:   None,
+            hw_context_destroy: None,
+            hw_bottom_left:     false,
+            hw_active:          false,
+            disk_control:       None,
+            current_rom_path:   None,
         }))
     }).clone()
 }
@@ -182,6 +343,50 @@ extern "C" fn cb_environment(cmd: c_uint, data: *mut c_void) -> bool {
             let fmt = *(data as *const u32);
             g.pixel_format = fmt;
             true
+        },
+        // v0.8.32: SET_HW_RENDER — PCSX2/Dolphin/Flycast pedem contexto GL.
+        // Windows: criamos contexto WGL offscreen + FBO, devolvemos callbacks.
+        RETRO_ENVIRONMENT_SET_HW_RENDER => unsafe {
+            if data.is_null() { return false; }
+            #[cfg(windows)]
+            {
+                let cb = data as *mut RetroHwRenderCallback;
+                let ctx_type = (*cb).context_type;
+                log::info!("[libretro] SET_HW_RENDER context_type={} version={}.{} depth={} stencil={} bottom_left={}",
+                    ctx_type, (*cb).version_major, (*cb).version_minor,
+                    (*cb).depth, (*cb).stencil, (*cb).bottom_left_origin);
+                // v0.8.45: Aceita OpenGL desktop (1) e Core (3). ES (2/4/5) recusa
+                // pra cores caírem em fallback compatível — temos contexto desktop GL.
+                let is_gl_desktop = matches!(ctx_type, 1 | 3);
+                let is_gl_es = matches!(ctx_type, 2 | 4 | 5);
+                if !is_gl_desktop {
+                    if is_gl_es {
+                        log::warn!("[libretro] SET_HW_RENDER: ctx_type={} eh OpenGL ES — recusando (so temos desktop GL 4.3 Core). Core deve fallback pra software.", ctx_type);
+                    } else {
+                        log::warn!("[libretro] SET_HW_RENDER: tipo {} nao-OpenGL desktop, recusando", ctx_type);
+                    }
+                    return false;
+                }
+                if !crate::gl_context::ensure_init() {
+                    log::error!("[libretro] SET_HW_RENDER: falha init GL context");
+                    return false;
+                }
+                // Salva callbacks do core, planta os nossos no struct
+                g.hw_context_reset   = (*cb).context_reset;
+                g.hw_context_destroy = (*cb).context_destroy;
+                g.hw_bottom_left     = (*cb).bottom_left_origin;
+                g.hw_active          = true;
+                (*cb).get_current_framebuffer = Some(cb_get_current_framebuffer);
+                (*cb).get_proc_address        = Some(cb_get_proc_address);
+                log::info!("[libretro] SET_HW_RENDER: aceito (OpenGL offscreen pronto)");
+                true
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = data;
+                log::warn!("[libretro] SET_HW_RENDER: hw_render so disponivel em Windows ainda");
+                false
+            }
         },
         RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY => unsafe {
             if data.is_null() { return false; }
@@ -200,8 +405,8 @@ extern "C" fn cb_environment(cmd: c_uint, data: *mut c_void) -> bool {
         },
         RETRO_ENVIRONMENT_GET_VARIABLE => unsafe {
             if data.is_null() { return false; }
-            // v0.8.30: retorna defaults pras opcoes que cores grandes (PCSX2, Dolphin,
-            // Flycast) PRECISAM pra carregar. Sem isso PCSX2 acha que nao tem BIOS.
+            // v0.8.30: defaults pras opcoes que cores grandes (PCSX2/Dolphin/Flycast) PRECISAM.
+            // v0.8.37: override do user (UI settings) tem precedencia.
             #[repr(C)]
             struct RetroVariable { key: *const c_char, value: *const c_char }
             let var = data as *mut RetroVariable;
@@ -209,6 +414,26 @@ extern "C" fn cb_environment(cmd: c_uint, data: *mut c_void) -> bool {
             let key_cstr = CStr::from_ptr((*var).key);
             let key = key_cstr.to_string_lossy();
             let key_str: &str = &key;
+            // 1) override do user
+            {
+                let overrides = option_overrides().lock().unwrap();
+                if let Some(val) = overrides.get(key_str) {
+                    (*var).value = val.as_ptr();
+                    log::info!("[libretro] GET_VARIABLE {} -> {} (user)", key, val.to_string_lossy());
+                    return true;
+                }
+            }
+            // 2) v0.8.46: auto-detect — BIOS PS2 baseado em region do filename
+            if key_str == "pcsx2_bios" {
+                let rom = g.current_rom_path.clone();
+                drop(g);
+                let detected = detect_ps2_bios(rom.as_deref());
+                let cs = set_auto_var("pcsx2_bios", detected);
+                (*var).value = cs.as_ptr();
+                log::info!("[libretro] GET_VARIABLE pcsx2_bios -> {} (auto, rom={:?})", detected, rom);
+                return true;
+            }
+            // 3) default canonico
             if let Some(val) = libretro_defaults().get(key_str) {
                 (*var).value = val.as_ptr();
                 log::info!("[libretro] GET_VARIABLE {} -> {}", key, val.to_string_lossy());
@@ -262,7 +487,31 @@ extern "C" fn cb_environment(cmd: c_uint, data: *mut c_void) -> bool {
             *(data as *mut *const c_char) = USERNAME.as_ptr() as *const c_char;
             true
         },
-        RETRO_ENVIRONMENT_GET_INPUT_BITMASKS => true, // Suporte: poll retorna bitmask
+        // v0.8.43/44: BITMASK — alem de return true, escreve bool true em *data
+        // pra cores que checam o ponteiro (PCSX2 antigo, alguns forks)
+        RETRO_ENVIRONMENT_GET_INPUT_BITMASKS => unsafe {
+            if !data.is_null() { *(data as *mut bool) = true; }
+            true
+        },
+        // v0.8.44: Auto-acknowledge env cmds que sao "core informa frontend".
+        // Sem isso, cores que esperam ack podem desabilitar input/features.
+        RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS => true,   // 19: A=Jump, B=Duck etc (info)
+        RETRO_ENVIRONMENT_SET_CONTROLLER_INFO => true,     // 35: PS2 multitap, DualShock etc
+        RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME => true,     // 18: core pode rodar sem ROM
+        RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK => true,   // 12: core quer teclado (no-op)
+        // v0.8.46: armazena callbacks pra Tauri commands depois chamarem swap de disco
+        RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE => unsafe {
+            if !data.is_null() {
+                g.disk_control = Some(data as *const RetroDiskControlCallback);
+                log::info!("[libretro] SET_DISK_CONTROL_INTERFACE registrado");
+            }
+            true
+        },
+        RETRO_ENVIRONMENT_SET_FRAME_TIME_CALLBACK => true, // 21: core quer notify de frame time
+        RETRO_ENVIRONMENT_SET_AUDIO_CALLBACK => false,     // 22: NAO suportamos audio driven by core
+        RETRO_ENVIRONMENT_SET_MEMORY_MAPS => true,         // 36: cheats/RetroAchievements info
+        RETRO_ENVIRONMENT_SET_MESSAGE => true,             // 6: core quer mostrar msg (ignoramos)
+        RETRO_ENVIRONMENT_SET_PROC_ADDRESS_CALLBACK => true, // 33: core expoe API pra outros cores
         RETRO_ENVIRONMENT_GET_FASTFORWARDING => unsafe {
             if data.is_null() { return false; }
             *(data as *mut bool) = false; // Ludex faz FF via skip_frames
@@ -303,7 +552,12 @@ fn libretro_defaults() -> &'static std::collections::HashMap<&'static str, CStri
         };
         // PCSX2 — defaults sensatos (vide SET_VARIABLES log)
         ins("pcsx2_bios", "scph39001.bin");
-        ins("pcsx2_renderer", "Auto");
+        // v0.8.45: voltei pra "OpenGL" explicito. v0.8.34 botei OpenGL e deu tela
+        // preta — mas a causa REAL era alpha=0 do FBO (resolvido v0.8.36).
+        // Agora com alpha fix + analog stick (v0.8.45), OpenGL eh a escolha certa
+        // (provemos contexto GL 4.3 Core via hw_render). Auto pode pegar D3D11 ou
+        // Vulkan e brigar com nosso contexto.
+        ins("pcsx2_renderer", "OpenGL");
         ins("pcsx2_fastboot", "enabled");
         ins("pcsx2_fastcdvd", "disabled");
         ins("pcsx2_upscale_multiplier", "1x Native (PS2)");
@@ -353,11 +607,310 @@ fn libretro_defaults() -> &'static std::collections::HashMap<&'static str, CStri
         ] { ins(k, "disabled"); }
         ins("pcsx2_cpu_sprite_size", "0");
         ins("pcsx2_cpu_sprite_level", "Sprites Only");
-        // Dolphin / Flycast / Saturn defaults comuns
+        // ===== Dolphin (Wii / GameCube) — v0.8.35 =====
         ins("dolphin_renderer", "Hardware");
+        ins("dolphin_cpu_core", "JIT64");
+        ins("dolphin_dsp_hle", "enabled");
+        ins("dolphin_dsp_jit", "enabled");
+        ins("dolphin_efb_scale", "x1 (640 x 528)"); // native — sobe se PC for forte
+        ins("dolphin_widescreen_hack", "disabled");
+        ins("dolphin_progressive_scan", "enabled");
+        ins("dolphin_pal60", "enabled");
+        ins("dolphin_efb_copy_method", "EFB to Texture"); // mais rapido que EFB to RAM
+        ins("dolphin_efb_to_texture_enable", "enabled");
+        ins("dolphin_fast_depth_calculation", "enabled");
+        ins("dolphin_disable_fog", "disabled");
+        ins("dolphin_load_custom_textures", "disabled");
+        ins("dolphin_cache_custom_textures", "disabled");
+        ins("dolphin_shader_compilation_mode", "sync"); // sync = sem stutter mas espera shader
+        ins("dolphin_wait_for_shaders", "enabled");
+        ins("dolphin_anisotropic_filtering", "1x");
+        ins("dolphin_antialiasing", "None");
+        ins("dolphin_force_texture_filtering", "disabled");
+        ins("dolphin_show_fps", "disabled");
+        ins("dolphin_osd_enabled", "disabled");
+        ins("dolphin_disable_dual_core", "disabled"); // multicore acelera
+
+        // ===== Flycast (Dreamcast) — v0.8.35 =====
         ins("flycast_internal_resolution", "640x480");
         ins("flycast_cable_type", "TV (Composite)");
+        ins("flycast_threaded_rendering", "enabled"); // grande ganho FPS
+        ins("flycast_anisotropic_filtering", "off");
+        ins("flycast_texture_filtering", "0");
+        ins("flycast_widescreen_hack", "disabled");
+        ins("flycast_widescreen_cheats", "disabled");
+        ins("flycast_synchronous_rendering", "disabled");
+        ins("flycast_oit_layers", "32");
+        ins("flycast_div_matching", "Auto");
+        ins("flycast_force_freeplay", "enabled");
+        ins("flycast_region", "Default");
+        ins("flycast_broadcast", "Default");
+        ins("flycast_language", "Default");
+        ins("flycast_per_strip_translucent_sorting", "disabled");
+        ins("flycast_pvr2_filtering", "disabled");
+        ins("flycast_alpha_sorting", "per-triangle (normal)");
+        ins("flycast_enable_dsp", "enabled");
+        ins("flycast_vmu_sound", "disabled");
+        ins("flycast_mipmapping", "enabled");
+        ins("flycast_fog", "enabled");
+        ins("flycast_volume_modifier_enable", "enabled");
+
+        // ===== PPSSPP (PSP) — v0.8.35 =====
+        ins("ppsspp_internal_resolution", "1440x816"); // 2x — bom equilibrio
+        ins("ppsspp_button_preference", "Cross");
+        ins("ppsspp_language", "Automatic");
+        ins("ppsspp_cpu_core", "JIT");
+        ins("ppsspp_fast_memory", "enabled");
+        ins("ppsspp_ignore_bad_memory_access", "enabled");
+        ins("ppsspp_io_timing_method", "Fast");
+        ins("ppsspp_force_lag_sync", "disabled");
+        ins("ppsspp_locked_cpu_speed", "off");
+        ins("ppsspp_lazy_texture_caching", "disabled");
+        ins("ppsspp_retain_changed_textures", "disabled");
+        ins("ppsspp_force_max_fps", "60");
+        ins("ppsspp_frame_skipping", "Off");
+        ins("ppsspp_frame_skipping_type", "Number of Frames");
+        ins("ppsspp_auto_frame_skip", "disabled");
+        ins("ppsspp_skip_buffer_effects", "disabled");
+        ins("ppsspp_skip_gpu_readbacks", "Off (Safe)");
+        ins("ppsspp_inflight_frames", "Up to 2");
+        ins("ppsspp_software_skinning", "enabled");
+        ins("ppsspp_hardware_transform", "enabled");
+        ins("ppsspp_software_rendering", "disabled");
+        ins("ppsspp_vertex_cache", "disabled");
+        ins("ppsspp_lower_resolution_for_effects", "Off");
+        ins("ppsspp_spline_quality", "Low");
+        ins("ppsspp_texture_anisotropic_filtering", "off");
+        ins("ppsspp_texture_filtering", "Auto");
+        ins("ppsspp_texture_scaling_level", "Off");
+        ins("ppsspp_texture_scaling_type", "xBRZ");
+        ins("ppsspp_texture_deposterize", "disabled");
+        ins("ppsspp_texture_replacement", "disabled");
+        ins("ppsspp_buffer_filter", "Linear");
+        ins("ppsspp_internal_shader", "Off");
+
+        // ===== Mupen64Plus-Next (N64) — v0.8.35 =====
+        ins("mupen64plus-rsp-plugin", "hle");
+        ins("mupen64plus-cpucore", "dynamic_recompiler");
+        ins("mupen64plus-43screensize", "640x480");
+        ins("mupen64plus-169screensize", "960x540");
+        ins("mupen64plus-aspect", "4:3");
+        ins("mupen64plus-ThreadedRenderer", "True");
+        ins("mupen64plus-EnableHybridFilter", "True");
+        ins("mupen64plus-EnableLOD", "True");
+        ins("mupen64plus-EnableHWLighting", "False");
+        ins("mupen64plus-EnableCopyAuxToRDRAM", "False");
+        ins("mupen64plus-MultiSampling", "0");
+        ins("mupen64plus-EnableNativeResFactor", "1");
+        ins("mupen64plus-EnableTextureCache", "True");
+        ins("mupen64plus-EnableEnhancedHighResStorage", "False");
+        ins("mupen64plus-EnableEnhancedTextureStorage", "False");
+        ins("mupen64plus-EnableFBEmulation", "True");
+        ins("mupen64plus-AspectRatio", "4:3");
+        ins("mupen64plus-FrameDuping", "False");
+        ins("mupen64plus-FXAA", "0");
+        ins("mupen64plus-pak1", "memory");
+        ins("mupen64plus-pak2", "none");
+        ins("mupen64plus-pak3", "none");
+        ins("mupen64plus-pak4", "none");
+
+        // ===== Citra (3DS) — v0.8.35 =====
+        ins("citra_resolution_factor", "1x (Native)");
+        ins("citra_use_hw_renderer", "enabled");
+        ins("citra_use_hw_shader", "enabled");
+        ins("citra_use_shader_jit", "enabled");
+        ins("citra_use_acc_mul", "enabled");
+        ins("citra_use_acc_geo_shaders", "enabled");
+        ins("citra_use_virtual_sd", "enabled");
+        ins("citra_is_new_3ds", "New 3DS"); // melhor compat
+        ins("citra_region_value", "Auto");
+        ins("citra_language", "Portuguese");
+        ins("citra_layout_option", "Default Top-Bottom Screen");
+        ins("citra_swap_screen", "Top");
+        ins("citra_use_libretro_save_path", "LibRetro Default");
+        ins("citra_analog_function", "C-Stick and Touchscreen Pointer");
+        ins("citra_render_touchscreen", "disabled");
+        ins("citra_mouse_touchscreen", "enabled");
+        ins("citra_touch_touchscreen", "enabled");
+        ins("citra_deadzone", "15");
+        ins("citra_use_cpu_jit", "enabled");
+        ins("citra_dump_textures", "disabled");
+        ins("citra_custom_textures", "disabled");
+        ins("citra_preload_textures", "disabled");
+        ins("citra_async_shader_compilation", "disabled");
+
+        // ===== swanstation (PS1, fork DuckStation) — v0.8.35 =====
+        ins("swanstation_GPU_Renderer", "Hardware");
+        ins("swanstation_GPU_ResolutionScale", "1");
+        ins("swanstation_GPU_MSAA", "1");
+        ins("swanstation_GPU_TrueColor", "enabled");
+        ins("swanstation_GPU_ScaledDithering", "enabled");
+        ins("swanstation_GPU_UseSoftwareRendererForReadbacks", "false");
+        ins("swanstation_GPU_TextureFilter", "Nearest");
+        ins("swanstation_GPU_DisableInterlacing", "true");
+        ins("swanstation_GPU_ForceNTSCTimings", "false");
+        ins("swanstation_GPU_WidescreenHack", "false");
+        ins("swanstation_GPU_PGXPEnable", "false"); // PGXP = anti-warp, custa FPS
+        ins("swanstation_GPU_PGXPCulling", "true");
+        ins("swanstation_GPU_PGXPTextureCorrection", "true");
+        ins("swanstation_CPU_ExecutionMode", "Recompiler");
+        ins("swanstation_CPU_Overclock", "100");
+        ins("swanstation_Console_Region", "Auto");
+        ins("swanstation_BIOS_PatchFastBoot", "true");
+        ins("swanstation_BIOS_PatchTTYEnable", "false");
+        ins("swanstation_MemoryCards_Card1Type", "PerGameTitle");
+        ins("swanstation_MemoryCards_Card2Type", "None");
+        ins("swanstation_Display_AspectRatio", "4:3");
+        ins("swanstation_Display_CropMode", "Overscan");
+        ins("swanstation_Display_LinearFiltering", "true");
+        ins("swanstation_Display_IntegerScaling", "false");
+        ins("swanstation_Display_ShowOSDMessages", "false");
+        ins("swanstation_Audio_ResamplingMode", "Catmull-Rom");
+        ins("swanstation_Logging_LogLevel", "None");
+
+        // ===== Genesis Plus GX (MD/SMS/GG/SegaCD) — v0.8.35 =====
+        ins("genesis_plus_gx_system_hw", "auto");
+        ins("genesis_plus_gx_region_detect", "auto");
+        ins("genesis_plus_gx_bios", "disabled");
+        ins("genesis_plus_gx_bram", "per game");
+        ins("genesis_plus_gx_audio_filter", "low-pass");
+        ins("genesis_plus_gx_blargg_ntsc_filter", "disabled");
+        ins("genesis_plus_gx_lcd_filter", "disabled");
+        ins("genesis_plus_gx_overscan", "disabled");
+        ins("genesis_plus_gx_aspect_ratio", "auto");
+        ins("genesis_plus_gx_render", "single field"); // mais rapido que double field
+        ins("genesis_plus_gx_force_dtack", "enabled");
+        ins("genesis_plus_gx_addr_error", "enabled");
+        ins("genesis_plus_gx_lock_on", "OFF");
+
+        // ===== Saturn (Mednafen) — v0.8.35 =====
         ins("beetle_saturn_cdimagecache", "disabled");
+        ins("beetle_saturn_region", "Auto Detect");
+        ins("beetle_saturn_cart", "Auto Detect");
+        ins("beetle_saturn_horizontal_overscan", "0");
+        ins("beetle_saturn_initial_scanline", "0");
+        ins("beetle_saturn_last_scanline", "239");
+        ins("beetle_saturn_resolution_mode", "self-adjusting");
+        ins("beetle_saturn_multitap_port1", "disabled");
+        ins("beetle_saturn_multitap_port2", "disabled");
+
+        // ===== melonDS (DS) — v0.8.35 =====
+        ins("melonds_renderer", "OpenGL"); // HW renderer
+        ins("melonds_threaded_renderer", "enabled");
+        ins("melonds_screen_layout", "Top/Bottom");
+        ins("melonds_hybrid_ratio", "2");
+        ins("melonds_swapscreen_mode", "Toggle");
+        ins("melonds_screen_gap", "0");
+        ins("melonds_jit_enable", "enabled");
+        ins("melonds_console_mode", "DS");
+        ins("melonds_boot_directly", "enabled");
+        ins("melonds_use_fw_settings", "disabled");
+        ins("melonds_language", "Portuguese");
+        ins("melonds_opengl_resolution", "1");
+        ins("melonds_opengl_better_polygons", "disabled");
+        ins("melonds_opengl_filtering", "nearest");
+        ins("melonds_touch_mode", "Mouse");
+        ins("melonds_audio_interpolation", "None");
+        ins("melonds_audio_bitrate", "Automatic");
+        ins("melonds_show_cursor", "disabled");
+        ins("melonds_mic_input", "Silence");
+
+        // ===== mGBA (GBA) — v0.8.35 (defaults sao bons, so ajustes pequenos) =====
+        ins("mgba_skip_bios", "ON");
+        ins("mgba_use_bios", "ON");
+        ins("mgba_solar_sensor_level", "0");
+        ins("mgba_allow_opposing_directions", "no");
+        ins("mgba_gb_model", "Autodetect");
+        ins("mgba_sgb_borders", "ON");
+        ins("mgba_idle_optimization", "Remove Known");
+        ins("mgba_frameskip", "0");
+        ins("mgba_color_correction", "OFF");
+        ins("mgba_interframe_blending", "OFF");
+        ins("mgba_audio_low_pass_filter", "disabled");
+
+        // ===== snes9x (SNES) — v0.8.35 =====
+        ins("snes9x_overscan", "auto");
+        ins("snes9x_aspect", "auto");
+        ins("snes9x_region", "auto");
+        ins("snes9x_layer_1", "enabled");
+        ins("snes9x_layer_2", "enabled");
+        ins("snes9x_layer_3", "enabled");
+        ins("snes9x_layer_4", "enabled");
+        ins("snes9x_layer_5", "enabled");
+        ins("snes9x_gfx_clip", "enabled");
+        ins("snes9x_gfx_transp", "enabled");
+        ins("snes9x_gfx_hires", "enabled");
+        ins("snes9x_audio_interpolation", "gaussian");
+        ins("snes9x_reduce_sprite_flicker", "disabled");
+        ins("snes9x_block_invalid_vram_access", "enabled");
+
+        // ===== Nestopia (NES) — v0.8.35 =====
+        ins("nestopia_blargg_ntsc_filter", "disabled");
+        ins("nestopia_palette", "consumer");
+        ins("nestopia_nospritelimit", "enabled"); // mais sprites = sem flicker
+        ins("nestopia_overscan_v", "enabled");
+        ins("nestopia_overscan_h_left", "0");
+        ins("nestopia_overscan_h_right", "0");
+        ins("nestopia_aspect", "auto");
+        ins("nestopia_genie_distortion", "disabled");
+        ins("nestopia_fds_auto_insert", "enabled");
+        ins("nestopia_select_adapter", "auto");
+
+        // ===== Gambatte (GB/GBC) — v0.8.35 =====
+        ins("gambatte_gb_colorization", "auto");
+        ins("gambatte_gb_internal_palette", "GB - DMG");
+        ins("gambatte_gb_bootloader", "enabled");
+        ins("gambatte_gb_hwmode", "Auto");
+        ins("gambatte_audio_resampler", "sinc"); // melhor qualidade
+        ins("gambatte_show_gb_link_settings", "disabled");
+        ins("gambatte_gb_link_mode", "Not Connected");
+        ins("gambatte_dark_filter_level", "0");
+        ins("gambatte_mix_frames", "disabled");
+
+        // ===== mednafen_pce (TurboGrafx-16) — v0.8.35 =====
+        ins("pce_show_advanced_input_settings", "enabled");
+        ins("pce_nospritelimit", "enabled");
+        ins("pce_cdimagecache", "disabled");
+        ins("pce_cdbios", "System Card 3");
+        ins("pce_cdspeed", "1");
+        ins("pce_adpcmextraprec", "10-bit");
+        ins("pce_adpcmlp", "off");
+        ins("pce_resamp_quality", "3");
+        ins("pce_scaling", "auto");
+
+        // ===== MAME (Arcade) — v0.8.35 =====
+        ins("mame_alternate_renderer", "disabled");
+        ins("mame_altres", "640x480");
+        ins("mame_boot_to_bios", "disabled");
+        ins("mame_boot_to_osd", "disabled");
+        ins("mame_cheats_enable", "disabled");
+        ins("mame_lightgun_mode", "none");
+        ins("mame_mouse_enable", "disabled");
+        ins("mame_thread_mode", "automatic"); // threading = ganho FPS
+        ins("mame_throttle", "disabled"); // sem throttling interno (frontend faz)
+        ins("mame_softlists_enable", "enabled");
+
+        // ===== Defaults universais (BIOS-free / smaller cores) =====
+        ins("stella_console", "auto");
+        ins("stella_palette", "standard");
+        ins("stella_filter", "disabled");
+        ins("stella_phosphor", "default");
+        ins("stella_paddle_sensitivity", "3");
+
+        ins("beetle_lynx_rot", "None");
+        ins("beetle_wswan_rotate_display", "manual");
+        ins("beetle_wswan_language", "english");
+        ins("beetle_vb_anaglyph_preset", "disabled");
+        ins("beetle_vb_3dmode", "anaglyph");
+        ins("beetle_ngp_language", "english");
+
+        ins("bluemsx_msxromtype1", "Auto");
+        ins("vice_c64_model", "C64 PAL auto");
+        ins("vice_drive_true_emulation", "disabled");
+        ins("fuse_machine", "Spectrum 48K");
+        ins("puae_model", "auto");
+        ins("opera_bios", "panafz10.bin");
+        ins("virtualjaguar_doom_res_hack", "disabled");
         m
     })
 }
@@ -379,12 +932,45 @@ extern "C" fn cb_log(level: c_uint, fmt: *const c_char) {
     eprintln!("[libretro/{}] {}", level, trimmed);
 }
 
+// v0.8.32: callbacks que damos pro core no SET_HW_RENDER.
+#[cfg(windows)]
+extern "C" fn cb_get_current_framebuffer() -> usize {
+    crate::gl_context::current_fbo() as usize
+}
+#[cfg(windows)]
+extern "C" fn cb_get_proc_address(name: *const c_char) -> *const c_void {
+    crate::gl_context::get_proc_addr(name)
+}
+
 extern "C" fn cb_video_refresh(data: *const c_void, width: c_uint, height: c_uint, pitch: usize) {
+    // v0.8.32: cores HW passam (void*)-1 como marker — frame esta no FBO,
+    // a gente faz glReadPixels pra trazer pra RAM.
+    #[cfg(windows)]
+    if data as isize == RETRO_HW_FRAME_BUFFER_VALID {
+        if let Some(rgba) = crate::gl_context::read_pixels(width, height) {
+            let s = state();
+            let mut g = s.lock().unwrap();
+            g.frame = Some(Frame { width, height, rgba });
+        }
+        return;
+    }
     if data.is_null() { return; }
-    let s = state();
-    let mut g = s.lock().unwrap();
-    let fmt = g.pixel_format;
-    let mut rgba = vec![0u8; (width * height * 4) as usize];
+    // v0.8.35: snapshot pixel_format e libera lock ANTES do per-pixel loop
+    let fmt = {
+        let s = state();
+        let g = s.lock().unwrap();
+        g.pixel_format
+    };
+    let need = (width * height * 4) as usize;
+    // v0.8.35: reusa buffer do pool (sem alloc por frame). Cresce on-demand.
+    let mut rgba = {
+        let s = state();
+        let mut g = s.lock().unwrap();
+        let mut v = std::mem::take(&mut g.frame_pool);
+        if v.capacity() < need { v.reserve(need - v.capacity()); }
+        v.resize(need, 0);
+        v
+    };
     unsafe {
         match fmt {
             RETRO_PIXEL_FORMAT_XRGB8888 => {
@@ -441,32 +1027,48 @@ extern "C" fn cb_video_refresh(data: *const c_void, width: c_uint, height: c_uin
             }
         }
     }
-    g.frame = Some(Frame { width, height, rgba });
-}
-
-extern "C" fn cb_audio_sample(left: i16, right: i16) {
+    // v0.8.35: devolve frame pro pool reciclando o Vec antigo
     let s = state();
     let mut g = s.lock().unwrap();
-    // Limite anti-overflow: dropa se buffer encher (2 segundos de samples)
-    let limit = 48000 * 2 * 2;
-    if g.audio_buf.len() < limit {
-        g.audio_buf.push_back(left);
-        g.audio_buf.push_back(right);
+    let old = g.frame.replace(Frame { width, height, rgba });
+    if let Some(old_frame) = old {
+        // Pool guarda o Vec liberado pra proxima alocacao
+        let mut buf = old_frame.rgba;
+        buf.clear();
+        g.frame_pool = buf;
     }
+}
+
+// v0.8.38: 1.5s buffer. v0.8.37 botou 500ms mas jogos PS2 pesados (GoW2, Crash)
+// ainda travavam — emulacao varia 30-60 FPS e PCSX2 batcha audio em chunks
+// grandes. 1.5s absorve esses bursts. Latencia 1.5s eh perceptivel mas SEM gaps
+// >> gaps com latencia baixa. Memoria: 48kHz*stereo*1.5s = 144000 i16 = 288KB.
+const AUDIO_BUF_LIMIT: usize = 144000;
+
+extern "C" fn cb_audio_sample(left: i16, right: i16) {
+    let mut buf = audio_buf().lock().unwrap();
+    if buf.len() + 2 > AUDIO_BUF_LIMIT {
+        // Drop oldest pra abrir espaco (mantem audio "atual")
+        buf.pop_front();
+        buf.pop_front();
+    }
+    buf.push_back(left);
+    buf.push_back(right);
 }
 
 extern "C" fn cb_audio_sample_batch(data: *const i16, frames: usize) -> usize {
     if data.is_null() { return frames; }
-    let s = state();
-    let mut g = s.lock().unwrap();
-    let limit = 48000 * 2 * 2;
-    let n_samples = frames * 2; // stereo interleaved
+    let n_samples = frames * 2;
+    let mut buf = audio_buf().lock().unwrap();
+    // Se batch nao cabe, dropa do inicio pra abrir espaco
+    let space = AUDIO_BUF_LIMIT.saturating_sub(buf.len());
+    if n_samples > space {
+        let drop_n = n_samples - space;
+        for _ in 0..drop_n.min(buf.len()) { buf.pop_front(); }
+    }
     unsafe {
         let slice = std::slice::from_raw_parts(data, n_samples);
-        for &sample in slice {
-            if g.audio_buf.len() >= limit { break; }
-            g.audio_buf.push_back(sample);
-        }
+        buf.extend(slice.iter().copied());
     }
     frames
 }
@@ -475,10 +1077,27 @@ extern "C" fn cb_input_poll() {
     // sem-op — input ja foi atualizado via libretro_set_input
 }
 
-extern "C" fn cb_input_state(port: c_uint, device: c_uint, _index: c_uint, id: c_uint) -> i16 {
-    if port != 0 || device != RETRO_DEVICE_JOYPAD || id >= 16 { return 0; }
+extern "C" fn cb_input_state(port: c_uint, device: c_uint, index: c_uint, id: c_uint) -> i16 {
+    if port != 0 { return 0; }
     let s = state();
     let g = s.lock().unwrap();
+    // v0.8.45: ANALOG stick (PCSX2/Dolphin/PSP/N64 etc precisam pro stick funcionar)
+    if device == RETRO_DEVICE_ANALOG {
+        if index >= 2 || id >= 2 { return 0; }
+        let slot = (index as usize) * 2 + (id as usize);
+        return g.analog_state[slot];
+    }
+    if device != RETRO_DEVICE_JOYPAD { return 0; }
+    // v0.8.43: BITMASK support — cores modernos (PCSX2, Dolphin, PPSSPP, etc.)
+    // pedem todos os 16 botoes via uma chamada com id=256.
+    if id == RETRO_DEVICE_ID_JOYPAD_MASK {
+        let mut mask: i16 = 0;
+        for i in 0..16 {
+            if g.input_state[i] { mask |= 1 << i; }
+        }
+        return mask;
+    }
+    if id >= 16 { return 0; }
     if g.input_state[id as usize] { 1 } else { 0 }
 }
 
@@ -504,9 +1123,16 @@ pub fn make_safe_link(rom_path: &Path) -> std::path::PathBuf {
         return rom_path.to_path_buf();
     }
     let ext = rom_path.extension().and_then(|e| e.to_str()).unwrap_or("iso");
-    let link_path = temp_dir.join(format!("rom.{}", ext));
-    // Remove anterior se existe (pra link novo apontar pro ROM atual)
-    let _ = std::fs::remove_file(&link_path);
+    // v0.8.48: nome do link inclui hash do path ORIGINAL — sem isso PCSX2 cria
+    // memory card "rom.ps2" compartilhado entre TODOS os jogos PS2 (memcard eh
+    // nomeado pelo filename). Com hash estavel, cada jogo tem seu memcard.
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(rom_path.to_string_lossy().as_bytes());
+    let hash_hex = hex::encode(&hasher.finalize()[..6]); // 12 hex chars
+    let link_path = temp_dir.join(format!("rom_{}.{}", hash_hex, ext));
+    // Se ja existe (mesma rom, sessao anterior), reutiliza — memcard mantem nome
+    if link_path.exists() { return link_path; }
     // 1) Tenta hardlink (mesmo volume, instantaneo)
     if std::fs::hard_link(rom_path, &link_path).is_ok() {
         return link_path;
@@ -584,6 +1210,12 @@ impl LibretroCore {
         let actual_path = make_safe_link(rom_path);
         let path_c = CString::new(actual_path.to_string_lossy().as_ref()).map_err(|e| e.to_string())?;
         log::info!("[libretro] using path={} (original={})", actual_path.display(), rom_path.display());
+        // v0.8.46: salva path da ROM pra BIOS region detection no GET_VARIABLE
+        {
+            let s = state();
+            let mut g = s.lock().unwrap();
+            g.current_rom_path = Some(rom_path.to_string_lossy().into_owned());
+        }
         let sys_info_fn: Symbol<SysFn> = self.lib.get(b"retro_get_system_info").map_err(|e| e.to_string())?;
         let mut sys_info = RetroSystemInfo {
             library_name: std::ptr::null(),
@@ -628,9 +1260,44 @@ impl LibretroCore {
             }
         }
 
+        // v0.8.32: se hw_render foi negociado, contexto GL precisa estar current
+        // nesta thread antes do retro_load_game (PCSX2 inicia GL state durante load)
+        #[cfg(windows)]
+        {
+            let s = state();
+            let g = s.lock().unwrap();
+            let active = g.hw_active;
+            drop(g);
+            if active { let _ = crate::gl_context::make_current(); }
+        }
+
         let load: Symbol<LoadFn> = self.lib.get(b"retro_load_game").map_err(|e| e.to_string())?;
         if !load(&info as *const _) {
             return Err(format!("retro_load_game retornou false (need_fullpath={})", sys_info.need_fullpath));
+        }
+
+        // v0.8.32: notifica core que contexto GL esta pronto pra ele inicializar
+        // recursos GPU (programas/buffers/texturas). DEVE rodar com ctx current.
+        #[cfg(windows)]
+        {
+            let s = state();
+            let g = s.lock().unwrap();
+            let reset_cb = if g.hw_active { g.hw_context_reset } else { None };
+            drop(g);
+            if let Some(reset) = reset_cb {
+                let _ = crate::gl_context::make_current();
+                log::info!("[libretro] chamando hw context_reset");
+                reset();
+            }
+        }
+
+        // v0.8.44: garante port 0 = JoyPad. Alguns cores defaultam pra NONE
+        // se SET_CONTROLLER_INFO nao foi acknowledged corretamente -> sem input.
+        // Ignora erro: nem todo core exporta esse simbolo (cores antigos).
+        type PortDevFn = extern "C" fn(c_uint, c_uint);
+        if let Ok(set_port) = self.lib.get::<PortDevFn>(b"retro_set_controller_port_device") {
+            set_port(0, RETRO_DEVICE_JOYPAD);
+            log::info!("[libretro] port 0 = JOYPAD");
         }
 
         let av: Symbol<AvFn> = self.lib.get(b"retro_get_system_av_info").map_err(|e| e.to_string())?;
@@ -644,11 +1311,54 @@ impl LibretroCore {
 
     pub unsafe fn unload_game(&self) {
         type Fn0 = extern "C" fn();
+        // v0.8.46: notifica core que vamos descartar contexto GL — core libera
+        // recursos GPU (programas/buffers/texturas). Sem isso vaza por sessao.
+        #[cfg(windows)]
+        {
+            let s = state();
+            let g = s.lock().unwrap();
+            let destroy_cb = if g.hw_active { g.hw_context_destroy } else { None };
+            drop(g);
+            if let Some(destroy) = destroy_cb {
+                let _ = crate::gl_context::make_current();
+                log::info!("[libretro] chamando hw context_destroy");
+                destroy();
+            }
+            let s2 = state();
+            let mut g = s2.lock().unwrap();
+            g.hw_active = false;
+            g.hw_context_reset = None;
+            g.hw_context_destroy = None;
+            g.disk_control = None;
+            g.current_rom_path = None;
+        }
         if let Ok(f) = self.lib.get::<Fn0>(b"retro_unload_game") { f(); }
+        // v0.8.46: cleanup do symlink/hardlink temp/rom.* (deixa pasta limpa)
+        let temp_link = dirs::data_dir()
+            .map(|d| d.join("Ludex").join("temp"));
+        if let Some(temp_dir) = temp_link {
+            if let Ok(entries) = std::fs::read_dir(&temp_dir) {
+                for e in entries.flatten() {
+                    let p = e.path();
+                    if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
+                        if name.starts_with("rom.") { let _ = std::fs::remove_file(&p); }
+                    }
+                }
+            }
+        }
     }
 
     pub unsafe fn run(&self) -> Result<(), String> {
         type Fn0 = extern "C" fn();
+        // v0.8.32: ctx GL precisa current na thread que chama retro_run
+        #[cfg(windows)]
+        {
+            let s = state();
+            let g = s.lock().unwrap();
+            let active = g.hw_active;
+            drop(g);
+            if active { let _ = crate::gl_context::make_current(); }
+        }
         let f: Symbol<Fn0> = self.lib.get(b"retro_run").map_err(|e| e.to_string())?;
         f();
         Ok(())
