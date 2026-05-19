@@ -18,7 +18,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { sfx, playPlatformJingle, unlockAudio, haptic, setMuted as setSfxMuted, isMutedNow } from "./ludexMobileAudio";
 import {
-  loadRecents, pushRecent, trackSession, statsFor, totalPlayTime,
+  loadRecents, pushRecent, trackSession, statsFor, totalPlayTime, loadStats,
   ACHIEVEMENTS, loadAchievements, checkAchievements, markTabVisited, unlockAchievement,
   isChildModeOn, setChildMode as setChildModeStore, verifyChildPin, filterChildSafe,
   exportConfig, importConfig, notifyBackupMade,
@@ -567,6 +567,8 @@ export default function LudexMobile() {
             onAdminUnlock={setAndroidDemo}
             onPickFolder={pickRomsFolder}
             currentRomsRoot={config?.roms_root}
+            config={config}
+            onConfigChange={setConfig}
           />
         )}
       </main>
@@ -990,7 +992,7 @@ function SoundToggle() {
   );
 }
 
-function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, currentRomsRoot }) {
+function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, currentRomsRoot, config, onConfigChange }) {
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [keyInput, setKeyInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1119,7 +1121,9 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
         <UpdateChecker />
       </section>
 
-      {/* v0.9.1: paridade com Windows - sites guide + logs viewer */}
+      {/* v0.9.1: paridade com Windows - profiles + stats + sources + logs + music MP3 */}
+      <ProfileSwitcherCard config={config} activeProfile={activeProfile} onConfigChange={onConfigChange} />
+      <StatsDashboardCard />
       <SourcesGuideCard />
       <LogsViewerCard />
       <WhyWindowsCard />
@@ -2276,22 +2280,384 @@ function BackupRestoreCard() {
 // ============================================================
 // === AMBIENT MUSIC TOGGLE ===================================
 // ============================================================
+// v0.9.1: ambient music agora suporta MP3s (paridade Windows) + fallback chiptune.
+// MP3s vão na pasta /storage/emulated/0/Ludex/music/ no Android. Vazio = chiptune.
 function AmbientMusicToggle() {
   const [on, setOnState] = useState(isAmbientOn());
-  useEffect(() => { if (on) setAmbientOn(true); /* eslint-disable-next-line */ }, []);
+  const [tracks, setTracks] = useState([]);
+  const [trackIdx, setTrackIdx] = useState(0);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    invoke("list_music_tracks").then(setTracks).catch(() => setTracks([]));
+  }, []);
+
+  useEffect(() => {
+    if (!on) {
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      setAmbientOn(false);
+      return;
+    }
+    // Se há MP3s, toca eles. Senão, chiptune sintético.
+    if (tracks.length > 0) {
+      const playTrack = (idx) => {
+        if (audioRef.current) { audioRef.current.pause(); }
+        const audio = new Audio(convertFileSrc(tracks[idx]));
+        audio.volume = 0.35;
+        audio.onended = () => {
+          const next = (idx + 1) % tracks.length;
+          setTrackIdx(next);
+          playTrack(next);
+        };
+        audio.play().catch(() => {});
+        audioRef.current = audio;
+      };
+      playTrack(trackIdx);
+    } else {
+      setAmbientOn(true); // chiptune fallback
+    }
+    return () => {
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    };
+  }, [on, tracks.length]);
+
+  const skip = () => {
+    if (tracks.length === 0) return;
+    const next = (trackIdx + 1) % tracks.length;
+    setTrackIdx(next);
+    if (audioRef.current && on) {
+      audioRef.current.pause();
+      const audio = new Audio(convertFileSrc(tracks[next]));
+      audio.volume = 0.35;
+      audio.onended = () => skip();
+      audio.play().catch(() => {});
+      audioRef.current = audio;
+    }
+  };
+
+  const trackName = tracks[trackIdx]
+    ? tracks[trackIdx].split(/[\\/]/).pop().replace(/\.mp3$/, "").replace(/^ES_/, "").slice(0, 35)
+    : null;
+
   return (
     <section className="lmx-settings-card">
-      <div className="lmx-settings-label">Musica ambiente (chiptune)</div>
+      <div className="lmx-settings-label">Música ambiente</div>
       <p className="lmx-settings-hint">
-        Loop chiptune gerado in-app (Web Audio API), entre menus.
+        {tracks.length > 0
+          ? `${tracks.length} MP3${tracks.length > 1 ? "s" : ""} em Ludex/music/`
+          : "Chiptune sintético (Web Audio). Pra ter MP3s curados igual o Windows, copia arquivos pra /storage/emulated/0/Ludex/music/"}
       </p>
-      <button className="lmx-settings-btn primary" onClick={() => {
-        const next = !on;
-        setAmbientOn(next);
-        setOnState(next);
-      }}>
-        {on ? "Desligar musica" : "Ligar musica"}
-      </button>
+      {on && trackName && (
+        <div style={{ marginBottom: 8, padding: "8px 10px", borderRadius: 8, background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.25)", fontSize: 12, color: "#c4b5fd" }}>
+          ♪ {trackName}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 6 }}>
+        <button className="lmx-settings-btn primary" onClick={() => setOnState(!on)} style={{ flex: 1 }}>
+          {on ? "Desligar música" : "Ligar música"}
+        </button>
+        {on && tracks.length > 1 && (
+          <button className="lmx-settings-btn ghost" onClick={skip}>
+            ⏭
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
+// === PROFILE SWITCHER CARD (v0.9.1 - paridade Windows) ======
+// ============================================================
+// Multiplos profiles no mobile (era single 'Player'). User pode criar,
+// trocar, renomear, deletar. Conquistas/recents/stats sao por dispositivo
+// (localStorage), mas o profile ativo determina o name/avatar mostrado.
+// Salva no config.json via save_config (mesmo backend Rust do desktop).
+const AVATAR_PRESETS = [
+  { id: "controller", label: "Controle", emoji: "🎮", color: "#7c3aed" },
+  { id: "star",       label: "Estrela",  emoji: "⭐", color: "#eab308" },
+  { id: "heart",      label: "Coração",  emoji: "❤", color: "#ef4444" },
+  { id: "fire",       label: "Fogo",     emoji: "🔥", color: "#f97316" },
+  { id: "lightning",  label: "Raio",     emoji: "⚡", color: "#facc15" },
+  { id: "ghost",      label: "Fantasma", emoji: "👻", color: "#94a3b8" },
+  { id: "crown",      label: "Coroa",    emoji: "👑", color: "#facc15" },
+  { id: "skull",      label: "Caveira",  emoji: "💀", color: "#64748b" },
+];
+
+function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newAvatar, setNewAvatar] = useState("controller");
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [msg, setMsg] = useState(null);
+  const profiles = config?.profiles || [];
+
+  const save = async (updatedConfig) => {
+    try {
+      await invoke("save_config", { config: updatedConfig });
+      onConfigChange && onConfigChange(updatedConfig);
+      sfx.confirm();
+    } catch (e) {
+      setMsg({ kind: "error", text: "Falha ao salvar: " + e });
+    }
+  };
+
+  const create = async () => {
+    const n = newName.trim();
+    if (n.length < 2) { setMsg({ kind: "error", text: "Nome muito curto (mínimo 2 letras)" }); return; }
+    const newProfile = {
+      id: `p${Math.random().toString(36).slice(2, 10)}`,
+      name: n,
+      avatar_id: newAvatar,
+      photo_path: null,
+      created_at: Math.floor(Date.now() / 1000),
+    };
+    const updated = {
+      ...config,
+      profiles: [...profiles, newProfile],
+      active_profile_id: newProfile.id,
+    };
+    await save(updated);
+    setCreating(false);
+    setNewName("");
+    setMsg({ kind: "ok", text: `Profile "${n}" criado e ativado.` });
+    setTimeout(() => setMsg(null), 3000);
+  };
+
+  const switchTo = async (id) => {
+    if (id === config?.active_profile_id) return;
+    await save({ ...config, active_profile_id: id });
+    const p = profiles.find(x => x.id === id);
+    setMsg({ kind: "ok", text: `Trocou pro profile "${p?.name}".` });
+    setTimeout(() => setMsg(null), 3000);
+  };
+
+  const rename = async (id) => {
+    const n = editName.trim();
+    if (n.length < 2) return;
+    const updated = {
+      ...config,
+      profiles: profiles.map(p => p.id === id ? { ...p, name: n } : p),
+    };
+    await save(updated);
+    setEditingId(null);
+    setEditName("");
+  };
+
+  const del = async (id) => {
+    if (profiles.length <= 1) { setMsg({ kind: "error", text: "Não pode deletar o único profile." }); return; }
+    if (!confirm("Deletar esse profile? Tempo/conquistas locais ficam (são por dispositivo).")) return;
+    const newProfiles = profiles.filter(p => p.id !== id);
+    const newActive = config.active_profile_id === id ? newProfiles[0].id : config.active_profile_id;
+    await save({ ...config, profiles: newProfiles, active_profile_id: newActive });
+  };
+
+  return (
+    <section className="lmx-settings-card">
+      <div className="lmx-settings-label">Perfis ({profiles.length})</div>
+      <p className="lmx-settings-hint">
+        Múltiplos perfis: cada um com nome + avatar. Use Backup/Sync (acima) pra trazer
+        conquistas e favoritos de outro dispositivo.
+      </p>
+
+      {profiles.map(p => {
+        const isActive = p.id === config?.active_profile_id;
+        const av = AVATAR_PRESETS.find(a => a.id === p.avatar_id) || AVATAR_PRESETS[0];
+        const isEditing = editingId === p.id;
+        return (
+          <div key={p.id} style={{
+            display: "flex", alignItems: "center", gap: 10, padding: 10, marginBottom: 6,
+            borderRadius: 10, background: isActive ? "rgba(124,58,237,0.15)" : "rgba(255,255,255,0.03)",
+            border: `1px solid ${isActive ? "rgba(124,58,237,0.4)" : "rgba(255,255,255,0.06)"}`,
+          }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 10, background: av.color, color: "#fff",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+              flexShrink: 0,
+            }}>{av.emoji}</div>
+            {isEditing ? (
+              <input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onBlur={() => rename(p.id)}
+                onKeyDown={(e) => e.key === "Enter" && rename(p.id)}
+                autoFocus
+                maxLength={28}
+                style={{ flex: 1, background: "rgba(0,0,0,0.3)", border: "1px solid #c4b5fd", color: "#fff", padding: "6px 10px", borderRadius: 6, fontSize: 14 }}
+              />
+            ) : (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                {isActive && <div style={{ fontSize: 10, color: "#c4b5fd", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Ativo</div>}
+              </div>
+            )}
+            {!isActive && !isEditing && (
+              <button onClick={() => switchTo(p.id)} style={{ background: "#7c3aed", border: "none", color: "#fff", padding: "6px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600 }}>
+                Usar
+              </button>
+            )}
+            {!isEditing && (
+              <button onClick={() => { setEditingId(p.id); setEditName(p.name); }} style={{ background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", padding: "6px 8px", borderRadius: 6, fontSize: 11 }}>
+                Editar
+              </button>
+            )}
+            {profiles.length > 1 && !isEditing && !isActive && (
+              <button onClick={() => del(p.id)} style={{ background: "rgba(239,68,68,0.15)", border: "none", color: "#ef4444", padding: "6px 8px", borderRadius: 6, fontSize: 11 }}>
+                Excluir
+              </button>
+            )}
+          </div>
+        );
+      })}
+
+      {!creating ? (
+        <button className="lmx-settings-btn primary" onClick={() => setCreating(true)} style={{ marginTop: 8 }}>
+          + Novo perfil
+        </button>
+      ) : (
+        <div style={{ marginTop: 8, padding: 10, borderRadius: 10, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.25)" }}>
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Nome do perfil"
+            maxLength={28}
+            autoFocus
+            style={{ width: "100%", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(124,58,237,0.4)", color: "#fff", padding: "8px 10px", borderRadius: 6, fontSize: 14, marginBottom: 8, boxSizing: "border-box" }}
+          />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 8 }}>
+            {AVATAR_PRESETS.map(av => (
+              <button
+                key={av.id}
+                onClick={() => setNewAvatar(av.id)}
+                style={{
+                  aspectRatio: "1/1", borderRadius: 8, background: av.color,
+                  border: `2px solid ${newAvatar === av.id ? "#fff" : "transparent"}`,
+                  color: "#fff", fontSize: 20, cursor: "pointer", padding: 0,
+                }}
+              >{av.emoji}</button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button className="lmx-settings-btn primary" onClick={create} style={{ flex: 1 }}>Criar</button>
+            <button className="lmx-settings-btn ghost" onClick={() => { setCreating(false); setNewName(""); }} style={{ flex: 1 }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {msg && <p className={`lmx-settings-msg ${msg.kind}`}>{msg.text}</p>}
+    </section>
+  );
+}
+
+// ============================================================
+// === STATS DASHBOARD CARD (v0.9.1 - paridade Windows) =======
+// ============================================================
+// CollectionStats + TopPlayed + Sessions equivalente do desktop.
+// Le do localStorage (loadStats, totalPlayTime, loadRecents) e renderiza
+// 3 sub-secoes: cards de overview, top 5 mais jogados, atividade ultimos 7 dias.
+function StatsDashboardCard({ systems }) {
+  const stats = loadStats();
+  const recents = loadRecents();
+  const totalSec = totalPlayTime();
+  const totalGames = Object.keys(stats).length;
+  const totalSessions = Object.values(stats).reduce((acc, s) => acc + (s.sessions || 0), 0);
+  const sysSet = new Set(recents.map(r => r.systemId).filter(Boolean));
+
+  // Top 5 mais jogados
+  const topGames = Object.entries(stats)
+    .map(([gamePath, s]) => {
+      const recent = recents.find(r => r.gamePath === gamePath);
+      return {
+        path: gamePath,
+        name: recent?.gameName || gamePath.split(/[\\/]/).pop(),
+        systemId: recent?.systemId || "?",
+        systemColor: recent?.systemColor || "#7c3aed",
+        totalSec: s.totalSec || 0,
+        sessions: s.sessions || 0,
+      };
+    })
+    .filter(g => g.totalSec > 0)
+    .sort((a, b) => b.totalSec - a.totalSec)
+    .slice(0, 5);
+
+  // Sessoes ultimos 7 dias (barras simples)
+  const now = Date.now();
+  const dayMs = 86400000;
+  const last7 = [];
+  for (let d = 6; d >= 0; d--) {
+    const dayStart = now - d * dayMs;
+    const dayLabel = new Date(dayStart).toLocaleDateString("pt-BR", { weekday: "short" }).slice(0, 3);
+    let dayTotal = 0;
+    for (const s of Object.values(stats)) {
+      if (s.lastSession && s.lastSession >= dayStart - dayMs && s.lastSession <= dayStart) {
+        dayTotal += s.totalSec || 0;
+      }
+    }
+    last7.push({ label: dayLabel, total: dayTotal });
+  }
+  const maxDay = Math.max(1, ...last7.map(d => d.total));
+
+  return (
+    <section className="lmx-settings-card">
+      <div className="lmx-settings-label">Estatísticas</div>
+      <p className="lmx-settings-hint">Sua atividade no Ludex Mobile (local, este dispositivo).</p>
+
+      {/* Overview cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, marginTop: 10 }}>
+        <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.25)" }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: "#c4b5fd" }}>{formatPlayTime(totalSec)}</div>
+          <div style={{ fontSize: 11, color: "#a78bfa", textTransform: "uppercase", letterSpacing: 1 }}>Tempo total</div>
+        </div>
+        <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.25)" }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: "#86efac" }}>{totalGames}</div>
+          <div style={{ fontSize: 11, color: "#4ade80", textTransform: "uppercase", letterSpacing: 1 }}>Jogos</div>
+        </div>
+        <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(236,72,153,0.12)", border: "1px solid rgba(236,72,153,0.25)" }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: "#f9a8d4" }}>{totalSessions}</div>
+          <div style={{ fontSize: 11, color: "#f472b6", textTransform: "uppercase", letterSpacing: 1 }}>Sessões</div>
+        </div>
+        <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)" }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: "#93c5fd" }}>{sysSet.size}</div>
+          <div style={{ fontSize: 11, color: "#60a5fa", textTransform: "uppercase", letterSpacing: 1 }}>Sistemas</div>
+        </div>
+      </div>
+
+      {/* Top 5 mais jogados */}
+      {topGames.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#c4b5fd", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Mais jogados</div>
+          {topGames.map((g, idx) => (
+            <div key={g.path} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: idx < topGames.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+              <div style={{ width: 4, height: 28, background: g.systemColor, borderRadius: 2 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.name}</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>{g.sessions} sessão{g.sessions !== 1 ? "ões" : ""}</div>
+              </div>
+              <strong style={{ fontSize: 13, color: "#c4b5fd", whiteSpace: "nowrap" }}>{formatPlayTime(g.totalSec)}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Últimos 7 dias - barras simples */}
+      <div style={{ marginTop: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#c4b5fd", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Últimos 7 dias</div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 60 }}>
+          {last7.map((d, i) => (
+            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+              <div style={{
+                width: "100%",
+                height: `${Math.max(2, (d.total / maxDay) * 50)}px`,
+                background: "linear-gradient(180deg, #c4b5fd, #7c3aed)",
+                borderRadius: "3px 3px 0 0",
+                opacity: d.total > 0 ? 1 : 0.2,
+              }} title={`${d.label}: ${formatPlayTime(d.total)}`} />
+              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.45)" }}>{d.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }

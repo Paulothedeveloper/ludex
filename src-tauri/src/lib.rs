@@ -2465,14 +2465,20 @@ async fn fetch_cover(system_id: String, game_name: String) -> Option<String> {
 }
 
 /// Resolve a pasta de musica seguindo a mesma logica dos emuladores:
-/// 1. <install_dir>/music/  (bundlado pelo instalador)
-/// 2. <project_root>/music/  (dev: ao lado do exe em target/release)
+/// 1. Android: /storage/emulated/0/Ludex/music/ (user copia MP3s manualmente)
+/// 2. <install_dir>/music/  (bundlado pelo instalador desktop)
+/// 3. <project_root>/music/  (dev: ao lado do exe em target/release)
 fn resolve_music_dir() -> Option<PathBuf> {
+    #[cfg(target_os = "android")]
+    {
+        let android_music = PathBuf::from("/storage/emulated/0/Ludex/music");
+        let _ = std::fs::create_dir_all(&android_music);
+        if android_music.is_dir() { return Some(android_music); }
+    }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
             let bundled = parent.join("music");
             if bundled.is_dir() { return Some(bundled); }
-            // dev: src-tauri/target/release/playbox.exe -> ../../../music
             let dev = parent.join("..").join("..").join("..").join("music");
             if dev.is_dir() { return Some(dev); }
         }
