@@ -79,9 +79,14 @@ Se você ainda não tem ROMs num emulador específico, o Ludex mostra botões pr
 git clone https://github.com/EllaeMyApp/ludex.git
 cd ludex/app
 npm install
+# Baixa os 27 cores libretro do buildbot oficial (Windows .dll + Android .so).
+# ~1.5 GB total. Idempotente — pula cores ja presentes.
+pwsh ./scripts/setup-cores.ps1
 npm run tauri:dev    # dev mode com hot reload
 npm run tauri:build  # build de produção (NSIS .exe)
 ```
+
+Os cores ficam em `app/cores/` (gitignored porque `mame_libretro.dll` sozinho tem 360MB, acima do limite GitHub de 100MB).
 
 Stack: Tauri 2 + Rust 1.77+ + React 18 + Vite 5. Veja `app/src-tauri/Cargo.toml`.
 
