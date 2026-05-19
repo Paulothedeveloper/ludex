@@ -6483,6 +6483,79 @@ html[data-android="true"] body {
   50%      { opacity: 0.85; transform: translateX(-50%) scale(1.04); }
 }
 
+/* v0.8.51: GamepadStatusToast — notificacao de pad conectado/desconectado */
+.pb-gamepad-toast {
+  position: fixed;
+  top: 88px;
+  right: 24px;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px 14px 14px;
+  min-width: 280px;
+  max-width: 400px;
+  background: rgba(20, 18, 36, 0.92);
+  border: 1px solid;
+  border-radius: 12px;
+  backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  animation: pb-gamepad-toast-in 0.32s cubic-bezier(.22,1,.36,1);
+  pointer-events: none;
+}
+.pb-gamepad-toast.connected {
+  border-color: rgba(34, 197, 94, 0.5);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(34, 197, 94, 0.15) inset;
+}
+.pb-gamepad-toast.disconnected {
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(239, 68, 68, 0.15) inset;
+}
+.pb-gamepad-toast-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.pb-gamepad-toast.connected .pb-gamepad-toast-icon {
+  background: rgba(34, 197, 94, 0.18);
+  color: #22c55e;
+}
+.pb-gamepad-toast.disconnected .pb-gamepad-toast-icon {
+  background: rgba(239, 68, 68, 0.18);
+  color: #ef4444;
+}
+.pb-gamepad-toast-icon svg { width: 26px; height: 26px; }
+.pb-gamepad-toast-text { flex: 1; min-width: 0; }
+.pb-gamepad-toast-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  margin-bottom: 3px;
+}
+.pb-gamepad-toast.connected .pb-gamepad-toast-label { color: #22c55e; }
+.pb-gamepad-toast.disconnected .pb-gamepad-toast-label { color: #ef4444; }
+.pb-gamepad-toast-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #efeaff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pb-gamepad-toast-hint {
+  font-size: 11.5px;
+  color: rgba(220, 210, 240, 0.65);
+  margin-top: 3px;
+}
+@keyframes pb-gamepad-toast-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 /* v0.8.37: SystemSettingsModal */
 .lx-settings-body { padding: 0 24px 16px; max-height: 65vh; overflow-y: auto; }
 .lx-settings-hint {
