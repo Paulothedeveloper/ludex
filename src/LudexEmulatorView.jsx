@@ -8,7 +8,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { SystemSettingsModal } from "./LudexExtras";
 import { CloseIcon, SystemIcon } from "./ludexIcons";
 import { ToolsIcon as LxToolsIcon } from "./LudexExtras";
-import { hasOptionsForSystem, applySystemOptions, effectivePadMap } from "./ludexSystemOptions";
+import { hasOptionsForSystem, applySystemOptions, effectivePadMap, getFrontendConfig } from "./ludexSystemOptions";
 import { validRomExtension, invokeTimeout } from "./ludexUtils";
 
 export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
@@ -26,11 +26,35 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
   const audioCtxRef = useRef(null);
   const audioNextTimeRef = useRef(0);
   const audioRateRef = useRef(32040);
+  const audioGainNodeRef = useRef(null);
   const autoLoadDoneRef = useRef(false);
   const [ffSpeed, setFfSpeed] = useState(1);
   const [ffHold, setFfHold] = useState(false);
   const ffEffectiveRef = useRef(1);
-  useEffect(() => { ffEffectiveRef.current = ffHold ? Math.max(ffSpeed, 2) : ffSpeed; }, [ffHold, ffSpeed]);
+  // v0.9.1: config frontend reativa (audio gain, deadzone, rewind, FF speed, pixel filter, etc)
+  const [frontendCfg, setFrontendCfg] = useState(() => getFrontendConfig(system.id));
+  const cfgRef = useRef(frontendCfg);
+  useEffect(() => { cfgRef.current = frontendCfg; }, [frontendCfg]);
+  // FF default vem da config (3x / 4x / etc) quando user pressiona o botao
+  useEffect(() => {
+    const ffFromCfg = frontendCfg.ffSpeed || 4;
+    ffEffectiveRef.current = ffHold ? Math.max(ffSpeed, ffFromCfg) : ffSpeed;
+  }, [ffHold, ffSpeed, frontendCfg.ffSpeed]);
+  // Atualiza audio gain ao vivo quando user muda volume na UI
+  useEffect(() => {
+    if (audioGainNodeRef.current) {
+      audioGainNodeRef.current.gain.value = frontendCfg.audioGain ?? 1.0;
+    }
+  }, [frontendCfg.audioGain]);
+  // Escuta evento da SystemSettingsModal pra recarregar config sem precisar fechar/abrir modal
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail?.systemId && e.detail.systemId !== system.id) return;
+      setFrontendCfg(getFrontendConfig(system.id));
+    };
+    window.addEventListener("ludex:frontend-config-changed", handler);
+    return () => window.removeEventListener("ludex:frontend-config-changed", handler);
+  }, [system.id]);
 
   const KEY_MAP = useMemo(() => ({
     ArrowUp: 4, ArrowDown: 5, ArrowLeft: 6, ArrowRight: 7,
@@ -66,10 +90,19 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
           canvasRef.current.height = result.base_height;
         }
         try {
-          const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: result.sample_rate });
+          const ctx = new (window.AudioContext || window.webkitAudioContext)({
+            sampleRate: result.sample_rate,
+            // v0.9.1: latencyHint baixo se user habilitou modo baixa latencia
+            latencyHint: cfgRef.current.lowLatencyAudio ? "interactive" : "playback",
+          });
           await ctx.resume();
           audioCtxRef.current = ctx;
           audioNextTimeRef.current = ctx.currentTime + 0.05;
+          // v0.9.1: GainNode pra controle de volume em tempo real
+          const gain = ctx.createGain();
+          gain.gain.value = cfgRef.current.audioGain ?? 1.0;
+          gain.connect(ctx.destination);
+          audioGainNodeRef.current = gain;
         } catch (e) {
           console.warn("AudioContext init", e);
         }
@@ -150,7 +183,8 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
             }
             const source = actx.createBufferSource();
             source.buffer = audioBufNode;
-            source.connect(actx.destination);
+            // v0.9.1: conecta no GainNode (controlado pela UI) em vez de destination direto
+            source.connect(audioGainNodeRef.current || actx.destination);
             const ct = actx.currentTime;
             if (audioNextTimeRef.current < ct) {
               audioNextTimeRef.current = ct + 0.15;
@@ -353,8 +387,11 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
         } else if (!rbDown || !selectHeld) {
           lastComboRef.load = false;
         }
-        const ax = pad.axes[0] || 0;
-        const ay = pad.axes[1] || 0;
+        // v0.9.1: deadzone configuravel pelo user (defaults 15%)
+        const dz = cfgRef.current.deadzone ?? 0.15;
+        const applyDz = (v) => Math.abs(v) < dz ? 0 : Math.sign(v) * ((Math.abs(v) - dz) / (1 - dz));
+        const ax = applyDz(pad.axes[0] || 0);
+        const ay = applyDz(pad.axes[1] || 0);
         const hatX = pad.axes[6] || 0;
         const hatY = pad.axes[7] || 0;
         const dpUp    = !!pad.buttons[12]?.pressed || hatY < -0.5 || ay < -0.5;
@@ -379,10 +416,11 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
             invoke("libretro_set_input", { buttonId: libretroId, pressed }).catch(() => {});
           }
         }
-        const lx = Math.round((pad.axes[0] || 0) * 32767);
-        const ly = Math.round((pad.axes[1] || 0) * 32767);
-        const rx = Math.round((pad.axes[2] || 0) * 32767);
-        const ry = Math.round((pad.axes[3] || 0) * 32767);
+        // v0.9.1: aplica deadzone tambem nos analogicos mandados pro core
+        const lx = Math.round(applyDz(pad.axes[0] || 0) * 32767);
+        const ly = Math.round(applyDz(pad.axes[1] || 0) * 32767);
+        const rx = Math.round(applyDz(pad.axes[2] || 0) * 32767);
+        const ry = Math.round(applyDz(pad.axes[3] || 0) * 32767);
         if (lx !== lastAnalog[0] || ly !== lastAnalog[1]) {
           lastAnalog[0] = lx; lastAnalog[1] = ly;
           invoke("libretro_set_analog", { stick: 0, x: lx, y: ly }).catch(() => {});

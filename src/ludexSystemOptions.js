@@ -387,6 +387,59 @@ SYSTEM_OPTIONS.sms = SYSTEM_OPTIONS.md;
 SYSTEM_OPTIONS.gg = SYSTEM_OPTIONS.md;
 SYSTEM_OPTIONS.segacd = SYSTEM_OPTIONS.md;
 
+// ===== v0.9.1: opcoes do FRONTEND (Ludex), nao do core libretro =====
+// Aplicadas no LudexEmulatorView (audio gain, deadzone analogica, rewind,
+// fast-forward speed). Chave comeca com 'ludex_' pra nao colidir com cores.
+// Persistidas no mesmo localStorage por sistema. Atualizam em tempo real.
+const FRONTEND_OPTIONS = [
+  sel('ludex_audio_volume', 'Volume Áudio', 'audio',
+    ['0% (mudo)', '25%', '50%', '75%', '100% (normal)', '125%', '150%', '200% (amplificado)'],
+    '100% (normal)'),
+  sel('ludex_audio_low_latency', 'Modo Baixa Latência', 'audio',
+    ['enabled', 'disabled'],
+    'enabled'),
+  sel('ludex_stick_deadzone', 'Deadzone Analógico', 'input',
+    ['0%', '5%', '10%', '15%', '20%', '25%', '30%'],
+    '15%'),
+  sel('ludex_pad_vibration', 'Vibração do Controle', 'input',
+    ['enabled', 'disabled'],
+    'enabled'),
+  sel('ludex_rewind', 'Rewind (voltar no tempo)', 'sistema',
+    ['disabled', 'enabled'],
+    'disabled'),
+  sel('ludex_rewind_buffer_mb', 'Buffer Rewind (RAM)', 'sistema',
+    ['16 MB (~10s)', '32 MB (~20s)', '64 MB (~40s)', '128 MB (~80s)', '256 MB (~160s)'],
+    '64 MB (~40s)'),
+  sel('ludex_fast_forward_speed', 'Velocidade Fast-Forward', 'performance',
+    ['2x', '3x', '4x', '5x', '8x', '10x', 'sem limite'],
+    '4x'),
+  sel('ludex_auto_save_state_on_exit', 'Auto Save State ao Sair', 'sistema',
+    ['enabled', 'disabled'],
+    'enabled'),
+  sel('ludex_pixel_filter', 'Filtro Visual', 'video',
+    ['none', 'CRT Scanlines (sutil)', 'CRT Scanlines (forte)', 'LCD Grid', 'Nearest Pixels (chunky)', 'Smooth (bilinear)'],
+    'none'),
+  sel('ludex_show_fps', 'Mostrar FPS', 'video',
+    ['disabled', 'enabled'],
+    'disabled'),
+];
+
+// Adiciona FRONTEND_OPTIONS no fim de cada sistema (preserva opcoes especificas do core)
+for (const sysId of Object.keys(SYSTEM_OPTIONS)) {
+  SYSTEM_OPTIONS[sysId] = [...SYSTEM_OPTIONS[sysId], ...FRONTEND_OPTIONS];
+}
+
+// Lista de opcoes que NAO precisam de reload (frontend) — UI usa pra esconder badge
+export const HOT_RELOAD_KEYS = new Set([
+  ...FRONTEND_OPTIONS.map(o => o.key),
+  // Opcoes do core que aceitam hot-reload via GET_VARIABLE_UPDATE
+  // (cores modernos suportam todos, mas algumas mudancas de renderer
+  // requerem rebuild do contexto)
+]);
+
+// Opcoes que SAO de frontend (nao manda pro core via libretro_set_option)
+export const FRONTEND_OPTION_KEYS = new Set(FRONTEND_OPTIONS.map(o => o.key));
+
 // ===== Helpers de persistencia + apply =====
 
 const STORAGE_PREFIX = 'ludex.options.';
@@ -408,12 +461,44 @@ export function clearSystemOptions(systemId) {
   try { localStorage.removeItem(STORAGE_PREFIX + systemId); } catch {}
 }
 
-// Aplica todas opcoes salvas de um sistema (chamado antes de load_game)
+// Aplica todas opcoes salvas de um sistema (chamado antes de load_game).
+// v0.9.1: skip opcoes frontend-only (ludex_*) — essas sao lidas pelo EmulatorView
+// diretamente do localStorage, nao mandam pro core libretro.
 export async function applySystemOptions(systemId) {
   const values = loadSystemOptions(systemId);
   for (const [key, value] of Object.entries(values)) {
+    if (FRONTEND_OPTION_KEYS && FRONTEND_OPTION_KEYS.has(key)) continue;
     try { await invoke('libretro_set_option', { key, value }); } catch {}
   }
+}
+
+// v0.9.1: helper pra LudexEmulatorView ler config frontend efetiva.
+// Retorna {audioGain, deadzone, rewindEnabled, rewindBufferMb, ffSpeed, autoSaveOnExit, pixelFilter, showFps}
+// com fallback pros defaults se nao houver salvo.
+export function getFrontendConfig(systemId) {
+  const values = loadSystemOptions(systemId);
+  const parsePercent = (v, def) => {
+    if (!v) return def;
+    const m = String(v).match(/(\d+)%/);
+    return m ? parseInt(m[1]) / 100 : def;
+  };
+  const parseInt0 = (v, def) => {
+    if (!v) return def;
+    const m = String(v).match(/(\d+)/);
+    return m ? parseInt(m[1]) : def;
+  };
+  return {
+    audioGain:        parsePercent(values.ludex_audio_volume, 1.0),
+    lowLatencyAudio:  values.ludex_audio_low_latency !== 'disabled',
+    deadzone:         parsePercent(values.ludex_stick_deadzone, 0.15),
+    vibration:        values.ludex_pad_vibration !== 'disabled',
+    rewindEnabled:    values.ludex_rewind === 'enabled',
+    rewindBufferMb:   parseInt0(values.ludex_rewind_buffer_mb, 64),
+    ffSpeed:          values.ludex_fast_forward_speed === 'sem limite' ? 99 : parseInt0(values.ludex_fast_forward_speed, 4),
+    autoSaveOnExit:   (values.ludex_auto_save_state_on_exit ?? 'enabled') === 'enabled',
+    pixelFilter:      values.ludex_pixel_filter || 'none',
+    showFps:          values.ludex_show_fps === 'enabled',
+  };
 }
 
 // Aplica opcoes de TODOS sistemas (chamado no boot)

@@ -253,11 +253,19 @@ pub static OPTION_OVERRIDES: OnceLock<StdMutex<std::collections::HashMap<String,
 pub fn option_overrides() -> &'static StdMutex<std::collections::HashMap<String, &'static CString>> {
     OPTION_OVERRIDES.get_or_init(|| StdMutex::new(std::collections::HashMap::new()))
 }
+
+// v0.9.1: flag dirty pra hot-reload de opcoes durante gameplay.
+// Setada quando user muda config na UI, lida (e zerada) pelo core via
+// GET_VARIABLE_UPDATE -> core re-le todas as variaveis via GET_VARIABLE.
+pub static OPTIONS_DIRTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 pub fn set_option_override(key: String, value: String) {
     if let Ok(cs) = CString::new(value) {
         let leaked: &'static CString = Box::leak(Box::new(cs));
         let mut m = option_overrides().lock().unwrap();
         m.insert(key, leaked);
+        // Sinaliza pro core re-ler as variaveis (hot-reload)
+        OPTIONS_DIRTY.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 }
 
@@ -463,7 +471,13 @@ extern "C" fn cb_environment(cmd: c_uint, data: *mut c_void) -> bool {
             true
         },
         RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE => unsafe {
-            if !data.is_null() { *(data as *mut bool) = false; }
+            // v0.9.1: retorna true 1x quando o user mudou opcao na UI.
+            // Core entao re-le via GET_VARIABLE -> override pega efeito sem reload.
+            if !data.is_null() {
+                let dirty = OPTIONS_DIRTY.swap(false, std::sync::atomic::Ordering::SeqCst);
+                *(data as *mut bool) = dirty;
+                if dirty { log::info!("[libretro] GET_VARIABLE_UPDATE -> true (user changed options)"); }
+            }
             true
         },
         // v0.8.27: LOG_INTERFACE — cores como PCSX2 segfaultam se nao tiver

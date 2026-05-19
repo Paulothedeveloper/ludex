@@ -4,6 +4,7 @@ import {
   getOptionsForSystem, loadSystemOptions, saveSystemOptions, clearSystemOptions,
   LIBRETRO_BUTTONS, DEFAULT_PAD_MAP, effectivePadMap,
   remapPadButton, clearPadMap, padIdxLabel, padIdxForLibretroBtn,
+  FRONTEND_OPTION_KEYS,
 } from "./ludexSystemOptions";
 
 /* SVG icons inline — sem emoji em UI de producao. Stroke 1.6, 18x18 default. */
@@ -425,6 +426,13 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
     const next = { ...values, [key]: value };
     setValues(next);
     saveSystemOptions(systemId, next);
+    // v0.9.1: opcoes 'ludex_*' sao do frontend (audio gain, deadzone, etc),
+    // nao mandam pro core libretro. EmulatorView le elas direto do localStorage.
+    if (FRONTEND_OPTION_KEYS && FRONTEND_OPTION_KEYS.has(key)) {
+      // Dispatch evento pra EmulatorView (se ouvindo) atualizar config em tempo real
+      try { window.dispatchEvent(new CustomEvent("ludex:frontend-config-changed", { detail: { systemId, key, value } })); } catch {}
+      return;
+    }
     try { await invoke("libretro_set_option", { key, value }); } catch (e) { console.error(e); }
   };
 
@@ -432,21 +440,32 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
     setValues({});
     clearSystemOptions(systemId);
     for (const opt of options) {
+      if (FRONTEND_OPTION_KEYS && FRONTEND_OPTION_KEYS.has(opt.key)) continue;
       try { await invoke("libretro_set_option", { key: opt.key, value: opt.default }); } catch {}
     }
+    try { window.dispatchEvent(new CustomEvent("ludex:frontend-config-changed", { detail: { systemId, reset: true } })); } catch {}
   };
 
   return (
     <div className="lx-settings-body">
+      <p className="lx-settings-hint" style={{ marginBottom: 12 }}>
+        ⚡ Opções <strong>ludex_*</strong> (volume, deadzone, rewind, filtros) aplicam <strong>na hora</strong>, sem reiniciar.
+        <br />
+        🔄 Demais opções (resolução, renderer, etc) pegam efeito no próximo "Jogar" — alguns cores recarregam ao vivo, outros só depois.
+      </p>
       {categories.map((cat) => (
         <section key={cat} className="lx-settings-section">
           <h4 className="lx-settings-cat">{CATEGORY_LABELS[cat] || cat}</h4>
           <div className="lx-settings-rows">
             {byCategory[cat].map((opt) => {
               const current = values[opt.key] ?? opt.default;
+              const isHotReload = opt.key.startsWith('ludex_');
               return (
                 <div key={opt.key} className="lx-settings-row">
-                  <label className="lx-settings-label" title={opt.key}>{opt.label}</label>
+                  <label className="lx-settings-label" title={opt.key}>
+                    {opt.label}
+                    {isHotReload && <span style={{ marginLeft: 6, fontSize: '0.7em', color: '#22c55e' }} title="Aplica em tempo real">⚡</span>}
+                  </label>
                   <select
                     className="lx-settings-select"
                     value={current}
@@ -463,7 +482,7 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
         </section>
       ))}
       <button className="lx-settings-btn lx-settings-btn-ghost" onClick={resetAll}
-        style={{ marginTop: 8 }}>Restaurar Defaults de Vídeo/Performance</button>
+        style={{ marginTop: 8 }}>Restaurar Defaults</button>
     </div>
   );
 }
