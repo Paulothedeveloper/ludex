@@ -181,16 +181,30 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
               left[i]  = i16[i * 2]     / 32768;
               right[i] = i16[i * 2 + 1] / 32768;
             }
-            const source = actx.createBufferSource();
-            source.buffer = audioBufNode;
-            // v0.9.1: conecta no GainNode (controlado pela UI) em vez de destination direto
-            source.connect(audioGainNodeRef.current || actx.destination);
             const ct = actx.currentTime;
-            if (audioNextTimeRef.current < ct) {
-              audioNextTimeRef.current = ct + 0.15;
+            const bufferedAhead = audioNextTimeRef.current - ct;
+            const lowLat = cfgRef.current.lowLatencyAudio;
+            // v0.9.1: scheduling robusto pra eliminar stutter.
+            // Lead window: 80ms low-lat, 200ms normal (mais buffer = menos stutter).
+            // Drop window: se acumulou >500ms ahead, dropa esse chunk (evita audio em runaway).
+            const leadMs = lowLat ? 0.08 : 0.20;
+            const dropMs = 0.50;
+            if (bufferedAhead > dropMs) {
+              // Buffer cresceu demais (JS tava rapido + emu rapido). Pula sem agendar.
+              // audioNextTime nao avanca; proximo chunk encontra buffer menor.
+              // Apenas avanca o timestamp pra acompanhar o "tempo gasto"
+              audioNextTimeRef.current = ct + leadMs;
+            } else {
+              const source = actx.createBufferSource();
+              source.buffer = audioBufNode;
+              source.connect(audioGainNodeRef.current || actx.destination);
+              // Se ficou atrasado, reset com lead pra dar respiro
+              if (audioNextTimeRef.current < ct + 0.01) {
+                audioNextTimeRef.current = ct + leadMs;
+              }
+              source.start(audioNextTimeRef.current);
+              audioNextTimeRef.current += frames / sampleRate;
             }
-            source.start(audioNextTimeRef.current);
-            audioNextTimeRef.current += frames / sampleRate;
           }
         }
       } catch (e) {

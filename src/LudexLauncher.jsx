@@ -111,7 +111,7 @@ const SYSTEM_CATEGORIES = [
   { id: "atari",     name: "ATARI",       systems: ["a2600","lynx","jaguar"] },
   { id: "arcade",    name: "ARCADE",      systems: ["arcade"] },
   { id: "handheld",  name: "PORTATEIS",   systems: ["ws","ngpc"] },
-  { id: "outros",    name: "OUTROS",      systems: ["tg16","threedo","msx","c64","zx","amiga","retro"] },
+  { id: "outros",    name: "OUTROS",      systems: ["tg16","threedo","msx","c64","zx","amiga"] },
 ];
 
 function CategoryIcon({ id }) {

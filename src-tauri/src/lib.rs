@@ -700,16 +700,9 @@ const EMULATORS: &[EmulatorConfig] = &[
         launch_args: &[],
         igdb_platform: 62,
     },
-    EmulatorConfig {
-        id: "retro",
-        name: "RETRO",
-        color: "#f59e0b",
-        folder_name: "RETRO",
-        emulator_rel: "RETROARCH\\retroarch.exe",
-        extensions: &["nes", "sfc", "smc", "n64", "z64", "gba", "gb", "gbc", "md", "gen", "zip"],
-        launch_args: &[],
-        igdb_platform: 0,
-    },
+    // v0.9.1: sistema "retro" removido. Era um fallback que abria RetroArch externo,
+    // mas agora todos os sistemas listados acima ja tem libretro embarcado. Manter
+    // confundia o user (tentava abrir um app externo que nao existe na pasta Ludex).
 ];
 
 /// Caminhos sao resolvidos em ordem de prioridade:
@@ -1309,6 +1302,44 @@ fn scan_roms(roms_root: Option<String>) -> Vec<SystemInfo> {
     EMULATORS.iter().map(|cfg| scan_system(&root_path, &emu_root, cfg)).collect()
 }
 
+/// v0.9.1: Reescreve paths absolutos do xemu.toml (BIOS, HDD, snapshots etc)
+/// pra apontar pros arquivos que realmente existem no projeto atual. Necessario
+/// pq o user moveu Playbox -> Ludex e o config ficou stale ("Failed to open BootROM").
+/// Procura keys conhecidas e troca prefixo D:\Projetos do Claude\Playbox\ -> emu_dir.
+fn rewrite_xemu_paths(toml_path: &std::path::Path, emu_dir: &std::path::Path) {
+    let bios_dir = emu_dir.join("bios");
+    let hdd_path = bios_dir.join("xbox_hdd.qcow2");
+    let mcpx_path = bios_dir.join("mcpx_1.0.bin");
+    let bios_bin  = bios_dir.join("Complex_4627.bin");
+    if !mcpx_path.is_file() || !bios_bin.is_file() {
+        log::warn!("[xemu] BIOS files nao encontrados em {:?}, pulando rewrite", bios_dir);
+        return;
+    }
+    let new_contents = format!(
+        "[general]\nshow_welcome = false\n\n[sys.files]\nbootrom_path = '{}'\nflashrom_path = '{}'\neeprom_path = '{}'\n\n[sys]\nhard_drive = '{}'\n",
+        mcpx_path.display().to_string().replace('\\', "/"),
+        bios_bin.display().to_string().replace('\\', "/"),
+        bios_dir.join("eeprom.bin").display().to_string().replace('\\', "/"),
+        hdd_path.display().to_string().replace('\\', "/"),
+    );
+    // Se o arquivo ja existe e tem o path correto, nao reescreve (preserva customizacoes do user)
+    if let Ok(existing) = std::fs::read_to_string(toml_path) {
+        let mcpx_str = mcpx_path.display().to_string().replace('\\', "/");
+        if existing.contains(&mcpx_str) {
+            return; // ja ta certo
+        }
+        // Se existe MAS tem path antigo (Playbox), reescreve
+        if existing.contains("Playbox") || existing.contains("BootROM") {
+            log::info!("[xemu] reescrevendo xemu.toml com paths Ludex (era Playbox)");
+        }
+    }
+    if let Err(e) = std::fs::write(toml_path, new_contents) {
+        log::warn!("[xemu] falha ao reescrever xemu.toml: {}", e);
+    } else {
+        log::info!("[xemu] xemu.toml atualizado: bios={:?}", mcpx_path);
+    }
+}
+
 #[tauri::command]
 fn launch_game(system_id: String, rom_path: String) -> Result<(), String> {
     let cfg = EMULATORS
@@ -1323,6 +1354,16 @@ fn launch_game(system_id: String, rom_path: String) -> Result<(), String> {
     let rom = PathBuf::from(&rom_path);
     if !rom.is_file() {
         return Err(format!("ROM nao encontrada em: {}", rom_path));
+    }
+
+    // v0.9.1: xemu usa xemu.toml com paths absolutos pro BIOS. Se o user moveu
+    // o projeto de Playbox -> Ludex, o config fica stale e xemu falha com
+    // "Failed to open BootROM". Reescreve paths automaticamente antes de launch.
+    if system_id == "xbox" {
+        if let Some(emu_dir) = exe.parent() {
+            let toml_path = emu_dir.join("xemu.toml");
+            rewrite_xemu_paths(&toml_path, emu_dir);
+        }
     }
 
     let rom_name = rom.file_stem()
