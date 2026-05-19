@@ -4543,6 +4543,10 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
+  /* v0.9.1: fundo solido direto no root (era so .lx-firstrun-bg z-index:-1
+     que falhava em alguns contextos de stacking -> launcher por baixo
+     vazava transparente). */
+  background: linear-gradient(135deg, #050015 0%, #0a0420 100%);
   animation: lxFadeIn 380ms ease both;
 }
 .lx-firstrun-bg {
@@ -4550,9 +4554,15 @@
   inset: 0;
   background:
     radial-gradient(ellipse 800px 600px at 30% 30%, rgba(124, 58, 237, 0.35), transparent 70%),
-    radial-gradient(ellipse 700px 500px at 70% 70%, rgba(236, 72, 153, 0.20), transparent 70%),
-    linear-gradient(135deg, #050015 0%, #0a0420 100%);
-  z-index: -1;
+    radial-gradient(ellipse 700px 500px at 70% 70%, rgba(236, 72, 153, 0.20), transparent 70%);
+  /* z-index 0 em vez de -1 — fica entre o bg do root e a card, e nao tenta
+     escapar do stacking context. */
+  z-index: 0;
+  pointer-events: none;
+}
+.lx-firstrun-card {
+  position: relative;
+  z-index: 1;
 }
 
 .lx-firstrun-card {
@@ -4717,11 +4727,15 @@
   position: absolute;
   inset: 0;
   pointer-events: auto;
+  z-index: 1;
   animation: lxFadeIn 240ms ease both;
 }
 .lx-tour-banner {
   position: absolute;
   pointer-events: auto;
+  /* v0.9.1: z-index 2 garante que o banner fica SEMPRE acima do spotlight SVG.
+     Sem isso, em alguns webviews o SVG capturava clicks dos botoes do banner. */
+  z-index: 2;
   padding: 22px 24px 20px;
   border-radius: 18px;
   background: rgba(20, 12, 38, 0.62);

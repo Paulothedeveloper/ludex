@@ -378,14 +378,14 @@ export default function LudexOnboarding({ onComplete }) {
         <div className="lx-firstrun-card lx-firstrun-card-intro">
           <div className="lx-firstrun-logo">L U D E X</div>
           <p className="lx-firstrun-sub">
-            Sua biblioteca retro em um lugar só — 27+ sistemas embedded, controle nativo, save states, RetroAchievements e Discord Rich Presence. Antes de começar, deixa a gente te mostrar tudo em 5 passos rápidos.
+            Sua biblioteca retro em um lugar só — 27+ sistemas embedded, controle nativo, save states, RetroAchievements e Discord Rich Presence.
           </p>
-          <div className="lx-firstrun-actions" style={{ justifyContent: "center", marginTop: 22 }}>
-            <button className="lx-tour-btn lx-tour-btn-ghost" onClick={() => setPhase("profile")}>
-              Pular tour
+          <div className="lx-firstrun-actions" style={{ justifyContent: "center", marginTop: 22, flexWrap: "wrap" }}>
+            <button className="lx-tour-btn lx-tour-btn-primary" onClick={() => setPhase("profile")}>
+              Continuar
             </button>
-            <button className="lx-tour-btn lx-tour-btn-primary" onClick={() => setPhase("tour")}>
-              Começar tour
+            <button className="lx-tour-btn lx-tour-btn-ghost" onClick={() => setPhase("tour")}>
+              Ver tour guiado (opcional)
             </button>
           </div>
         </div>
