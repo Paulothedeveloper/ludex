@@ -27,6 +27,10 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
   const audioNextTimeRef = useRef(0);
   const audioRateRef = useRef(32040);
   const audioGainNodeRef = useRef(null);
+  // v0.9.1: fila de audio chunks pra descolar do frame loop. Audio drainer
+  // setInterval(4ms) processa independente, eliminando stutter por race entre
+  // video render e audio scheduling.
+  const audioQueueRef = useRef([]);
   const autoLoadDoneRef = useRef(false);
   const [ffSpeed, setFfSpeed] = useState(1);
   const [ffHold, setFfHold] = useState(false);
@@ -121,6 +125,49 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
     };
   }, [system.id, game.path, system.libretro_core]);
 
+  // v0.9.1: audio drainer dedicado — processa fila a cada 4ms independente
+  // do frame loop. Elimina stutter por race condition entre rAF e audio sched.
+  useEffect(() => {
+    if (!info) return;
+    const id = setInterval(() => {
+      const actx = audioCtxRef.current;
+      if (!actx || audioQueueRef.current.length === 0) return;
+      const sampleRate = audioRateRef.current;
+      const lowLat = cfgRef.current.lowLatencyAudio;
+      const leadMs = lowLat ? 0.06 : 0.18;
+      const dropMs = 0.40;
+      // Drena tudo que ta na queue
+      while (audioQueueRef.current.length > 0) {
+        const i16 = audioQueueRef.current.shift();
+        const frames = i16.length / 2;
+        if (frames === 0) continue;
+        const ct = actx.currentTime;
+        const bufferedAhead = audioNextTimeRef.current - ct;
+        // Se acumulou demais ahead, dropa esse chunk
+        if (bufferedAhead > dropMs) {
+          audioNextTimeRef.current = ct + leadMs;
+          continue;
+        }
+        const audioBufNode = actx.createBuffer(2, frames, sampleRate);
+        const left = audioBufNode.getChannelData(0);
+        const right = audioBufNode.getChannelData(1);
+        for (let i = 0; i < frames; i++) {
+          left[i]  = i16[i * 2]     / 32768;
+          right[i] = i16[i * 2 + 1] / 32768;
+        }
+        const source = actx.createBufferSource();
+        source.buffer = audioBufNode;
+        source.connect(audioGainNodeRef.current || actx.destination);
+        if (audioNextTimeRef.current < ct + 0.005) {
+          audioNextTimeRef.current = ct + leadMs;
+        }
+        source.start(audioNextTimeRef.current);
+        audioNextTimeRef.current += frames / sampleRate;
+      }
+    }, 4); // 250 Hz polling = audio drain quase imediato
+    return () => clearInterval(id);
+  }, [info]);
+
   // Loop de frames
   useEffect(() => {
     if (!info) return;
@@ -163,48 +210,22 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
           const imageData = new ImageData(rgba, w, h);
           ctx.putImageData(imageData, 0, 0);
         }
+        // v0.9.1: audio coletado mas NAO escalonado aqui. Empilha na queue,
+        // o setInterval do audio drainer (mais rapido que rAF) processa.
         const audioBuf = await invoke("libretro_take_audio");
-        const actx = audioCtxRef.current;
-        if (audioBuf && audioBuf.byteLength > 0 && actx) {
-          const i16 = new Int16Array(
+        if (audioBuf && audioBuf.byteLength > 0) {
+          // Copia bytes pra um Int16Array proprio (audioBuf vira invalido apos retorno)
+          const srcView = new Int16Array(
             audioBuf.buffer ? audioBuf.buffer : audioBuf,
             audioBuf.byteOffset || 0,
             audioBuf.byteLength / 2
           );
-          const frames = i16.length / 2;
-          if (frames > 0) {
-            const sampleRate = audioRateRef.current;
-            const audioBufNode = actx.createBuffer(2, frames, sampleRate);
-            const left = audioBufNode.getChannelData(0);
-            const right = audioBufNode.getChannelData(1);
-            for (let i = 0; i < frames; i++) {
-              left[i]  = i16[i * 2]     / 32768;
-              right[i] = i16[i * 2 + 1] / 32768;
-            }
-            const ct = actx.currentTime;
-            const bufferedAhead = audioNextTimeRef.current - ct;
-            const lowLat = cfgRef.current.lowLatencyAudio;
-            // v0.9.1: scheduling robusto pra eliminar stutter.
-            // Lead window: 80ms low-lat, 200ms normal (mais buffer = menos stutter).
-            // Drop window: se acumulou >500ms ahead, dropa esse chunk (evita audio em runaway).
-            const leadMs = lowLat ? 0.08 : 0.20;
-            const dropMs = 0.50;
-            if (bufferedAhead > dropMs) {
-              // Buffer cresceu demais (JS tava rapido + emu rapido). Pula sem agendar.
-              // audioNextTime nao avanca; proximo chunk encontra buffer menor.
-              // Apenas avanca o timestamp pra acompanhar o "tempo gasto"
-              audioNextTimeRef.current = ct + leadMs;
-            } else {
-              const source = actx.createBufferSource();
-              source.buffer = audioBufNode;
-              source.connect(audioGainNodeRef.current || actx.destination);
-              // Se ficou atrasado, reset com lead pra dar respiro
-              if (audioNextTimeRef.current < ct + 0.01) {
-                audioNextTimeRef.current = ct + leadMs;
-              }
-              source.start(audioNextTimeRef.current);
-              audioNextTimeRef.current += frames / sampleRate;
-            }
+          const copy = new Int16Array(srcView.length);
+          copy.set(srcView);
+          audioQueueRef.current.push(copy);
+          // Cap da queue pra evitar memory bloat se audio drainer falhar
+          if (audioQueueRef.current.length > 30) {
+            audioQueueRef.current.splice(0, audioQueueRef.current.length - 20);
           }
         }
       } catch (e) {
