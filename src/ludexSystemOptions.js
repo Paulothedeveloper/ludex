@@ -523,6 +523,53 @@ export const HOT_RELOAD_KEYS = new Set([
 // Opcoes que SAO de frontend (nao manda pro core via libretro_set_option)
 export const FRONTEND_OPTION_KEYS = new Set(FRONTEND_OPTIONS.map(o => o.key));
 
+// v0.9.1: opcoes que o core marca como "(Restart)" — mudancas so aplicam no
+// proximo Jogar, nao em tempo real. UI deve mostrar badge claro e toast quando
+// user mexer. Lista extraida dos logs SET_VARIABLES de cada core.
+export const RESTART_REQUIRED_KEYS = new Set([
+  // PCSX2 — todos marcados (Restart) no SET_VARIABLES
+  'pcsx2_fastboot',
+  'pcsx2_fastcdvd',
+  'pcsx2_shared_memory_cards',
+  'pcsx2_upscale_multiplier',
+  'pcsx2_widescreen_hint',
+  'pcsx2_nointerlacing_hint',
+  'pcsx2_game_enhancements_hint',
+  'pcsx2_uncapped_framerate_hint',
+  // Dolphin — mudancas de renderer/resolucao precisam reinit
+  'dolphin_efb_scale',
+  'dolphin_cpu_core',
+  'dolphin_renderer',
+  'dolphin_audio_mixer_rate',
+  // PS1 swanstation — algumas precisam reinit GPU
+  'swanstation_GPU_Renderer',
+  'swanstation_GPU_ResolutionScale',
+  // PSP
+  'ppsspp_internal_resolution',
+  'ppsspp_cpu_core',
+  // N64
+  'mupen64plus-43screensize',
+  'mupen64plus-169screensize',
+  // 3DS
+  'citra_resolution_factor',
+  'citra_use_hw_renderer',
+  // DS
+  'melonds_opengl_resolution',
+  'melonds_renderer',
+  // Dreamcast
+  'flycast_internal_resolution',
+  // BIOS/regiao quase sempre precisa restart
+  'pcsx2_bios',
+  'flycast_region',
+  'citra_region_value',
+  'dolphin_language',
+  'melonds_console_mode',
+]);
+
+export function requiresRestart(key) {
+  return RESTART_REQUIRED_KEYS.has(key);
+}
+
 // ===== Helpers de persistencia + apply =====
 
 const STORAGE_PREFIX = 'ludex.options.';

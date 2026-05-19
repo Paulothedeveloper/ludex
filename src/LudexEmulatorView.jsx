@@ -24,13 +24,11 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
   const [discInfo, setDiscInfo] = useState(null);
   const [discMenuOpen, setDiscMenuOpen] = useState(false);
   const audioCtxRef = useRef(null);
-  const audioNextTimeRef = useRef(0);
   const audioRateRef = useRef(32040);
   const audioGainNodeRef = useRef(null);
-  // v0.9.1: fila de audio chunks pra descolar do frame loop. Audio drainer
-  // setInterval(4ms) processa independente, eliminando stutter por race entre
-  // video render e audio scheduling.
-  const audioQueueRef = useRef([]);
+  // v0.9.1: AudioWorklet roda na audio thread = zero stutter independente do main.
+  // workletNodeRef.port.postMessage(samples) e o jeito de mandar audio do main.
+  const workletNodeRef = useRef(null);
   const autoLoadDoneRef = useRef(false);
   const [ffSpeed, setFfSpeed] = useState(1);
   const [ffHold, setFfHold] = useState(false);
@@ -96,19 +94,26 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
         try {
           const ctx = new (window.AudioContext || window.webkitAudioContext)({
             sampleRate: result.sample_rate,
-            // v0.9.1: latencyHint baixo se user habilitou modo baixa latencia
             latencyHint: cfgRef.current.lowLatencyAudio ? "interactive" : "playback",
           });
           await ctx.resume();
           audioCtxRef.current = ctx;
-          audioNextTimeRef.current = ctx.currentTime + 0.05;
-          // v0.9.1: GainNode pra controle de volume em tempo real
+          // v0.9.1: AudioWorklet - rodando na audio thread, imune a stutter do main
+          await ctx.audioWorklet.addModule("/ludex-audio-worklet.js");
+          const workletNode = new AudioWorkletNode(ctx, "ludex-audio-processor", {
+            numberOfInputs: 0,
+            numberOfOutputs: 1,
+            outputChannelCount: [2],
+            processorOptions: { sampleRate: result.sample_rate },
+          });
           const gain = ctx.createGain();
           gain.gain.value = cfgRef.current.audioGain ?? 1.0;
+          workletNode.connect(gain);
           gain.connect(ctx.destination);
           audioGainNodeRef.current = gain;
+          workletNodeRef.current = workletNode;
         } catch (e) {
-          console.warn("AudioContext init", e);
+          console.warn("AudioContext/Worklet init", e);
         }
       } catch (e) {
         console.error("libretro_load_game", e);
@@ -125,48 +130,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
     };
   }, [system.id, game.path, system.libretro_core]);
 
-  // v0.9.1: audio drainer dedicado — processa fila a cada 4ms independente
-  // do frame loop. Elimina stutter por race condition entre rAF e audio sched.
-  useEffect(() => {
-    if (!info) return;
-    const id = setInterval(() => {
-      const actx = audioCtxRef.current;
-      if (!actx || audioQueueRef.current.length === 0) return;
-      const sampleRate = audioRateRef.current;
-      const lowLat = cfgRef.current.lowLatencyAudio;
-      const leadMs = lowLat ? 0.06 : 0.18;
-      const dropMs = 0.40;
-      // Drena tudo que ta na queue
-      while (audioQueueRef.current.length > 0) {
-        const i16 = audioQueueRef.current.shift();
-        const frames = i16.length / 2;
-        if (frames === 0) continue;
-        const ct = actx.currentTime;
-        const bufferedAhead = audioNextTimeRef.current - ct;
-        // Se acumulou demais ahead, dropa esse chunk
-        if (bufferedAhead > dropMs) {
-          audioNextTimeRef.current = ct + leadMs;
-          continue;
-        }
-        const audioBufNode = actx.createBuffer(2, frames, sampleRate);
-        const left = audioBufNode.getChannelData(0);
-        const right = audioBufNode.getChannelData(1);
-        for (let i = 0; i < frames; i++) {
-          left[i]  = i16[i * 2]     / 32768;
-          right[i] = i16[i * 2 + 1] / 32768;
-        }
-        const source = actx.createBufferSource();
-        source.buffer = audioBufNode;
-        source.connect(audioGainNodeRef.current || actx.destination);
-        if (audioNextTimeRef.current < ct + 0.005) {
-          audioNextTimeRef.current = ct + leadMs;
-        }
-        source.start(audioNextTimeRef.current);
-        audioNextTimeRef.current += frames / sampleRate;
-      }
-    }, 4); // 250 Hz polling = audio drain quase imediato
-    return () => clearInterval(id);
-  }, [info]);
+  // v0.9.1: drainer removido — AudioWorklet processa direto na audio thread.
 
   // Loop de frames
   useEffect(() => {
@@ -210,23 +174,21 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
           const imageData = new ImageData(rgba, w, h);
           ctx.putImageData(imageData, 0, 0);
         }
-        // v0.9.1: audio coletado mas NAO escalonado aqui. Empilha na queue,
-        // o setInterval do audio drainer (mais rapido que rAF) processa.
+        // v0.9.1: posta audio direto pro AudioWorklet (audio thread)
         const audioBuf = await invoke("libretro_take_audio");
-        if (audioBuf && audioBuf.byteLength > 0) {
-          // Copia bytes pra um Int16Array proprio (audioBuf vira invalido apos retorno)
+        if (audioBuf && audioBuf.byteLength > 0 && workletNodeRef.current) {
           const srcView = new Int16Array(
             audioBuf.buffer ? audioBuf.buffer : audioBuf,
             audioBuf.byteOffset || 0,
             audioBuf.byteLength / 2
           );
-          const copy = new Int16Array(srcView.length);
-          copy.set(srcView);
-          audioQueueRef.current.push(copy);
-          // Cap da queue pra evitar memory bloat se audio drainer falhar
-          if (audioQueueRef.current.length > 30) {
-            audioQueueRef.current.splice(0, audioQueueRef.current.length - 20);
-          }
+          // Copia pro Int16Array proprio (audioBuf eh transferivel mas seguro copiar)
+          const copy = new Int16Array(srcView);
+          // Transferable: zero-copy do main pra audio thread
+          workletNodeRef.current.port.postMessage(
+            { type: 'samples', data: copy },
+            [copy.buffer],
+          );
         }
       } catch (e) {
         console.error("frame tick", e);

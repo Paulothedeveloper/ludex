@@ -4,7 +4,7 @@ import {
   getOptionsForSystem, loadSystemOptions, saveSystemOptions, clearSystemOptions,
   LIBRETRO_BUTTONS, DEFAULT_PAD_MAP, effectivePadMap,
   remapPadButton, clearPadMap, padIdxLabel, padIdxForLibretroBtn,
-  FRONTEND_OPTION_KEYS,
+  FRONTEND_OPTION_KEYS, requiresRestart,
 } from "./ludexSystemOptions";
 
 /* SVG icons inline — sem emoji em UI de producao. Stroke 1.6, 18x18 default. */
@@ -421,6 +421,8 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
     byCategory[opt.category].push(opt);
   }
   const categories = Object.keys(byCategory);
+  // v0.9.1: toast pra avisar quando user mexer numa opcao restart-required
+  const [restartToast, setRestartToast] = useState(null);
 
   const onChange = async (key, value) => {
     const next = { ...values, [key]: value };
@@ -429,11 +431,14 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
     // v0.9.1: opcoes 'ludex_*' sao do frontend (audio gain, deadzone, etc),
     // nao mandam pro core libretro. EmulatorView le elas direto do localStorage.
     if (FRONTEND_OPTION_KEYS && FRONTEND_OPTION_KEYS.has(key)) {
-      // Dispatch evento pra EmulatorView (se ouvindo) atualizar config em tempo real
       try { window.dispatchEvent(new CustomEvent("ludex:frontend-config-changed", { detail: { systemId, key, value } })); } catch {}
       return;
     }
     try { await invoke("libretro_set_option", { key, value }); } catch (e) { console.error(e); }
+    // v0.9.1: se opcao requer restart, avisa com toast persistente ate user fechar
+    if (requiresRestart(key)) {
+      setRestartToast({ key, label: options.find(o => o.key === key)?.label || key });
+    }
   };
 
   const resetAll = async () => {
@@ -448,11 +453,20 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
 
   return (
     <div className="lx-settings-body">
-      <p className="lx-settings-hint" style={{ marginBottom: 12 }}>
-        ⚡ Opções <strong>ludex_*</strong> (volume, deadzone, rewind, filtros) aplicam <strong>na hora</strong>, sem reiniciar.
-        <br />
-        🔄 Demais opções (resolução, renderer, etc) pegam efeito no próximo "Jogar" — alguns cores recarregam ao vivo, outros só depois.
-      </p>
+      <div style={{
+        marginBottom: 12, padding: '10px 12px', borderRadius: 8,
+        background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+        fontSize: '0.85em', lineHeight: 1.5,
+      }}>
+        <div style={{ marginBottom: 4 }}>
+          <span style={{ color: '#22c55e', fontWeight: 700 }}>⚡ TEMPO REAL</span>
+          {' — '}aplica na hora, sem reiniciar o jogo.
+        </div>
+        <div>
+          <span style={{ color: '#ef4444', fontWeight: 700 }}>⟳ REINICIAR JOGO</span>
+          {' — '}o core (PCSX2, Dolphin, etc) só aplica essa opção no próximo "Jogar". Fecha o jogo e abre de novo.
+        </div>
+      </div>
       {categories.map((cat) => (
         <section key={cat} className="lx-settings-section">
           <h4 className="lx-settings-cat">{CATEGORY_LABELS[cat] || cat}</h4>
@@ -460,11 +474,13 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
             {byCategory[cat].map((opt) => {
               const current = values[opt.key] ?? opt.default;
               const isHotReload = opt.key.startsWith('ludex_');
+              const needsRestart = requiresRestart(opt.key);
               return (
                 <div key={opt.key} className="lx-settings-row">
-                  <label className="lx-settings-label" title={opt.key}>
-                    {opt.label}
-                    {isHotReload && <span style={{ marginLeft: 6, fontSize: '0.7em', color: '#22c55e' }} title="Aplica em tempo real">⚡</span>}
+                  <label className="lx-settings-label" title={opt.key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>{opt.label}</span>
+                    {isHotReload && <span style={{ fontSize: '0.65em', padding: '2px 6px', borderRadius: 999, background: 'rgba(34,197,94,0.15)', color: '#22c55e', fontWeight: 700 }} title="Aplica em tempo real">⚡ TEMPO REAL</span>}
+                    {needsRestart && <span style={{ fontSize: '0.65em', padding: '2px 6px', borderRadius: 999, background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontWeight: 700 }} title="Esse core libretro só lê essa opção quando o jogo abre. Reinicie o jogo pra efeito.">⟳ REINICIAR</span>}
                   </label>
                   <select
                     className="lx-settings-select"
@@ -483,6 +499,31 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
       ))}
       <button className="lx-settings-btn lx-settings-btn-ghost" onClick={resetAll}
         style={{ marginTop: 8 }}>Restaurar Defaults</button>
+
+      {restartToast && (
+        <div
+          role="status"
+          style={{
+            position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+            background: '#ef4444', color: '#fff', padding: '12px 20px', borderRadius: 10,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)', fontWeight: 600, fontSize: '0.9em',
+            zIndex: 99999, display: 'flex', alignItems: 'center', gap: 12, maxWidth: 480,
+          }}
+          onClick={() => setRestartToast(null)}
+        >
+          <span style={{ fontSize: '1.4em' }}>⟳</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, marginBottom: 2 }}>{restartToast.label} — exige reiniciar o jogo</div>
+            <div style={{ fontSize: '0.85em', opacity: 0.95 }}>
+              Essa configuração só pega efeito no próximo "Jogar". Feche e abra o jogo pra ver a diferença.
+            </div>
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); setRestartToast(null); }}
+            style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}
+          >OK</button>
+        </div>
+      )}
     </div>
   );
 }
