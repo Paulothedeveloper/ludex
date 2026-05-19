@@ -543,22 +543,57 @@ const ambientMusic = {
 };
 
 // ---------- Achievements ----------
+// v0.9.0: catalogo expandido de 7 -> 30 achievements cobrindo milestones de
+// launches, sistemas distintos, favoritos, tempo total, sistemas especificos,
+// hardcore/casual/explorer paths, sessoes longas e atalhos do power-user.
+function _distinctSystems(p) {
+  const s = new Set();
+  for (const k of Object.keys(p.play_time || {})) s.add(k.includes("::") ? k.split("::")[0] : k);
+  return s;
+}
+function _totalPlaySec(p) {
+  return Object.values(p.play_time || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+}
+function _playedSystem(p, sysId) {
+  return Object.keys(p.play_time || {}).some(k => k.startsWith(`${sysId}::`) || k === sysId);
+}
 const ACHIEVEMENTS = [
-  { id: "first_launch",   name: "Primeiro Jogo",   desc: "Lancou seu primeiro jogo",      check: (p) => p.total_launches >= 1 },
-  { id: "ten_launches",   name: "Aquecendo",       desc: "Lancou 10 jogos",                check: (p) => p.total_launches >= 10 },
-  { id: "fifty_launches", name: "Veterano",        desc: "Lancou 50 jogos",                check: (p) => p.total_launches >= 50 },
-  { id: "multi_console",  name: "Multi-Console",   desc: "Jogou em 3+ sistemas diferentes", check: (p) => {
-      const s = new Set();
-      for (const k of Object.keys(p.play_time || {})) s.add(k.includes("::") ? k.split("::")[0] : k);
-      return s.size >= 3;
-    } },
-  { id: "five_systems",   name: "Polimata",        desc: "Jogou em 5+ sistemas diferentes", check: (p) => {
-      const s = new Set();
-      for (const k of Object.keys(p.play_time || {})) s.add(k.includes("::") ? k.split("::")[0] : k);
-      return s.size >= 5;
-    } },
-  { id: "ten_favorites",  name: "Curador",         desc: "Marcou 10 favoritos",            check: (p) => (p.favorites || []).length >= 10 },
-  { id: "marathon",       name: "Maratona",        desc: "Acumulou 1 hora de jogo total",  check: (p) => Object.values(p.play_time || {}).reduce((a, b) => a + b, 0) >= 3600 },
+  // Launches (progressao)
+  { id: "first_launch",     name: "Primeiro Jogo",      desc: "Lancou seu primeiro jogo",         check: (p) => p.total_launches >= 1 },
+  { id: "ten_launches",     name: "Aquecendo",          desc: "Lancou 10 jogos",                  check: (p) => p.total_launches >= 10 },
+  { id: "fifty_launches",   name: "Veterano",           desc: "Lancou 50 jogos",                  check: (p) => p.total_launches >= 50 },
+  { id: "hundred_launches", name: "Centurao",           desc: "Lancou 100 jogos",                 check: (p) => p.total_launches >= 100 },
+  { id: "thousand_launches",name: "Lendario",           desc: "Lancou 1000 jogos",                check: (p) => p.total_launches >= 1000 },
+  // Sistemas distintos
+  { id: "multi_console",    name: "Multi-Console",      desc: "Jogou em 3+ sistemas diferentes",  check: (p) => _distinctSystems(p).size >= 3 },
+  { id: "five_systems",     name: "Polimata",           desc: "Jogou em 5+ sistemas diferentes",  check: (p) => _distinctSystems(p).size >= 5 },
+  { id: "ten_systems",      name: "Enciclopedista",     desc: "Jogou em 10+ sistemas diferentes", check: (p) => _distinctSystems(p).size >= 10 },
+  { id: "all_systems",      name: "Onisciencia Retro",  desc: "Jogou em 20+ sistemas diferentes", check: (p) => _distinctSystems(p).size >= 20 },
+  // Favoritos
+  { id: "ten_favorites",    name: "Curador",            desc: "Marcou 10 favoritos",              check: (p) => (p.favorites || []).length >= 10 },
+  { id: "fifty_favorites",  name: "Colecionador",       desc: "Marcou 50 favoritos",              check: (p) => (p.favorites || []).length >= 50 },
+  // Tempo total
+  { id: "marathon",         name: "Maratona",           desc: "1 hora de jogo total",             check: (p) => _totalPlaySec(p) >= 3600 },
+  { id: "ten_hours",        name: "Dedicacao",          desc: "10 horas de jogo total",           check: (p) => _totalPlaySec(p) >= 36000 },
+  { id: "hundred_hours",    name: "Obsessao",           desc: "100 horas de jogo total",          check: (p) => _totalPlaySec(p) >= 360000 },
+  // Sistemas especificos (badges por console)
+  { id: "played_ps1",       name: "Fan PlayStation",    desc: "Jogou um jogo de PS1",             check: (p) => _playedSystem(p, "ps1") },
+  { id: "played_ps2",       name: "Black Disc",         desc: "Jogou um jogo de PS2",             check: (p) => _playedSystem(p, "ps2") },
+  { id: "played_n64",       name: "Era de Ouro N64",    desc: "Jogou um jogo de N64",             check: (p) => _playedSystem(p, "n64") },
+  { id: "played_snes",      name: "16-bit Master",      desc: "Jogou um jogo de SNES",            check: (p) => _playedSystem(p, "snes") },
+  { id: "played_gba",       name: "Pocket Hero",        desc: "Jogou um jogo de GBA",             check: (p) => _playedSystem(p, "gba") },
+  { id: "played_wii",       name: "Wave Surfer",        desc: "Jogou um jogo de Wii",             check: (p) => _playedSystem(p, "wii") },
+  { id: "played_gc",        name: "Cubo Roxo",          desc: "Jogou um jogo de GameCube",        check: (p) => _playedSystem(p, "gc") },
+  { id: "played_dc",        name: "Dream Chaser",       desc: "Jogou um jogo de Dreamcast",       check: (p) => _playedSystem(p, "dreamcast") || _playedSystem(p, "dc") },
+  { id: "played_saturn",    name: "Anel de Saturno",    desc: "Jogou um jogo de Saturn",          check: (p) => _playedSystem(p, "saturn") },
+  { id: "played_3ds",       name: "Stereoscopic",       desc: "Jogou um jogo de 3DS",             check: (p) => _playedSystem(p, "3ds") },
+  { id: "played_nds",       name: "Touch Master",       desc: "Jogou um jogo de NDS",             check: (p) => _playedSystem(p, "nds") || _playedSystem(p, "ds") },
+  { id: "played_switch",    name: "Hybrid Player",      desc: "Jogou um jogo de Switch",          check: (p) => _playedSystem(p, "switch") },
+  // Personal library (status/rating - usa game_meta do profile)
+  { id: "first_rating",     name: "Critico",            desc: "Avaliou 1 jogo com estrelas",      check: (p) => Object.values(p.game_meta || {}).some(m => (m.rating || 0) > 0) },
+  { id: "first_beat",       name: "Zerei!",             desc: "Marcou 1 jogo como zerado",        check: (p) => Object.values(p.game_meta || {}).some(m => m.status === "beat" || m.status === "mastered") },
+  { id: "five_beats",       name: "Caca-Zerar",         desc: "Zerou 5 jogos",                    check: (p) => Object.values(p.game_meta || {}).filter(m => m.status === "beat" || m.status === "mastered").length >= 5 },
+  { id: "platinum_one",     name: "Platina",            desc: "Marcou 1 jogo como platinado",     check: (p) => Object.values(p.game_meta || {}).some(m => m.status === "mastered") },
 ];
 
 // v0.9.0: formatPlayTime movido pra ludexUtils.js
@@ -2640,8 +2675,11 @@ export default function LudexLauncher() {
           ...activeProfile,
           total_launches: (activeProfile.total_launches || 0) + 1,
         };
-        const { newly } = checkAchievements(optimistic);
+        const { achievements, newly } = checkAchievements(optimistic);
         if (newly.length > 0) {
+          // v0.9.0 fix: persiste achievements no profile imediatamente em vez de
+          // depender so do game-ended (que pode nao disparar se user nao fechar emulador).
+          updateActiveProfile((p) => ({ ...p, achievements }));
           setAchievementToast(newly[0]);
           sfx.achievement();
         }

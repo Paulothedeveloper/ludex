@@ -69,17 +69,42 @@ export function totalPlayTime() {
 
 // ============ ACHIEVEMENTS INTERNOS ============
 // IDs simples + icon SVG path d (so 1 path por achievement, sem deps)
+// v0.9.0: catalogo expandido de 10 -> 25 cobrindo milestones de tempo, ROMs,
+// sistemas, sessoes longas, perfil power-user e ate dawn-player.
 export const ACHIEVEMENTS = [
+  // Onboarding / primeiros passos
   { id: "first_rom",       name: "Primeira ROM",          desc: "Carregou seu primeiro jogo no Ludex",                     icon: "M5 13l4 4L19 7" },
+  { id: "mobile_pioneer",  name: "Pioneiro Mobile",       desc: "Abriu o app mobile do Ludex",                             icon: "M5 4a2 2 0 012-2h10a2 2 0 012 2v16a2 2 0 01-2 2H7a2 2 0 01-2-2zM12 18h.01" },
+  { id: "all_categories",  name: "Pesquisador",           desc: "Abriu todas as abas (Inicio/Sistemas/Buscar/Ajustes)",    icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" },
+  { id: "first_save",      name: "Primeira save state",   desc: "Salvou progresso pela primeira vez",                      icon: "M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2zM17 21v-8H7v8M7 3v5h8" },
+  // Variedade
   { id: "five_systems",    name: "Colecionador",          desc: "Jogou em 5 sistemas diferentes",                          icon: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" },
+  { id: "ten_systems",     name: "Enciclopedista",        desc: "Jogou em 10 sistemas diferentes",                         icon: "M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" },
+  { id: "ten_games",       name: "Variedade",             desc: "Jogou em 10 jogos diferentes",                            icon: "M6 4h12l-1 4H7zM5 8h14l1 12H4zM10 12h4M10 16h4" },
+  { id: "fifty_games",     name: "Acervo",                desc: "Jogou em 50 jogos diferentes",                            icon: "M4 4h16v16H4zM4 9h16M9 4v16" },
+  // Tempo total
   { id: "first_hour",      name: "Imersao",               desc: "Total de 1 hora de jogo",                                 icon: "M12 8v4l3 2M12 22a10 10 0 100-20 10 10 0 000 20z" },
   { id: "ten_hours",       name: "Dedicacao",             desc: "Total de 10 horas de jogo",                               icon: "M12 8v4l3 2M12 22a10 10 0 100-20 10 10 0 000 20z" },
-  { id: "first_save",      name: "Primeira save state",   desc: "Salvou progresso pela primeira vez",                      icon: "M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2zM17 21v-8H7v8M7 3v5h8" },
-  { id: "midnight_player", name: "Coruja",                desc: "Jogou depois das 23h",                                    icon: "M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" },
-  { id: "ten_games",       name: "Variedade",             desc: "Jogou em 10 jogos diferentes",                            icon: "M6 4h12l-1 4H7zM5 8h14l1 12H4zM10 12h4M10 16h4" },
+  { id: "hundred_hours",   name: "Obsessao",              desc: "Total de 100 horas de jogo",                              icon: "M12 6v6l4 2M12 22A10 10 0 1112 2a10 10 0 010 20z" },
+  // Sessoes
   { id: "marathon",        name: "Maratonista",           desc: "Sessao unica de 2+ horas",                                icon: "M13 2L3 14h9l-1 8 10-12h-9z" },
-  { id: "mobile_pioneer",  name: "Pioneiro Mobile",       desc: "Usou o app mobile (versao previa)",                       icon: "M5 4a2 2 0 012-2h10a2 2 0 012 2v16a2 2 0 01-2 2H7a2 2 0 01-2-2zM12 18h.01" },
-  { id: "all_categories",  name: "Pesquisador",           desc: "Abriu todas as abas (Inicio/Sistemas/Buscar/Ajustes)",    icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" },
+  { id: "epic_marathon",   name: "Resistencia Epica",     desc: "Sessao unica de 5+ horas",                                icon: "M13 2L3 14h9l-1 8 10-12h-9zM18 6l3 3" },
+  // Horarios
+  { id: "midnight_player", name: "Coruja",                desc: "Jogou depois das 23h",                                    icon: "M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" },
+  { id: "dawn_player",     name: "Madrugador",            desc: "Jogou entre 4h e 7h da manha",                            icon: "M12 2v2M4.93 4.93l1.41 1.41M2 12h2M20 12h2M17.66 6.34l1.41-1.41M12 6a6 6 0 010 12 6 6 0 010-12z" },
+  { id: "weekend_warrior", name: "Guerreiro Fim-de-Semana", desc: "Jogou sabado ou domingo",                              icon: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" },
+  // Sistemas especificos
+  { id: "played_gba",      name: "Pocket Hero",           desc: "Jogou um GBA",                                            icon: "M9 2h6a2 2 0 012 2v16a2 2 0 01-2 2H9a2 2 0 01-2-2V4a2 2 0 012-2z" },
+  { id: "played_nes",      name: "Bit Veterano",          desc: "Jogou um NES",                                            icon: "M6 6h12v12H6zM6 12h12" },
+  { id: "played_snes",     name: "16-bit Master",         desc: "Jogou um SNES",                                           icon: "M4 8h16v8H4zM10 12h4" },
+  { id: "played_md",       name: "Blast Processing",      desc: "Jogou um Mega Drive",                                     icon: "M4 8h16v8H4zM4 12h16" },
+  { id: "played_ps1",      name: "Disc Spinner",          desc: "Jogou um PS1",                                            icon: "M12 2a10 10 0 100 20 10 10 0 000-20zM12 8a4 4 0 100 8 4 4 0 000-8z" },
+  // Personalizacao
+  { id: "custom_cover",    name: "Designer",              desc: "Adicionou uma capa customizada",                          icon: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" },
+  { id: "backup_made",     name: "Precavido",             desc: "Exportou backup do seu progresso",                        icon: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" },
+  // Hidden / power-user
+  { id: "speed_swap",      name: "Velocista",             desc: "Trocou de jogo 5x em menos de 1 minuto",                  icon: "M13 2L3 14h9l-1 8 10-12h-9z" },
+  { id: "favorited_ten",   name: "Curador Pessoal",       desc: "Favoritou 10 jogos",                                      icon: "M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7l3-7z" },
 ];
 
 export function loadAchievements() {
@@ -103,32 +128,77 @@ export function isAchievementUnlocked(id) {
 
 // Engine: checa achievements baseado em events do app
 export function checkAchievements(onUnlocked) {
-  // first_rom: existe pelo menos 1 stat
+  // first_rom / ten_games / fifty_games: contador de jogos distintos com stats
   const stats = loadStats();
   const totalGames = Object.keys(stats).length;
   if (totalGames >= 1) unlockAchievement("first_rom", onUnlocked);
   if (totalGames >= 10) unlockAchievement("ten_games", onUnlocked);
+  if (totalGames >= 50) unlockAchievement("fifty_games", onUnlocked);
 
-  // five_systems: 5 systems diferentes nos recents
+  // Sistemas distintos (via recents.systemId)
   const recents = loadRecents();
-  const sysSet = new Set(recents.map(r => r.systemId));
+  const sysSet = new Set(recents.map(r => r.systemId).filter(Boolean));
   if (sysSet.size >= 5) unlockAchievement("five_systems", onUnlocked);
+  if (sysSet.size >= 10) unlockAchievement("ten_systems", onUnlocked);
+
+  // Sistemas especificos
+  if (sysSet.has("gba"))   unlockAchievement("played_gba", onUnlocked);
+  if (sysSet.has("nes"))   unlockAchievement("played_nes", onUnlocked);
+  if (sysSet.has("snes"))  unlockAchievement("played_snes", onUnlocked);
+  if (sysSet.has("md") || sysSet.has("megadrive")) unlockAchievement("played_md", onUnlocked);
+  if (sysSet.has("ps1"))   unlockAchievement("played_ps1", onUnlocked);
 
   // play time milestones
   const totalSec = totalPlayTime();
-  if (totalSec >= 3600) unlockAchievement("first_hour", onUnlocked);
-  if (totalSec >= 36000) unlockAchievement("ten_hours", onUnlocked);
+  if (totalSec >= 3600)   unlockAchievement("first_hour", onUnlocked);
+  if (totalSec >= 36000)  unlockAchievement("ten_hours", onUnlocked);
+  if (totalSec >= 360000) unlockAchievement("hundred_hours", onUnlocked);
 
-  // marathon: alguma session > 2h (aproximado: jogo com totalSec > 7200 em poucas sessions)
+  // marathon: alguma session > 2h / epic > 5h
   for (const s of Object.values(stats)) {
-    if (s.totalSec > 7200 && s.sessions <= 5) { unlockAchievement("marathon", onUnlocked); break; }
+    if (s.totalSec > 7200  && s.sessions <= 5) unlockAchievement("marathon", onUnlocked);
+    if (s.totalSec > 18000 && s.sessions <= 6) unlockAchievement("epic_marathon", onUnlocked);
   }
 
-  // midnight_player: hora atual >= 23
-  if (new Date().getHours() >= 23) unlockAchievement("midnight_player", onUnlocked);
+  // Horarios
+  const now = new Date();
+  const hour = now.getHours();
+  const day = now.getDay(); // 0=domingo, 6=sabado
+  if (hour >= 23 || hour < 4) unlockAchievement("midnight_player", onUnlocked);
+  if (hour >= 4 && hour < 7)  unlockAchievement("dawn_player", onUnlocked);
+  if (day === 0 || day === 6) unlockAchievement("weekend_warrior", onUnlocked);
+
+  // Favoritos
+  try {
+    const favs = JSON.parse(localStorage.getItem("ludex.favorites.v1") || "[]");
+    if (Array.isArray(favs) && favs.length >= 10) unlockAchievement("favorited_ten", onUnlocked);
+  } catch {}
 
   // mobile_pioneer: sempre desbloqueia ao abrir app mobile
   unlockAchievement("mobile_pioneer", onUnlocked);
+}
+
+// Disparado quando user exporta backup (settings tab)
+export function notifyBackupMade(onUnlocked) {
+  unlockAchievement("backup_made", onUnlocked);
+}
+
+// Disparado quando user adiciona capa custom
+export function notifyCustomCover(onUnlocked) {
+  unlockAchievement("custom_cover", onUnlocked);
+}
+
+// Rastreia speed_swap (5 trocas em <60s)
+let _swapTimes = [];
+export function trackGameSwap(onUnlocked) {
+  const now = Date.now();
+  _swapTimes.push(now);
+  // Mantem so dos ultimos 60s
+  _swapTimes = _swapTimes.filter(t => now - t <= 60000);
+  if (_swapTimes.length >= 5) {
+    unlockAchievement("speed_swap", onUnlocked);
+    _swapTimes = [];
+  }
 }
 
 export function markTabVisited(tabId) {

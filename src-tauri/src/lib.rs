@@ -4712,24 +4712,25 @@ fn android_demo_status() -> AndroidDemoStatus {
     }
 }
 
-/// Tenta destravar APK permanentemente usando uma license key admin.
-/// Valida com Gumroad e checa se email == ADMIN_EMAIL. Apenas Paulo libera.
+/// v0.9.0: Destrava APK Android com QUALQUER license valida (era so admin).
+/// Admin email continua bypassando limite de uses. User comum consome 1 slot
+/// dos GUMROAD_MAX_USES (igual no Windows). Multi-device real: mesma key vale
+/// pra ate 5 dispositivos combinados (PC + celular contam juntos).
 #[tauri::command]
 async fn android_demo_admin_unlock(license_key: String) -> Result<bool, String> {
-    // v0.8.25: admin email bypassa qualquer erro do Gumroad (incluindo limite
-    // de uses atingido). Faz fetch raw pra ler buyer_email mesmo se Gumroad
-    // retornar success=false por limite.
     if GUMROAD_ACCESS_TOKEN == "PLACEHOLDER_ACCESS_TOKEN" {
         return Err("Sistema de licenca nao configurado".into());
     }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
-        .user_agent("Ludex/0.8 (admin-unlock)")
+        .user_agent("Ludex/0.9 (android-unlock)")
         .build()
         .map_err(|e| format!("http client: {}", e))?;
     let mut form = std::collections::HashMap::new();
     form.insert("product_id", GUMROAD_PRODUCT_ID.to_string());
     form.insert("license_key", license_key.trim().to_string());
+    // v0.9.0: incrementa uses (consome slot) - so se NAO for admin (admin bypassa)
+    // Faz primeiro um fetch sem incremento pra detectar admin, depois incrementa.
     form.insert("increment_uses_count", "false".to_string());
     let resp = client.post("https://api.gumroad.com/v2/licenses/verify")
         .bearer_auth(GUMROAD_ACCESS_TOKEN)
@@ -4738,24 +4739,44 @@ async fn android_demo_admin_unlock(license_key: String) -> Result<bool, String> 
         .map_err(|e| format!("gumroad request: {}", e))?;
     let body: serde_json::Value = resp.json().await
         .map_err(|e| format!("gumroad parse: {}", e))?;
-    // Tenta achar email mesmo se success=false (campo purchase.email pode vir)
     let buyer_email = body.pointer("/purchase/email")
         .and_then(|v| v.as_str())
         .map(String::from);
     let is_admin = buyer_email.as_deref()
         .map(|e| e.eq_ignore_ascii_case(ADMIN_EMAIL))
         .unwrap_or(false);
+    let success = body.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+    let uses = body.get("uses").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+
     if !is_admin {
-        // Se nao eh admin email, checa se eh resposta de "license invalida" mesmo
-        let success = body.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
         if !success {
             let msg = body.get("message").and_then(|v| v.as_str()).unwrap_or("license invalida");
-            return Err(format!("Essa license nao e admin: {}", msg));
+            return Err(format!("License invalida: {}", msg));
         }
-        return Err("Essa license nao e admin. APK ficara em modo demo (7 dias).".to_string());
+        // User comum: respeita limite de uses (igual no Windows)
+        if uses >= GUMROAD_MAX_USES {
+            return Err(format!(
+                "Limite de {} dispositivos ja atingido com essa license. Desative em outro PC/celular ou compre outra.",
+                GUMROAD_MAX_USES
+            ));
+        }
+        // Re-fetch com incremento de slot pra "ativar" no Gumroad oficialmente
+        let mut form2 = std::collections::HashMap::new();
+        form2.insert("product_id", GUMROAD_PRODUCT_ID.to_string());
+        form2.insert("license_key", license_key.trim().to_string());
+        form2.insert("increment_uses_count", "true".to_string());
+        let resp2 = client.post("https://api.gumroad.com/v2/licenses/verify")
+            .bearer_auth(GUMROAD_ACCESS_TOKEN)
+            .form(&form2)
+            .send().await
+            .map_err(|e| format!("gumroad activate: {}", e))?;
+        if !resp2.status().is_success() {
+            return Err(format!("Falha ao consumir slot: HTTP {}", resp2.status()));
+        }
     }
+    // Salva (independente de admin ou user comum)
     let mut cfg = load_config();
-    cfg.android_admin_unlock = true;
+    cfg.android_admin_unlock = true; // nome legado, mas agora vale pra user comum tb
     cfg.license_key = Some(license_key.trim().to_string());
     save_config(cfg)?;
     Ok(true)
