@@ -188,6 +188,43 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
+// v0.8.49: wrapper invoke com timeout — protege UI de invokes Rust que travam
+// (rede lenta, backend hang, etc). Default 30s. Rejeita com erro claro.
+function invokeTimeout(cmd, args, ms = 30000) {
+  return Promise.race([
+    invoke(cmd, args),
+    new Promise((_, reject) => setTimeout(
+      () => reject(new Error(`Timeout: ${cmd} demorou mais de ${ms}ms`)),
+      ms,
+    )),
+  ]);
+}
+
+// v0.8.49: validacao de extensao ROM antes de mandar pro backend libretro.
+// Defesa em profundidade — backend pode ter bug que aceita path estranho.
+const ALLOWED_ROM_EXTS = new Set([
+  // Imagens de disco / cartucho
+  "iso","cue","bin","chd","mdf","mds","img","ccd","sub","m3u","gdi","cdi",
+  // Cartuchos
+  "sfc","smc","nes","fds","gba","gb","gbc","gen","md","smd","32x","sms","gg",
+  "n64","z64","v64","rom","ngp","ngc","ws","wsc","vb","lnx",
+  // PSP / DS / 3DS
+  "pbp","cso","nds","ids","3ds","cci","cxi","3dsx","app","elf","axf","cia",
+  // Saturn / Sega CD
+  "ccd",
+  // Multi-platform
+  "zip","7z","rar","sg","col","msx","msx2","cas","dsk","fdi","adf","ipf","tap",
+  "z80","sna","tzx","trd","scl","mx1","mx2","ri",
+  // 3DO/Jaguar/Lynx
+  "j64","cof",
+]);
+function validRomExtension(romPath) {
+  if (!romPath || typeof romPath !== "string") return false;
+  const dot = romPath.lastIndexOf(".");
+  if (dot < 0 || dot === romPath.length - 1) return false;
+  return ALLOWED_ROM_EXTS.has(romPath.slice(dot + 1).toLowerCase());
+}
+
 // ---------- Web Audio: sons procedurais ----------
 let _audioCtx = null;
 function audioCtx() {
@@ -2527,9 +2564,15 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
           setError(`Sistema "${system.name}" sem core libretro configurado`);
           return;
         }
+        // v0.8.49: valida extensao da ROM antes de mandar pro backend
+        if (!validRomExtension(game.path)) {
+          setError(`Extensao de arquivo nao suportada: ${game.path}`);
+          return;
+        }
         // v0.8.37: aplica opcoes salvas do user (UI Settings) antes de load_game
         try { await applySystemOptions(system.id); } catch {}
-        const result = await invoke("libretro_load_game", { coreFilename: coreFile, romPath: game.path });
+        // v0.8.49: timeout 60s — load_game eh pesado (PCSX2 bootstrap pode levar 10-30s)
+        const result = await invokeTimeout("libretro_load_game", { coreFilename: coreFile, romPath: game.path }, 60000);
         if (cancelled) return;
         setInfo(result);
         audioRateRef.current = result.sample_rate || 32040;
@@ -2661,9 +2704,19 @@ function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [info]);
 
+  // v0.8.49: cleanup do setTimeout — antes vazava se fechasse emulador em <1.8s
+  // depois de mostrar mensagem (setState em componente desmontado).
+  const stateMsgTimeoutRef = useRef(null);
   const showStateMsg = useCallback((kind, text) => {
+    if (stateMsgTimeoutRef.current) clearTimeout(stateMsgTimeoutRef.current);
     setStateMsg({ kind, text });
-    setTimeout(() => setStateMsg(null), 1800);
+    stateMsgTimeoutRef.current = setTimeout(() => {
+      setStateMsg(null);
+      stateMsgTimeoutRef.current = null;
+    }, 1800);
+  }, []);
+  useEffect(() => () => {
+    if (stateMsgTimeoutRef.current) clearTimeout(stateMsgTimeoutRef.current);
   }, []);
 
   // Captura canvas atual como PNG (Uint8Array, ~tamanho do frame escalado)
@@ -4031,20 +4084,26 @@ export default function LudexLauncher() {
 
   const selected = displayedSystems[selectedSystemIdx];
 
-  const visibleGames = useMemo(() => {
-    if (!selected) return [];
+  // v0.8.49: dividi em 2 memos pra evitar re-sort em mudancas de perfil/favoritos.
+  // Sort soh refaz quando selected ou sortMode muda; filtros aplicam por cima.
+  const activeProfilePlayData = useMemo(() => {
     const profile = config.profiles.find((p) => p.id === config.active_profile_id);
     const playTime = profile?.play_time || {};
     const sessions = profile?.sessions || [];
-    // Mapeia rom_path -> ultimo timestamp jogado (a partir de sessions)
     const lastByRom = {};
     for (const s of sessions) {
       const cur = lastByRom[s.rom_path] || 0;
       const end = (s.started_at || 0) + (s.duration_sec || 0);
       if (end > cur) lastByRom[s.rom_path] = end;
     }
+    return { playTime, lastByRom };
+  }, [config.profiles, config.active_profile_id]);
+
+  const sortedGames = useMemo(() => {
+    if (!selected) return [];
+    const { playTime, lastByRom } = activeProfilePlayData;
     const ptKey = (g) => `${g._origin_system_id || selected.id}::${g.path}`;
-    let games = [...selected.games];
+    const games = [...selected.games];
     switch (sortMode) {
       case "az":
         games.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
@@ -4055,13 +4114,15 @@ export default function LudexLauncher() {
       case "recent":
         games.sort((a, b) => (lastByRom[b.path] || 0) - (lastByRom[a.path] || 0));
         break;
-      case "fav":
-        games = games.filter((g) => favoriteSet.has(g.path));
-        break;
       default: break;
     }
     return games;
-  }, [selected, sortMode, config.profiles, config.active_profile_id, favoriteSet]);
+  }, [selected, sortMode, activeProfilePlayData]);
+
+  const visibleGames = useMemo(() => {
+    if (sortMode === "fav") return sortedGames.filter((g) => favoriteSet.has(g.path));
+    return sortedGames;
+  }, [sortedGames, sortMode, favoriteSet]);
 
   const selectedGame = visibleGames[selectedGameIdx];
   const launchSystemId = selectedGame?._origin_system_id || selected?.id;
@@ -4069,9 +4130,10 @@ export default function LudexLauncher() {
   const selectedCoverSrc = selectedGame ? covers[selectedGame.path] : null;
   const selectedShotSrc = selectedGame ? screenshots[selectedGame.path] : null;
   const selectedBgSrc = selectedShotSrc || selectedCoverSrc;
+  // v0.8.49: deps granular — antes [config] re-calculava em qualquer mudanca
   const activeProfile = useMemo(
     () => config.profiles.find((p) => p.id === config.active_profile_id),
-    [config]
+    [config.profiles, config.active_profile_id]
   );
 
   // v0.8.21: auto-check de update no startup desktop (background, banner se houver)
@@ -4112,10 +4174,12 @@ export default function LudexLauncher() {
   }, [config.music_enabled, config.music_volume, splashDone, launching, quitting, emulator]);
 
   // Unlock audio context na primeira interação (autoplay policy)
+  // v0.8.49: once:true — listener auto-removido após primeira interacao.
+  // Antes ficava ouvindo todo pointerdown/keydown da vida = overhead.
   useEffect(() => {
     const unlock = () => unlockAudio();
-    window.addEventListener("pointerdown", unlock, { once: false });
-    window.addEventListener("keydown", unlock, { once: false });
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
     return () => {
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
@@ -4291,6 +4355,14 @@ export default function LudexLauncher() {
   }, []);
 
   useEffect(() => { setSelectedGameIdx(0); }, [selectedSystemIdx, sortMode]);
+  // v0.8.49: auto-clamp se visibleGames encolheu (favoritos removidos, profile trocado etc)
+  useEffect(() => {
+    if (visibleGames.length === 0) {
+      if (selectedGameIdx !== 0) setSelectedGameIdx(0);
+    } else if (selectedGameIdx >= visibleGames.length) {
+      setSelectedGameIdx(visibleGames.length - 1);
+    }
+  }, [visibleGames.length, selectedGameIdx]);
   // Quando trocar categoria, volta pro primeiro sistema (evita idx fora de range)
   useEffect(() => { setSelectedSystemIdx(0); }, [selectedCategoryId]);
 
