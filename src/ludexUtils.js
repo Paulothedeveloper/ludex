@@ -42,3 +42,31 @@ export function validRomExtension(romPath) {
   if (dot < 0 || dot === romPath.length - 1) return false;
   return ALLOWED_ROM_EXTS.has(romPath.slice(dot + 1).toLowerCase());
 }
+
+/** Formata segundos -> "Xh Ymin" / "Xmin" / "Xs" */
+export function formatPlayTime(seconds) {
+  if (!seconds || seconds < 60) return `${Math.floor(seconds || 0)}s`;
+  const m = Math.floor(seconds / 60);
+  if (m < 60) return `${m}min`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}min`;
+}
+
+/** Status do jogo na biblioteca pessoal — usado em GameDetailPanel e cards. */
+export const GAME_STATUS_LABELS = {
+  "": "Sem status",
+  "wishlist": "Quero jogar",
+  "playing": "Jogando",
+  "beat": "Zerei",
+  "mastered": "Platinei",
+  "abandoned": "Abandonei",
+};
+export const GAME_STATUS_ORDER = ["", "wishlist", "playing", "beat", "mastered", "abandoned"];
+export const GAME_STATUS_EMOJI = {
+  "": "○",
+  "wishlist": "★",
+  "playing": "▶",
+  "beat": "✔",
+  "mastered": "✦",
+  "abandoned": "✕",
+};

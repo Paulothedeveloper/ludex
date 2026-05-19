@@ -19,19 +19,31 @@ $root = Split-Path $PSScriptRoot -Parent
 
 Write-Host "=== Ludex Release v$Version ===" -ForegroundColor Cyan
 
-# 1. Atualiza version em 3 arquivos
+# 1. Atualiza version em 3 arquivos (regex no-reformat, sem BOM)
 Write-Host "[1/5] Atualizando version em package.json, Cargo.toml e tauri.conf.json"
-$pkg = Get-Content "$root\package.json" -Raw | ConvertFrom-Json
-$pkg.version = $Version
-$pkg | ConvertTo-Json -Depth 32 | Set-Content "$root\package.json" -Encoding utf8
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 
-$tauri = Get-Content "$root\src-tauri\tauri.conf.json" -Raw | ConvertFrom-Json
-$tauri.version = $Version
-$tauri | ConvertTo-Json -Depth 32 | Set-Content "$root\src-tauri\tauri.conf.json" -Encoding utf8
+function Set-FileUtf8NoBom([string]$path, [string]$content) {
+  [System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
+}
 
-(Get-Content "$root\src-tauri\Cargo.toml") `
-  -replace '^version = "[^"]+"', "version = `"$Version`"" |
-  Set-Content "$root\src-tauri\Cargo.toml" -Encoding utf8
+# package.json - troca soh a primeira ocorrencia de "version"
+$pkgPath = "$root\package.json"
+$pkgRaw = [System.IO.File]::ReadAllText($pkgPath)
+$pkgNew = [regex]::Replace($pkgRaw, '"version"\s*:\s*"[^"]+"', "`"version`": `"$Version`"", 1)
+Set-FileUtf8NoBom $pkgPath $pkgNew
+
+# tauri.conf.json - mesma logica
+$tauriPath = "$root\src-tauri\tauri.conf.json"
+$tauriRaw = [System.IO.File]::ReadAllText($tauriPath)
+$tauriNew = [regex]::Replace($tauriRaw, '"version"\s*:\s*"[^"]+"', "`"version`": `"$Version`"", 1)
+Set-FileUtf8NoBom $tauriPath $tauriNew
+
+# Cargo.toml - primeira linha 'version = "..."' (so a do [package], nao das deps)
+$cargoPath = "$root\src-tauri\Cargo.toml"
+$cargoRaw = [System.IO.File]::ReadAllText($cargoPath)
+$cargoNew = [regex]::Replace($cargoRaw, '(?m)^version = "[^"]+"', "version = `"$Version`"", 1)
+Set-FileUtf8NoBom $cargoPath $cargoNew
 
 # 2. Build Windows (assinado) + Android (APK universal-release)
 $nsisExe = "$root\src-tauri\target\release\bundle\nsis\Ludex_${Version}_x64-setup.exe"

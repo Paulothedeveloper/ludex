@@ -10,7 +10,7 @@ use discord_rich_presence::{
 };
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::process::Command;
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
@@ -4596,6 +4596,9 @@ struct AndroidDemoStatus {
     clock_tampered: bool,
 }
 
+// Construido via serde_json::from_str em demo runtime — compilador nao detecta
+// construcao implicita por Deserialize, dai o allow.
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 struct DemoAnchor {
     installed_at: u64,
@@ -4766,7 +4769,8 @@ async fn android_demo_admin_unlock(license_key: String) -> Result<bool, String> 
 // 3. Retorna URL do APK pra frontend abrir no browser/downloader
 // ============================================================
 
-const ANDROID_LATEST_JSON: &str = "https://github.com/EllaeMyApp/ludex/releases/latest/download/latest-android.json";
+// v0.9.0: removido ANDROID_LATEST_JSON (nunca foi gerado). Vai direto pra REST API
+// do GitHub que ja serve a metadata correta (assets, tag_name, body).
 const ANDROID_LATEST_FALLBACK: &str = "https://api.github.com/repos/EllaeMyApp/ludex/releases/latest";
 
 #[derive(Serialize)]

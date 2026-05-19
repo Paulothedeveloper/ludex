@@ -48,7 +48,11 @@ pub struct GlContext {
     hglrc: HGLRC,
     opengl32: HMODULE,
     pub fbo: u32,
+    // color_tex e depth_rb sao os attachments do FBO. Precisam viver junto com o contexto
+    // (sao deletados em Drop), mas nao sao lidos diretamente apos a criacao.
+    #[allow(dead_code)]
     pub color_tex: u32,
+    #[allow(dead_code)]
     pub depth_rb: u32,
     pub width: u32,
     pub height: u32,

@@ -2,9 +2,13 @@
 //! Carrega .dll de cores libretro dinamicamente, executa frames, captura video,
 //! roteia input. Sem aplicação externa rodando.
 
+// Constantes/campos abaixo são parte da spec libretro e mantidos pra completude e
+// pra evitar regressão (cores podem comecar a usar a qualquer hora).
+#![allow(dead_code)]
+
 use libloading::{Library, Symbol};
 use std::ffi::{c_char, c_void, CStr, CString};
-use std::os::raw::{c_uchar, c_uint};
+use std::os::raw::c_uint;
 use std::path::Path;
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 
@@ -500,7 +504,7 @@ extern "C" fn cb_environment(cmd: c_uint, data: *mut c_void) -> bool {
         RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME => true,     // 18: core pode rodar sem ROM
         RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK => true,   // 12: core quer teclado (no-op)
         // v0.8.46: armazena callbacks pra Tauri commands depois chamarem swap de disco
-        RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE => unsafe {
+        RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE => {
             if !data.is_null() {
                 g.disk_control = Some(data as *const RetroDiskControlCallback);
                 log::info!("[libretro] SET_DISK_CONTROL_INTERFACE registrado");
