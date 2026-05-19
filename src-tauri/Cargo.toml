@@ -1,6 +1,6 @@
 [package]
 name = "ludex"
-version = "0.8.51"
+version = "0.8.52"
 description = "Ludex - Sua biblioteca retro em um lugar so"
 authors = ["Paulo Batista"]
 license = ""
@@ -26,8 +26,9 @@ tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
 walkdir = "2"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
 tokio = { version = "1", features = ["fs", "io-util", "sync"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 dirs = "5"
 libloading = "0.8"
 sha2 = "0.10"

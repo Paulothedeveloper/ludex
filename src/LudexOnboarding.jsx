@@ -71,35 +71,35 @@ const TOUR_STEPS = [
     id: "topbar",
     selector: '[data-tour="topbar"]',
     title: "Topo do Ludex",
-    body: "A barra superior mostra qual jogo está selecionado, tem o botão 🎲 para sortear um jogo aleatório (atalho: tecla R), abre seu perfil e os ajustes.",
+    body: "Mostra qual jogo está selecionado, botão de sortear aleatório (atalho: R), busca rápida (Ctrl+K ou L2/LB), seu perfil e os ajustes. Quando você conecta um controle, aparece um aviso verde aqui em cima.",
     placement: "bottom",
   },
   {
     id: "systems",
     selector: '[data-tour="systems"]',
-    title: "Plataformas",
-    body: "Aqui ficam todos os emuladores. Use ←/→ no teclado ou no controle (D-pad) pra trocar de console. Cada plataforma mostra seus próprios jogos abaixo.",
+    title: "Plataformas (27+ sistemas)",
+    body: "PS1, PS2, N64, GameCube, Wii, 3DS, Saturn, Dreamcast, GBA, NDS, Switch e mais — todos com core embedded (não precisa baixar nada). Use ←/→ no teclado ou D-pad pra navegar. LB/RB ou L2/R2 pulam categoria inteira.",
     placement: "bottom",
   },
   {
     id: "sort",
     selector: '[data-tour="sort"]',
     title: "Filtros e ordenação",
-    body: "Padrão / A-Z / Recentes (último jogado) / Mais jogados / Favoritos. Passe rápido pelas opções pra encontrar o jogo certo.",
+    body: "Padrão / A-Z / Recentes (último jogado) / Mais jogados / Favoritos. A barra de busca também filtra por nome em tempo real.",
     placement: "bottom",
   },
   {
     id: "grid",
     selector: '[data-tour="grid"]',
     title: "Sua biblioteca",
-    body: "Clique num jogo pra abrir os detalhes (capa, screenshots, sua nota, status, tempo jogado). Duplo-clique pra iniciar direto.",
+    body: "Clique pra abrir detalhes (capa, screenshots, sua nota, tempo jogado, status). Duplo-clique pra iniciar. Se você fechou um jogo antes, ao reabrir aparece prompt pra continuar do save state.",
     placement: "top",
   },
   {
     id: "settings",
     selector: '[data-tour="settings"]',
-    title: "Configurações",
-    body: "Tema, perfil, música ambiente, RetroAchievements, Discord, atualizações — tudo nos ajustes (atalho: tecla S).",
+    title: "Configurações (atalho: S)",
+    body: "Tema, perfil, música ambiente, wallpaper, RetroAchievements, Discord Rich Presence, auto-update do app. Em cada jogo aberto você ainda tem 'Opções do sistema' pra resolução, performance e remap de controle por emulador.",
     placement: "left",
   },
 ];
@@ -378,7 +378,7 @@ export default function LudexOnboarding({ onComplete }) {
         <div className="lx-firstrun-card lx-firstrun-card-intro">
           <div className="lx-firstrun-logo">L U D E X</div>
           <p className="lx-firstrun-sub">
-            Sua biblioteca retro em um lugar só. Antes de começar, vamos te mostrar como tudo funciona em 5 passos rápidos.
+            Sua biblioteca retro em um lugar só — 27+ sistemas embedded, controle nativo, save states, RetroAchievements e Discord Rich Presence. Antes de começar, deixa a gente te mostrar tudo em 5 passos rápidos.
           </p>
           <div className="lx-firstrun-actions" style={{ justifyContent: "center", marginTop: 22 }}>
             <button className="lx-tour-btn lx-tour-btn-ghost" onClick={() => setPhase("profile")}>

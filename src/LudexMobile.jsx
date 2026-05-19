@@ -436,14 +436,20 @@ export default function LudexMobile() {
         info={updateInfo}
         state={updateState}
         onInstall={async () => {
-          setUpdateState({ stage: "downloading", msg: "Baixando atualizacao..." });
+          setUpdateState({ stage: "downloading", msg: "Baixando atualizacao... (pode demorar 1-3min)" });
           try {
             const path = await invoke("android_download_apk", { apkUrl: updateInfo.apk_url });
-            setUpdateState({ stage: "installing", msg: "Abrindo instalador..." });
+            setUpdateState({ stage: "installing", msg: "Abrindo instalador do Android..." });
+            // installApk retorna true quando o intent abriu o PackageInstaller. O app vai pra
+            // background e o user confirma o install. Se retornar false sem erro, mostra dica.
             const ok = await invoke("android_install_apk", { apkPath: path });
-            if (!ok) setUpdateState({ stage: "error", msg: "Falha ao abrir instalador. Habilita 'Instalar de fontes desconhecidas' nas Configuracoes." });
+            if (!ok) {
+              setUpdateState({ stage: "error", msg: "O instalador nao abriu. Tente de novo ou habilita 'Instalar apps desconhecidos' pro Ludex nas Configuracoes." });
+            }
           } catch (e) {
-            setUpdateState({ stage: "error", msg: `Falha: ${e}` });
+            // Backend traz mensagem amigavel (404, APK corrompido, permissao etc)
+            const msg = String(e).replace(/^Error:\s*/, "");
+            setUpdateState({ stage: "error", msg });
           }
         }}
       />
@@ -2072,9 +2078,11 @@ function RecentsBanner({ recents, covers, onResume }) {
 // ============================================================
 function TutorialOverlay({ onDone }) {
   const steps = [
-    { title: "Bem-vindo ao Ludex Mobile", body: "Esta e a versao previa do Ludex. Joga retro/clasicos direto no celular.", icon: "M5 4a2 2 0 012-2h10a2 2 0 012 2v16a2 2 0 01-2 2H7a2 2 0 01-2-2zM12 18h.01" },
-    { title: "Adiciona ROMs", body: "Em Ajustes, clica 'Escolher pasta no celular' e aponta pra pasta com suas ROMs (.gba/.nes/.iso/etc).", icon: "M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" },
-    { title: "Quer tudo? Pega o Windows", body: "A versao Windows (paga) tem Switch, PS3, Xbox 360, gamepad nativo, musica ambiente, Discord rich presence e mais.", icon: "M21 9V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-4" },
+    { title: "Bem-vindo ao Ludex Mobile", body: "Sua biblioteca retro no celular: GBA, NES, SNES, GB/GBC, Mega Drive, NDS, PS1 e mais — direto no Android, sem PC.", icon: "M5 4a2 2 0 012-2h10a2 2 0 012 2v16a2 2 0 01-2 2H7a2 2 0 01-2-2zM12 18h.01" },
+    { title: "Adiciona suas ROMs", body: "Vai em Ajustes > 'Escolher pasta no celular' e aponta pra pasta com seus arquivos (.gba/.nes/.iso/.smc/etc). O Ludex encontra as ROMs automaticamente.", icon: "M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" },
+    { title: "Controle Bluetooth", body: "Pareia qualquer controle (Xbox/PS/Switch/8BitDo) nas Configuracoes do Android. Ao abrir um jogo, o Ludex reconhece automaticamente e voce joga sem touchscreen.", icon: "M6 9h12M6 15h2m8 0h2M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z" },
+    { title: "Auto-update", body: "Quando sai versao nova no GitHub, o Ludex avisa na hora e baixa o APK direto. Voce so confirma a instalacao do Android.", icon: "M21 12a9 9 0 11-18 0 9 9 0 0118 0zM12 7v5l3 3" },
+    { title: "Versao Windows tem MAIS", body: "PS2, GameCube, Wii, 3DS, Saturn, Switch, PS3, Xbox 360, RetroAchievements, Discord Rich Presence, musica ambiente, wallpapers — tudo na versao paga de PC.", icon: "M21 9V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-4" },
   ];
   const [idx, setIdx] = useState(0);
   const cur = steps[idx];
@@ -2111,12 +2119,15 @@ function WhyWindowsCard() {
     <section className="lmx-settings-card lmx-why-windows">
       <div className="lmx-settings-label">Por que comprar a versao Windows?</div>
       <ul className="lmx-why-list">
+        <li>27+ sistemas embedded: PS2, GameCube, Wii, 3DS, Saturn, Dreamcast e mais</li>
         <li>Switch, PS3, Xbox 360, PS Vita, Wii U via emuladores nativos</li>
         <li>RetroAchievements (conquistas reais por jogo)</li>
-        <li>Discord Rich Presence</li>
+        <li>Save states com slot multiplo + resume automatico</li>
+        <li>Discord Rich Presence (mostra o jogo no seu perfil)</li>
         <li>Musica ambiente com playlist + crossfade</li>
         <li>Wallpapers customizados, perfis ilimitados</li>
-        <li>Gamepad nativo sem latencia</li>
+        <li>Gamepad nativo sem latencia + remap por emulador</li>
+        <li>Notificacao quando controle conecta/desconecta</li>
         <li>Auto-update do app + cores libretro</li>
       </ul>
       <a className="lmx-settings-btn primary" href="https://pauloadriel98.gumroad.com/l/ludex" target="_blank" rel="noopener">

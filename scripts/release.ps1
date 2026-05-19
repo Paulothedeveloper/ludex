@@ -1,9 +1,17 @@
 # Script de release do Ludex
-# Uso: .\scripts\release.ps1 -Version "0.6.5" -Notes "Descricao da release"
+# Uso: .\scripts\release.ps1 -Version "0.6.5" -Notes "Descricao"
+# Por padrao: builda EXE (Windows) + APK (Android universal release).
+# Flags:
+#   -SkipAndroid : pula build do APK (release so com EXE - users mobile NAO terao auto-update)
+#   -SkipWindows : pula build do EXE
+#   -DryRun      : nao cria release no GitHub, so builda
 
 param(
   [Parameter(Mandatory=$true)][string]$Version,
-  [Parameter(Mandatory=$true)][string]$Notes
+  [Parameter(Mandatory=$true)][string]$Notes,
+  [switch]$SkipAndroid,
+  [switch]$SkipWindows,
+  [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,62 +33,100 @@ $tauri | ConvertTo-Json -Depth 32 | Set-Content "$root\src-tauri\tauri.conf.json
   -replace '^version = "[^"]+"', "version = `"$Version`"" |
   Set-Content "$root\src-tauri\Cargo.toml" -Encoding utf8
 
-# 2. Build com signing
-Write-Host "[2/5] Build assinado (pode demorar 5-10min)"
-$env:TAURI_SIGNING_PRIVATE_KEY = "$root\src-tauri\playbox-update.key"
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
-Push-Location $root
-try {
-  npm run tauri build
-  if ($LASTEXITCODE -ne 0) { throw "Build falhou" }
-} finally {
-  Pop-Location
-}
-
-# 3. Localiza artefatos
+# 2. Build Windows (assinado) + Android (APK universal-release)
 $nsisExe = "$root\src-tauri\target\release\bundle\nsis\Ludex_${Version}_x64-setup.exe"
 $nsisSig = "$nsisExe.sig"
-if (-not (Test-Path $nsisExe)) { throw "Instalador nao encontrado: $nsisExe" }
-if (-not (Test-Path $nsisSig)) { throw "Assinatura nao encontrada: $nsisSig" }
+$apkSrc  = "$root\src-tauri\gen\android\app\build\outputs\apk\universal\release\app-universal-release.apk"
+$apkUnsigned = "$root\src-tauri\gen\android\app\build\outputs\apk\universal\release\app-universal-release-unsigned.apk"
+$apkRenamed = "$root\src-tauri\gen\android\app\build\outputs\apk\universal\release\Ludex_${Version}.apk"
 
-$signature = (Get-Content $nsisSig -Raw).Trim()
+if (-not $SkipWindows) {
+  Write-Host "[2a] Build Windows assinado (pode demorar 5-10min)"
+  $env:TAURI_SIGNING_PRIVATE_KEY = "$root\src-tauri\playbox-update.key"
+  $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
+  Push-Location $root
+  try {
+    npm run tauri build
+    if ($LASTEXITCODE -ne 0) { throw "Build Windows falhou" }
+  } finally { Pop-Location }
+  if (-not (Test-Path $nsisExe)) { throw "Instalador nao encontrado: $nsisExe" }
+  if (-not (Test-Path $nsisSig)) { throw "Assinatura nao encontrada: $nsisSig" }
+}
+
+if (-not $SkipAndroid) {
+  Write-Host "[2b] Build Android APK (universal-release, pode demorar 8-15min)"
+  Push-Location $root
+  try {
+    npm run tauri android build -- --apk
+    if ($LASTEXITCODE -ne 0) { throw "Build Android falhou. Confirme ANDROID_HOME e NDK_HOME setados." }
+  } finally { Pop-Location }
+  # Tauri pode gerar app-universal-release-unsigned.apk ou app-universal-release.apk
+  $apkBuilt = $null
+  if (Test-Path $apkSrc) { $apkBuilt = $apkSrc }
+  elseif (Test-Path $apkUnsigned) { $apkBuilt = $apkUnsigned }
+  else { throw "APK nao encontrado em $apkSrc nem $apkUnsigned" }
+  Copy-Item $apkBuilt $apkRenamed -Force
+  Write-Host "  APK pronto: $apkRenamed ($([math]::Round((Get-Item $apkRenamed).Length/1MB,1))MB)"
+}
+
+# 3. Gera latest.json
+$signature = if (-not $SkipWindows) { (Get-Content $nsisSig -Raw).Trim() } else { "" }
 $pubDate = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
 
-# 4. Gera latest.json
-Write-Host "[3/5] Gerando latest.json"
+Write-Host "[3] Gerando latest.json"
+$platforms = @{}
+if (-not $SkipWindows) {
+  $platforms["windows-x86_64"] = @{
+    signature = $signature
+    url       = "https://github.com/EllaeMyApp/ludex/releases/download/v$Version/Ludex_${Version}_x64-setup.exe"
+  }
+}
 $latest = @{
   version  = $Version
   notes    = $Notes
   pub_date = $pubDate
-  platforms = @{
-    "windows-x86_64" = @{
-      signature = $signature
-      url       = "https://github.com/EllaeMyApp/ludex/releases/download/v$Version/Ludex_${Version}_x64-setup.exe"
-    }
-  }
+  platforms = $platforms
 }
 $latestPath = "$root\src-tauri\target\release\bundle\nsis\latest.json"
+$null = New-Item -ItemType Directory -Path (Split-Path $latestPath -Parent) -Force
 $latest | ConvertTo-Json -Depth 8 | Set-Content $latestPath -Encoding utf8
 
-# 5. Commita versao + cria release
-Write-Host "[4/5] Commit + tag v$Version"
+if ($DryRun) {
+  Write-Host "`n=== DryRun - artefatos gerados, release NAO criada ===" -ForegroundColor Yellow
+  if (-not $SkipWindows) { Write-Host "  EXE: $nsisExe" }
+  if (-not $SkipAndroid) { Write-Host "  APK: $apkRenamed" }
+  Write-Host "  latest.json: $latestPath"
+  return
+}
+
+# 4. Commit + tag + release no GitHub
+Write-Host "[4] Commit + tag v$Version"
 Push-Location $root
 try {
   git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json
-  git commit -m "chore: bump v$Version"
-  git tag "v$Version"
+  git diff --staged --quiet
+  if ($LASTEXITCODE -ne 0) {
+    git commit -m "chore: bump v$Version"
+  } else {
+    Write-Host "  (sem mudancas de versao pra commitar - bump ja feito)"
+  }
+  # Cria tag soh se nao existir
+  $tagExists = git tag --list "v$Version"
+  if (-not $tagExists) { git tag "v$Version" }
   git push origin master --tags
 
-  Write-Host "[5/5] Criando release no GitHub"
-  gh release create "v$Version" `
-    "$nsisExe" `
-    "$latestPath" `
+  Write-Host "[5] Criando release no GitHub"
+  $assets = @($latestPath)
+  if (-not $SkipWindows) { $assets += $nsisExe }
+  if (-not $SkipAndroid) { $assets += $apkRenamed }
+  gh release create "v$Version" $assets `
     --title "v$Version" `
     --notes "$Notes"
-} finally {
-  Pop-Location
-}
+} finally { Pop-Location }
 
 Write-Host "`n=== OK! Release v$Version publicada ===" -ForegroundColor Green
 Write-Host "URL: https://github.com/EllaeMyApp/ludex/releases/tag/v$Version"
-Write-Host "Usuarios com a versao antiga vao receber a atualizacao na proxima vez que abrirem (ou clicarem em 'Verificar atualizacao')."
+Write-Host "Windows: auto-update na proxima abertura."
+if (-not $SkipAndroid) {
+  Write-Host "Android: APK disponivel em Ludex_${Version}.apk (auto-update Mobile pega via check_update_info)."
+}

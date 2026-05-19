@@ -3343,19 +3343,41 @@ async fn check_update_info() -> Result<UpdateInfo, String> {
 #[cfg(target_os = "android")]
 #[tauri::command]
 async fn android_download_apk(apk_url: String) -> Result<String, String> {
+    use tokio::io::AsyncWriteExt;
     // Cache dir do app via Kotlin
     let cache_dir = android_update_cache_dir_inner()?;
     let dest_path = format!("{}/ludex-update.apk", cache_dir);
+    // Apaga arquivo anterior (pode ser HTML 404 de release sem APK)
+    let _ = std::fs::remove_file(&dest_path);
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(600))
+        .timeout(std::time::Duration::from_secs(900))
         .build()
         .map_err(|e| e.to_string())?;
     let resp = client.get(&apk_url).send().await.map_err(|e| format!("download: {}", e))?;
     if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
+        return Err(format!("Atualizacao indisponivel (HTTP {}). Tente novamente em alguns minutos.", resp.status()));
     }
-    let bytes = resp.bytes().await.map_err(|e| format!("read body: {}", e))?;
-    std::fs::write(&dest_path, &bytes).map_err(|e| format!("write apk: {}", e))?;
+    // Stream pra disco pra evitar OOM em APKs grandes (200MB+)
+    let mut file = tokio::fs::File::create(&dest_path).await
+        .map_err(|e| format!("create file: {}", e))?;
+    let mut stream = resp.bytes_stream();
+    use futures_util::StreamExt; // bytes_stream() retorna Stream
+    while let Some(chunk) = stream.next().await {
+        let bytes = chunk.map_err(|e| format!("read chunk: {}", e))?;
+        file.write_all(&bytes).await.map_err(|e| format!("write chunk: {}", e))?;
+    }
+    file.flush().await.map_err(|e| format!("flush: {}", e))?;
+    drop(file);
+    // Valida magic bytes PK\x03\x04 (APK = ZIP). Se for HTML 404 ou corrompido, falha aqui
+    // em vez de crashar o PackageInstaller do Android.
+    let mut hdr = [0u8; 4];
+    use std::io::Read;
+    let mut fp = std::fs::File::open(&dest_path).map_err(|e| format!("reopen: {}", e))?;
+    fp.read_exact(&mut hdr).map_err(|e| format!("read header: {}", e))?;
+    if &hdr != b"PK\x03\x04" {
+        let _ = std::fs::remove_file(&dest_path);
+        return Err(String::from("Arquivo baixado nao e um APK valido. Pode ser que a versao Android ainda nao tenha sido publicada."));
+    }
     Ok(dest_path)
 }
 
@@ -3380,19 +3402,35 @@ fn android_update_cache_dir_inner() -> Result<String, String> {
 #[cfg(target_os = "android")]
 #[tauri::command]
 fn android_install_apk(apk_path: String) -> Result<bool, String> {
-    use jni::objects::{JObject, JString};
+    use jni::objects::{JObject, JString, JValueGen};
     let ctx = ndk_context::android_context();
     let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.map_err(|e| e.to_string())?;
     let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
     let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
     let jpath: JString = env.new_string(&apk_path).map_err(|e| e.to_string())?;
-    let ok = env.call_static_method(
+    let result = env.call_static_method(
         "gg/ludex/app/Permissions",
         "installApk",
         "(Landroid/app/Activity;Ljava/lang/String;)Z",
-        &[(&activity).into(), (&jpath).into()],
-    ).map_err(|e| format!("JNI installApk: {}", e))?
-     .z().map_err(|e| e.to_string())?;
+        &[JValueGen::Object(&activity), JValueGen::Object(&jpath)],
+    );
+    // Se Kotlin lancou exception (IllegalStateException com msg de erro), extrai a msg
+    if env.exception_check().unwrap_or(false) {
+        let throwable = env.exception_occurred().map_err(|e| e.to_string())?;
+        env.exception_clear().ok();
+        let msg_obj = env.call_method(&throwable, "getMessage", "()Ljava/lang/String;", &[])
+            .ok()
+            .and_then(|v| v.l().ok());
+        let msg = if let Some(o) = msg_obj {
+            if !o.is_null() {
+                let jstr: JString = o.into();
+                env.get_string(&jstr).map(|s| s.into()).unwrap_or_else(|_| String::from("erro JNI"))
+            } else { String::from("erro JNI (sem mensagem)") }
+        } else { String::from("erro JNI (sem mensagem)") };
+        return Err(msg);
+    }
+    let ok = result.map_err(|e| format!("JNI installApk: {}", e))?
+        .z().map_err(|e| e.to_string())?;
     Ok(ok)
 }
 
