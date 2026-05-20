@@ -836,6 +836,14 @@
 .lmx-detail-play svg { width: 18px; height: 18px; }
 .lmx-detail-play:active { transform: scale(0.98); }
 /* v0.9.3: nota (estrelas) + arquivo/mods na tela do jogo */
+.lmx-detail-webrating {
+  display: inline-flex; align-items: center; gap: 10px;
+  margin-top: 12px; padding: 8px 14px 8px 10px;
+  background: rgba(124,92,255,0.14); border: 1px solid rgba(124,92,255,0.3);
+  border-radius: 12px;
+}
+.lmx-detail-webrating-score { font-size: 26px; font-weight: 800; color: #c4b5fd; line-height: 1; }
+.lmx-detail-webrating-label { font-size: 10.5px; color: rgba(255,255,255,0.6); line-height: 1.2; }
 .lmx-detail-rating {
   display: flex; align-items: center; justify-content: space-between;
   margin-top: 16px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06);

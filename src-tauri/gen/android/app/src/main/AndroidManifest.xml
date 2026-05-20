@@ -9,8 +9,10 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
 
-    <!-- v0.8.21: auto-update obrigatorio do APK -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- v0.9.6: REQUEST_INSTALL_PACKAGES removido. O update agora abre a release
+         no navegador (open_url), nao instala APK dentro do app. Essa permissao +
+         o download/instalacao de APK eram o maior gatilho do Play Protect marcar
+         o app como malware. -->
 
     <!-- Gamepad support -->
     <uses-feature android:name="android.hardware.gamepad" android:required="false" />
@@ -50,15 +52,5 @@
             android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- v0.8.21: APK update installer expoe cache_dir pro PackageInstaller -->
-        <provider
-          android:name="androidx.core.content.FileProvider"
-          android:authorities="${applicationId}.update"
-          android:exported="false"
-          android:grantUriPermissions="true">
-          <meta-data
-            android:name="android.support.FILE_PROVIDER_PATHS"
-            android:resource="@xml/update_paths" />
-        </provider>
     </application>
 </manifest>

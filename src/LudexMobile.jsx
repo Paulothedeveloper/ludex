@@ -1406,6 +1406,13 @@ function GameDetailScreen({ system, game, coverSrc, onClose, onLaunch }) {
           {details?.developer && <span>· {details.developer}</span>}
           {game.size_mb && <span>· {game.size_mb} MB</span>}
         </div>
+        {/* v0.9.6: nota de usuarios externos (IGDB, 0-100) — paridade com PC */}
+        {details?.rating != null && (
+          <div className="lmx-detail-webrating">
+            <span className="lmx-detail-webrating-score">{Math.round(details.rating)}</span>
+            <span className="lmx-detail-webrating-label">Nota web<br />(usuários IGDB)</span>
+          </div>
+        )}
 
         <button className="lmx-detail-play" onClick={onLaunch}>
           <IconPlay /> JOGAR

@@ -2544,7 +2544,12 @@ async fn fetch_cover(system_id: String, game_name: String) -> Option<String> {
         .build()
         .ok()?;
 
-    let token = get_access_token(&client).await.ok()?;
+    // v0.9.6: log do motivo de falha (Paulo: capas pararam de aparecer no Android).
+    // Visivel no Ajustes > Logs do app.
+    let token = match get_access_token(&client).await {
+        Ok(t) => t,
+        Err(e) => { log::warn!("[cover] token IGDB falhou ({}): {}", game_name, e); return None; }
+    };
 
     // Tenta cada variante: nome completo, sem subtitulo, primeiras 3 palavras
     for variant in search_variants(&game_name) {
@@ -2575,6 +2580,7 @@ async fn fetch_cover(system_id: String, game_name: String) -> Option<String> {
         }
     }
 
+    log::warn!("[cover] sem match no IGDB pra '{}' (plataforma {})", game_name, cfg.igdb_platform);
     None
 }
 
