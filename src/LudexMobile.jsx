@@ -15,6 +15,9 @@
  */
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
+import { getWhatsNew, markVersionSeen } from "./ludexChangelog";
+import { WhatsNewModal } from "./LudexWhatsNew";
 import { open as openDialog, message as nativeMessage, ask as nativeAsk } from "@tauri-apps/plugin-dialog";
 
 // v0.9.2: window.alert/confirm/prompt sao NO-OP no WebView do Android (Tauri) —
@@ -188,6 +191,7 @@ export default function LudexMobile() {
   // sumia (botão "Começar" travado). Agora é state de verdade.
   const [tutorialDone, setTutorialDone] = useState(() => isFirstRunDone());
   const [splashDone, setSplashDone] = useState(false); // v0.9.7: splash de abertura
+  const [whatsNew, setWhatsNew] = useState(null); // v0.9.8: novidades pos-update
   const [profileEditorOpen, setProfileEditorOpen] = useState(false); // v0.9.4
   const [sysFolderPick, setSysFolderPick] = useState(null); // v0.9.5: systemId sendo configurado
 
@@ -314,6 +318,17 @@ export default function LudexMobile() {
   useEffect(() => {
     const t = setTimeout(() => setSplashDone(true), 1550);
     return () => clearTimeout(t);
+  }, []);
+
+  // v0.9.8: novidades pos-update (compara versao atual com a ultima vista)
+  useEffect(() => {
+    (async () => {
+      try {
+        const v = await getVersion();
+        const nw = getWhatsNew(v, isFirstRunDone());
+        if (nw) setWhatsNew(nw);
+      } catch {}
+    })();
   }, []);
 
   // ============ AUDIO: unlock no primeiro toque (autoplay policy) ============
@@ -698,6 +713,10 @@ export default function LudexMobile() {
 
       {/* v0.9.7: splash de abertura */}
       {!splashDone && <MobileSplash />}
+      {/* v0.9.8: novidades pos-update (depois do splash e do tutorial) */}
+      {whatsNew && splashDone && tutorialDone && (
+        <WhatsNewModal data={whatsNew} onClose={() => { markVersionSeen(whatsNew.current); setWhatsNew(null); }} />
+      )}
       {/* Tutorial first run */}
       {!tutorialDone && splashDone && (
         <TutorialOverlay onDone={() => { markFirstRunDone(); setTutorialDone(true); }} />

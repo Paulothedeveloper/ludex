@@ -5,6 +5,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { check as checkUpdate } from "@tauri-apps/plugin-updater";
+import { getWhatsNew, markVersionSeen } from "./ludexChangelog";
+import { WhatsNewModal } from "./LudexWhatsNew";
 import { relaunch } from "@tauri-apps/plugin-process";
 import "./LudexLauncher.css";
 import LudexOnboarding, { DEFAULT_AVATARS, avatarUrl, getProfileAvatarUrl } from "./LudexOnboarding";
@@ -2117,6 +2119,7 @@ export default function LudexLauncher() {
   const [androidDemo, setAndroidDemo] = useState(null);  // { expired, days_left, is_admin_unlocked, ... }
   // First-run onboarding + utilitarios novos do v0.4
   const [firstRunActive, setFirstRunActive] = useState(false);
+  const [whatsNew, setWhatsNew] = useState(null); // v0.9.8: novidades pos-update
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [suggestionsTab, setSuggestionsTab] = useState("roms");
   const [controlsTip, setControlsTip] = useState(null); // { system } | null
@@ -2348,6 +2351,23 @@ export default function LudexLauncher() {
     const t = setTimeout(() => setSplashDone(true), 3500);
     return () => clearTimeout(t);
   }, []);
+
+  // v0.9.8: novidades pos-update. Espera o config carregar pra saber se e usuario
+  // returning (tem profile) — so mostra pra quem ja usava o app.
+  const whatsNewRanRef = useRef(false);
+  useEffect(() => {
+    if (whatsNewRanRef.current) return;
+    const returning = !!config?.first_run_done || (config?.profiles?.length > 0);
+    if (!returning) return; // espera config / usuario novo nao mostra
+    whatsNewRanRef.current = true;
+    (async () => {
+      try {
+        const v = await getVersion();
+        const nw = getWhatsNew(v, true);
+        if (nw) setWhatsNew(nw);
+      } catch {}
+    })();
+  }, [config]);
 
   // Música ambiente: carrega playlist no startup, liga/desliga conforme config
   useEffect(() => {
@@ -2793,6 +2813,8 @@ export default function LudexLauncher() {
       photoSourcePath: customPhotoPath || null,
     });
     try { await invoke("complete_first_run"); } catch (e) { console.error("complete_first_run", e); }
+    // v0.9.8: usuario novo nao ve "novidades" (ja viu o onboarding)
+    try { const v = await getVersion(); markVersionSeen(v); setWhatsNew(null); } catch {}
     setFirstRunActive(false);
     sfx.confirm();
   }, [createProfile]);
@@ -4632,6 +4654,10 @@ export default function LudexLauncher() {
         systemName={settingsModal ? (displayedSystems.find(s => s.id === settingsModal.systemId)?.name || settingsModal.systemId) : ""}
         onClose={() => setSettingsModal(null)}
       />
+      {/* v0.9.8: novidades pos-update (depois do splash e do first-run) */}
+      {whatsNew && splashDone && !firstRunActive && (
+        <WhatsNewModal data={whatsNew} onClose={() => { markVersionSeen(whatsNew.current); setWhatsNew(null); }} />
+      )}
 
       {/* First-run onboarding: tour spotlight + criacao de perfil. Fica em
        * cima de tudo (z-index 9000) ate o user concluir. Skip em Android. */}
