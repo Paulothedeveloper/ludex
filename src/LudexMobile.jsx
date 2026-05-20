@@ -1109,9 +1109,9 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
           </div>
           {!androidDemo.is_admin_unlocked && (
             <>
-              <a className="lmx-settings-btn primary" href="https://pauloadriel98.gumroad.com/l/ludex" target="_blank" rel="noopener">
+              <button className="lmx-settings-btn primary" onClick={() => invoke("open_url", { url: "https://pauloadriel98.gumroad.com/l/ludex" }).catch(() => {})}>
                 Comprar versao Windows (R$ 49,90)
-              </a>
+              </button>
               {!showKeyInput ? (
                 <button className="lmx-settings-btn ghost" onClick={() => setShowKeyInput(true)}>
                   Sou admin / tenho license
@@ -1693,9 +1693,9 @@ function DemoExpiredScreen({ demo, onUnlock }) {
           Voce usou os {demo.demo_days_total} dias da versao Android gratuita.
           Pra continuar, compre a versao Windows.
         </p>
-        <a className="lmx-settings-btn primary" href="https://pauloadriel98.gumroad.com/l/ludex" target="_blank" rel="noopener">
+        <button className="lmx-settings-btn primary" onClick={() => invoke("open_url", { url: "https://pauloadriel98.gumroad.com/l/ludex" }).catch(() => {})}>
           Comprar Windows (R$ 49,90)
-        </a>
+        </button>
         {!showKeyInput ? (
           <button className="lmx-settings-btn ghost" onClick={() => setShowKeyInput(true)}>
             Sou admin / tenho license
@@ -2488,9 +2488,9 @@ function WhyWindowsCard() {
         <li>Notificacao quando controle conecta/desconecta</li>
         <li>Auto-update do app + cores libretro</li>
       </ul>
-      <a className="lmx-settings-btn primary" href="https://pauloadriel98.gumroad.com/l/ludex" target="_blank" rel="noopener">
+      <button className="lmx-settings-btn primary" onClick={() => invoke("open_url", { url: "https://pauloadriel98.gumroad.com/l/ludex" }).catch(() => {})}>
         Comprar Windows (R$ 49,90)
-      </a>
+      </button>
     </section>
   );
 }
