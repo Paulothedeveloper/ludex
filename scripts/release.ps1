@@ -101,7 +101,12 @@ $latest = @{
 }
 $latestPath = "$root\src-tauri\target\release\bundle\nsis\latest.json"
 $null = New-Item -ItemType Directory -Path (Split-Path $latestPath -Parent) -Force
-$latest | ConvertTo-Json -Depth 8 | Set-Content $latestPath -Encoding utf8
+# v0.9.2: ESCREVE SEM BOM. Set-Content -Encoding utf8 (PS 5.1) adiciona BOM,
+# e o parser JSON do updater do Tauri quebra com BOM no inicio -> erro
+# "missing field platforms" / "expected value". Era por isso que o auto-update
+# do PC nao funcionava. WriteAllText com UTF8Encoding($false) = sem BOM.
+$latestJson = $latest | ConvertTo-Json -Depth 8
+[System.IO.File]::WriteAllText($latestPath, $latestJson, (New-Object System.Text.UTF8Encoding($false)))
 
 if ($DryRun) {
   Write-Host "`n=== DryRun - artefatos gerados, release NAO criada ===" -ForegroundColor Yellow

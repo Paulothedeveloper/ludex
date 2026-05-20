@@ -33,6 +33,8 @@ import {
 import { SystemSettingsModal, SuggestionsModal } from "./LudexExtras"; // v0.9.1: + SuggestionsModal pra paridade com desktop
 import { DEFAULT_AVATARS, avatarUrl } from "./LudexOnboarding"; // v0.9.1: reusa avatares SVG do desktop (regra: NUNCA emoji em UI prod)
 import { hasOptionsForSystem, applySystemOptions, effectivePadMap } from "./ludexSystemOptions";
+import { CheatsModal } from "./LudexCheatsModal";
+import { loadCheats as loadGameCheats, applyCheats as applyGameCheats } from "./ludexCheats";
 
 // ============================================================
 // === ICONES SVG (sem emojis, regra Paulo) ===================
@@ -1276,69 +1278,137 @@ function GameDetailScreen({ system, game, coverSrc, onClose, onLaunch }) {
 }
 
 // ============================================================
-// === FOLDER PICKER MODAL (Android, sem SAF nativo no Tauri) =
-// ============================================================
-const COMMON_ANDROID_FOLDERS = [
-  { path: "/storage/emulated/0/Download", label: "Download", hint: "Pasta padrao de downloads" },
-  { path: "/storage/emulated/0/Ludex/roms", label: "Ludex/roms", hint: "Pasta padrao do Ludex" },
-  { path: "/storage/emulated/0/RetroArch/roms", label: "RetroArch/roms", hint: "Se ja usa RetroArch" },
-  { path: "/storage/emulated/0/Roms", label: "Roms", hint: "Pasta generica de ROMs" },
-  { path: "/storage/emulated/0/Games", label: "Games", hint: "Pasta de jogos" },
-  { path: "/storage/emulated/0/Documents/ROMs", label: "Documents/ROMs", hint: "Em Documents" },
+// === FOLDER BROWSER MODAL (v0.9.2) ==========================
+// Navegador de arquivos REAL: o user percorre o armazenamento do celular
+// (o app tem MANAGE_EXTERNAL_STORAGE, entao list_dir no Rust le tudo).
+// Antes era uma lista fixa "engessada"; agora tem breadcrumb, atalhos e
+// contagem de ROMs por pasta. ============================================
+const QUICK_SHORTCUTS = [
+  { path: "/storage/emulated/0", label: "Início" },
+  { path: "/storage/emulated/0/Download", label: "Download" },
+  { path: "/storage/emulated/0/Ludex/roms", label: "Ludex" },
+  { path: "/storage/emulated/0/RetroArch/roms", label: "RetroArch" },
 ];
 
+const IconFolder = ({ withRoms }) => (
+  <svg viewBox="0 0 24 24" fill={withRoms ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+  </svg>
+);
+const IconFile = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+  </svg>
+);
+const IconUp = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <polyline points="18 15 12 9 6 15" />
+  </svg>
+);
+
 function FolderPickerModal({ onClose, onPick }) {
-  const [custom, setCustom] = useState("");
+  const [cwd, setCwd] = useState(null);
+  const [listing, setListing] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+
+  const load = useCallback(async (path) => {
+    setLoading(true); setErr(null);
+    try {
+      const res = await invoke("list_dir", { path: path || null });
+      setListing(res);
+      setCwd(res.path);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(null); }, [load]);
+
+  const folders = (listing?.entries || []).filter((e) => e.is_dir);
+  const files = (listing?.entries || []).filter((e) => !e.is_dir);
+  const romsHere = files.filter((f) => /\.(zip|7z|chd|iso|bin|cue|nes|sfc|smc|gba|gb|gbc|n64|z64|nds|3ds|gcm|rvz|wbfs|iso|cso|pbp|md|gen|smd|pce|ws|wsc|ngp|gg|sms)$/i.test(f.name)).length;
+
+  // breadcrumb a partir do cwd
+  const crumbs = [];
+  if (cwd) {
+    const parts = cwd.split("/").filter(Boolean);
+    let acc = cwd.startsWith("/") ? "" : ".";
+    for (const p of parts) {
+      acc += "/" + p;
+      crumbs.push({ label: p, path: acc });
+    }
+  }
 
   return (
     <div className="lmx-sheet-backdrop" onClick={onClose}>
       <div className="lmx-folder-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="lmx-sheet-handle" />
         <div className="lmx-sheet-header">
-          <h3>Onde estao suas ROMs?</h3>
+          <h3>Escolher pasta de ROMs</h3>
           <button className="lmx-back-btn" onClick={onClose} aria-label="Fechar"><IconClose /></button>
         </div>
-        <p className="lmx-folder-hint">
-          Escolha uma pasta comum ou digite o caminho exato no seu celular.
-          O Ludex varre as subpastas automaticamente.
-        </p>
 
-        <div className="lmx-folder-list">
-          {COMMON_ANDROID_FOLDERS.map((f) => (
-            <button
-              key={f.path}
-              className="lmx-folder-item"
-              onClick={() => onPick(f.path)}
-            >
-              <div className="lmx-folder-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                </svg>
-              </div>
-              <div className="lmx-folder-item-text">
-                <div className="lmx-folder-item-label">{f.label}</div>
-                <div className="lmx-folder-item-path">{f.path}</div>
-                <div className="lmx-folder-item-hint">{f.hint}</div>
-              </div>
-            </button>
+        {/* Atalhos rapidos */}
+        <div className="lmx-fb-shortcuts">
+          {QUICK_SHORTCUTS.map((s) => (
+            <button key={s.path} className="lmx-fb-chip" onClick={() => load(s.path)}>{s.label}</button>
           ))}
         </div>
 
-        <div className="lmx-folder-custom">
-          <label className="lmx-folder-custom-label">Caminho custom:</label>
-          <input
-            type="text"
-            placeholder="/storage/emulated/0/MinhaPasta"
-            value={custom}
-            onChange={(e) => setCustom(e.target.value)}
-            className="lmx-folder-custom-input"
-          />
+        {/* Breadcrumb + subir */}
+        <div className="lmx-fb-bar">
+          <button
+            className="lmx-fb-up"
+            disabled={!listing?.parent}
+            onClick={() => listing?.parent && load(listing.parent)}
+            aria-label="Subir um nível"
+          ><IconUp /></button>
+          <div className="lmx-fb-crumbs">
+            {crumbs.length === 0 ? <span className="lmx-fb-crumb">/</span> : crumbs.map((c, i) => (
+              <span key={c.path} className="lmx-fb-crumb-wrap">
+                {i > 0 && <span className="lmx-fb-sep">/</span>}
+                <button className="lmx-fb-crumb" onClick={() => load(c.path)}>{c.label}</button>
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Conteudo */}
+        <div className="lmx-fb-list">
+          {loading && <div className="lmx-fb-status">Carregando…</div>}
+          {err && <div className="lmx-fb-status lmx-fb-err">{err}</div>}
+          {!loading && !err && folders.length === 0 && files.length === 0 && (
+            <div className="lmx-fb-status">Pasta vazia</div>
+          )}
+          {!loading && !err && folders.map((f) => (
+            <button key={f.path} className="lmx-fb-item" onClick={() => load(f.path)}>
+              <span className={"lmx-fb-icon" + (f.rom_count > 0 ? " has-roms" : "")}><IconFolder withRoms={f.rom_count > 0} /></span>
+              <span className="lmx-fb-name">{f.name}</span>
+              {f.rom_count > 0 && <span className="lmx-fb-badge">{f.rom_count} ROM{f.rom_count > 1 ? "s" : ""}</span>}
+            </button>
+          ))}
+          {!loading && !err && files.map((f) => (
+            <div key={f.path} className="lmx-fb-item lmx-fb-file">
+              <span className="lmx-fb-icon"><IconFile /></span>
+              <span className="lmx-fb-name">{f.name}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Acao: usar pasta atual */}
+        <div className="lmx-fb-footer">
+          {romsHere > 0 && (
+            <div className="lmx-fb-foundhint">{romsHere} ROM{romsHere > 1 ? "s" : ""} nesta pasta</div>
+          )}
           <button
             className="lmx-settings-btn primary"
-            disabled={!custom.trim()}
-            onClick={() => onPick(custom.trim())}
+            disabled={!cwd || loading}
+            onClick={() => onPick(cwd)}
           >
-            Usar este caminho
+            Usar esta pasta
           </button>
         </div>
       </div>
@@ -1488,6 +1558,7 @@ function saveCustomLayout(systemId, offsets) {
 function MobileEmulatorView({ system, game, onClose }) {
   const layout = SYSTEM_LAYOUTS[system.id] || DEFAULT_LAYOUT;
   const [menuOpen, setMenuOpen] = useState(false);
+  const [cheatsOpen, setCheatsOpen] = useState(false);
   const [emuSettingsOpen, setEmuSettingsOpen] = useState(false); // v0.8.38: settings in-game
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false);
@@ -1589,6 +1660,11 @@ function MobileEmulatorView({ system, game, onClose }) {
         if (cancelled) return;
         setInfo(result);
         audioRateRef.current = result.sample_rate || 32040;
+        // v0.9.2: re-aplica cheats salvos (habilitados) ao carregar
+        try {
+          const saved = loadGameCheats(system.id, game.path).filter((c) => c.enabled);
+          if (saved.length) setTimeout(() => { applyGameCheats(saved).catch(() => {}); }, 400);
+        } catch {}
         if (canvasRef.current) {
           canvasRef.current.width = result.base_width;
           canvasRef.current.height = result.base_height;
@@ -1844,7 +1920,9 @@ function MobileEmulatorView({ system, game, onClose }) {
   return (
     <div className="lmx-emu-root">
       <button className="lmx-emu-back" onClick={onClose} aria-label="Voltar"><IconArrowLeft /></button>
-      <button className="lmx-emu-menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu">⚙</button>
+      <button className="lmx-emu-menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+      </button>
       {/* v0.8.23: botao Fast-Forward — hold pra acelerar 2x, indicador visual */}
       <button
         className={`lmx-emu-ff-btn ${ffActive || ffSpeed > 1 ? "active" : ""}`}
@@ -1969,10 +2047,23 @@ function MobileEmulatorView({ system, game, onClose }) {
               </div>
             )}
 
+            <div className="lmx-emu-menu-section">
+              <div className="lmx-emu-menu-label">Cheats</div>
+              <button
+                className="lmx-emu-menu-pill"
+                onClick={() => { setCheatsOpen(true); setMenuOpen(false); }}
+              >
+                Buscar / gerenciar cheats
+              </button>
+            </div>
+
             <button className="lmx-settings-btn primary" onClick={() => setMenuOpen(false)}>Fechar</button>
             <button className="lmx-settings-btn ghost" onClick={() => { onClose(); }} style={{marginTop: 8}}>Sair do jogo</button>
           </div>
         </div>
+      )}
+      {cheatsOpen && (
+        <CheatsModal systemId={system.id} gamePath={game.path} onClose={() => setCheatsOpen(false)} />
       )}
       <SystemSettingsModal
         open={emuSettingsOpen}
@@ -1988,7 +2079,10 @@ function MobileEmulatorView({ system, game, onClose }) {
       )}
       {/* Indicador gamepad fisico conectado */}
       {gamepadConnected && !editMode && (
-        <div className="lmx-emu-gamepad-badge" title="Gamepad conectado">🎮 GAMEPAD</div>
+        <div className="lmx-emu-gamepad-badge" title="Gamepad conectado">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ marginRight: 5, verticalAlign: "-2px" }}><line x1="6" y1="11" x2="10" y2="11" /><line x1="8" y1="9" x2="8" y2="13" /><line x1="15" y1="12" x2="15.01" y2="12" /><line x1="18" y1="10" x2="18.01" y2="10" /><rect x="2" y="6" width="20" height="12" rx="2" /></svg>
+          GAMEPAD
+        </div>
       )}
       {/* Touch controls — layout customizado por sistema. Esconde se gamepad ativo */}
       <div className={`lmx-emu-controls ${editMode ? "lmx-emu-edit" : ""} ${gamepadConnected && !editMode ? "lmx-emu-controls-dim" : ""}`} data-face-count={layout.face.length}>

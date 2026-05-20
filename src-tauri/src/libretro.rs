@@ -1382,6 +1382,26 @@ impl LibretroCore {
         Ok(())
     }
 
+    // v0.9.2: cheats. retro_cheat_reset() limpa tudo; retro_cheat_set(idx, on, code)
+    // aplica um codigo. Codigos no formato do core (Game Genie/PAR p/ retro, raw
+    // p/ modernos). Se o core nao exporta os simbolos, retorna erro amigavel.
+    pub unsafe fn cheat_reset(&self) -> Result<(), String> {
+        type Fn0 = extern "C" fn();
+        let f: Symbol<Fn0> = self.lib.get(b"retro_cheat_reset")
+            .map_err(|_| "core nao suporta cheats".to_string())?;
+        f();
+        Ok(())
+    }
+
+    pub unsafe fn cheat_set(&self, index: u32, enabled: bool, code: &str) -> Result<(), String> {
+        type FnC = extern "C" fn(u32, bool, *const std::os::raw::c_char);
+        let f: Symbol<FnC> = self.lib.get(b"retro_cheat_set")
+            .map_err(|_| "core nao suporta cheats".to_string())?;
+        let c = CString::new(code).map_err(|e| e.to_string())?;
+        f(index, enabled, c.as_ptr());
+        Ok(())
+    }
+
     pub unsafe fn serialize_size(&self) -> Result<usize, String> {
         type Fn0 = extern "C" fn() -> usize;
         let f: Symbol<Fn0> = self.lib.get(b"retro_serialize_size").map_err(|e| e.to_string())?;

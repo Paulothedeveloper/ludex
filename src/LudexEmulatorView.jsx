@@ -10,6 +10,8 @@ import { CloseIcon, SystemIcon } from "./ludexIcons";
 import { ToolsIcon as LxToolsIcon } from "./LudexExtras";
 import { hasOptionsForSystem, applySystemOptions, effectivePadMap, getFrontendConfig } from "./ludexSystemOptions";
 import { validRomExtension, invokeTimeout } from "./ludexUtils";
+import { CheatsModal } from "./LudexCheatsModal";
+import { loadCheats, applyCheats } from "./ludexCheats";
 
 export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
   const canvasRef = useRef(null);
@@ -21,6 +23,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
   const [slots, setSlots] = useState([]);
   const [slotsBusy, setSlotsBusy] = useState(false);
   const [emuSettingsOpen, setEmuSettingsOpen] = useState(false);
+  const [cheatsOpen, setCheatsOpen] = useState(false);
   const [discInfo, setDiscInfo] = useState(null);
   const [discMenuOpen, setDiscMenuOpen] = useState(false);
   const audioCtxRef = useRef(null);
@@ -130,65 +133,105 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
     };
   }, [system.id, game.path, system.libretro_core]);
 
-  // v0.9.1: drainer removido — AudioWorklet processa direto na audio thread.
+  // v0.9.2: re-aplica cheats salvos (habilitados) assim que o jogo carrega.
+  useEffect(() => {
+    if (!info) return;
+    const saved = loadCheats(system.id, game.path).filter((c) => c.enabled);
+    if (saved.length === 0) return;
+    const t = setTimeout(() => { applyCheats(saved).catch(() => {}); }, 400);
+    return () => clearTimeout(t);
+  }, [info, system.id, game.path]);
 
-  // Loop de frames
+  // v0.9.2: drainer removido — AudioWorklet processa direto na audio thread.
+
+  // Loop de frames — v0.9.2: PACING PELO RELOGIO DE AUDIO (hardware), nao por
+  // performance.now()/rAF. Esse era o bug raiz do stutter: a emulacao ficava
+  // presa ao requestAnimationFrame, entao qualquer jank do main thread (render
+  // React, GC, latencia de IPC) atrasava a producao de audio -> o ring buffer
+  // do worklet ficava em underrun -> engasgo. Mesmo num PC forte (RTX 4070) o
+  // gargalo nao e CPU, e o agendamento.
+  //
+  // Agora: AudioContext.currentTime avanca em tempo real, governado pela placa
+  // de som. A cada tick calculamos quanto audio ainda esta no buffer
+  // (produzido - consumido) e rodamos frames suficientes pra repor ate
+  // TARGET_LATENCY. Se o rAF atrasa, rodamos mais frames de uma vez (catch-up),
+  // entao o buffer nunca esvazia. Video renderiza so o ultimo frame do tick.
   useEffect(() => {
     if (!info) return;
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
-    let nextFrame = performance.now();
     const baseFps = info.fps || 60;
+    const sampleRate = audioRateRef.current || info.sample_rate || 48000;
+    const samplesPerFrame = sampleRate / baseFps;
+    const lowLat = cfgRef.current.lowLatencyAudio !== false;
+    const TARGET_LATENCY = lowLat ? 0.07 : 0.12; // alvo de buffer (s)
+    const MAX_LATENCY    = lowLat ? 0.16 : 0.26; // teto: acima disso pausa producao
+    const MAX_FRAMES_PER_TICK = 16;
+
+    let producedPerCh = 0; // total de samples/canal postados ao worklet
+    let audioStart = null; // ctx.currentTime quando comecamos a produzir
+    let lastFf = 1;
+
+    function renderVideo(buf) {
+      if (!buf || buf.byteLength < 8) return;
+      const ab = buf.buffer ? buf.buffer : buf;
+      const off = buf.byteOffset || 0;
+      const view = new DataView(ab, off, buf.byteLength);
+      const w = view.getUint32(0, true);
+      const h = view.getUint32(4, true);
+      const rgba = new Uint8ClampedArray(ab, off + 8, w * h * 4);
+      if (w !== ctx.canvas.width || h !== ctx.canvas.height) {
+        ctx.canvas.width = w;
+        ctx.canvas.height = h;
+      }
+      ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
+    }
+
+    function postAudio(audioBuf) {
+      if (!audioBuf || audioBuf.byteLength === 0) return;
+      const ab = audioBuf.buffer ? audioBuf.buffer : audioBuf;
+      const srcView = new Int16Array(ab, audioBuf.byteOffset || 0, audioBuf.byteLength / 2);
+      producedPerCh += srcView.length / 2;
+      if (workletNodeRef.current) {
+        const copy = new Int16Array(srcView); // transferable zero-copy pro audio thread
+        workletNodeRef.current.port.postMessage({ type: "samples", data: copy }, [copy.buffer]);
+      }
+    }
 
     async function tick() {
-      const now = performance.now();
+      const actx = audioCtxRef.current;
       const ff = Math.max(1, ffEffectiveRef.current || 1);
-      const emuRate = baseFps * ff;
-      const renderRate = Math.min(emuRate, 144);
-      const targetFrameMs = 1000 / renderRate;
-      const framesPerRender = Math.max(1, Math.round(emuRate / renderRate));
-      if (now < nextFrame) {
-        rafRef.current = requestAnimationFrame(tick);
-        return;
-      }
-      nextFrame += targetFrameMs;
-      if (now - nextFrame > targetFrameMs * 4) nextFrame = now + targetFrameMs;
       try {
-        if (framesPerRender > 1) {
-          try { await invoke("libretro_skip_frames", { n: framesPerRender - 1 }); } catch {}
-        }
-        const buf = await invoke("libretro_run_frame");
-        if (buf && buf.byteLength >= 8) {
-          const view = new DataView(buf.buffer ? buf.buffer : buf, buf.byteOffset || 0, buf.byteLength);
-          const w = view.getUint32(0, true);
-          const h = view.getUint32(4, true);
-          const rgba = new Uint8ClampedArray(
-            buf.buffer ? buf.buffer : buf,
-            (buf.byteOffset || 0) + 8,
-            w * h * 4
-          );
-          if (w !== ctx.canvas.width || h !== ctx.canvas.height) {
-            ctx.canvas.width = w;
-            ctx.canvas.height = h;
+        if (ff > 1) {
+          // Fast-forward: roda ff frames (capado), MUDO (audio descartado) pra
+          // nao acumular nem dar pitch-bend. Reseta o baseline do clock.
+          const n = Math.min(ff, MAX_FRAMES_PER_TICK);
+          if (n > 1) { try { await invoke("libretro_skip_frames", { n: n - 1 }); } catch {} }
+          renderVideo(await invoke("libretro_run_frame"));
+          try { await invoke("libretro_take_audio"); } catch {} // drena e descarta
+          audioStart = null; producedPerCh = 0; lastFf = ff;
+        } else {
+          if (lastFf !== 1) { audioStart = null; producedPerCh = 0; lastFf = 1; }
+          let framesToRun = 1;
+          if (actx) {
+            if (audioStart == null) { audioStart = actx.currentTime; producedPerCh = 0; }
+            const consumedPerCh = Math.max(0, (actx.currentTime - audioStart) * sampleRate);
+            const bufferedSec = (producedPerCh - consumedPerCh) / sampleRate;
+            if (bufferedSec >= MAX_LATENCY) {
+              framesToRun = 0; // buffer cheio: espera o proximo tick
+            } else {
+              const deficitSec = TARGET_LATENCY - bufferedSec;
+              framesToRun = Math.min(
+                MAX_FRAMES_PER_TICK,
+                Math.max(1, Math.ceil((deficitSec * sampleRate) / samplesPerFrame)),
+              );
+            }
           }
-          const imageData = new ImageData(rgba, w, h);
-          ctx.putImageData(imageData, 0, 0);
-        }
-        // v0.9.1: posta audio direto pro AudioWorklet (audio thread)
-        const audioBuf = await invoke("libretro_take_audio");
-        if (audioBuf && audioBuf.byteLength > 0 && workletNodeRef.current) {
-          const srcView = new Int16Array(
-            audioBuf.buffer ? audioBuf.buffer : audioBuf,
-            audioBuf.byteOffset || 0,
-            audioBuf.byteLength / 2
-          );
-          // Copia pro Int16Array proprio (audioBuf eh transferivel mas seguro copiar)
-          const copy = new Int16Array(srcView);
-          // Transferable: zero-copy do main pra audio thread
-          workletNodeRef.current.port.postMessage(
-            { type: 'samples', data: copy },
-            [copy.buffer],
-          );
+          if (framesToRun > 0) {
+            if (framesToRun > 1) { try { await invoke("libretro_skip_frames", { n: framesToRun - 1 }); } catch {} }
+            renderVideo(await invoke("libretro_run_frame"));
+            postAudio(await invoke("libretro_take_audio"));
+          }
         }
       } catch (e) {
         console.error("frame tick", e);
@@ -446,6 +489,16 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
         >
           <LxToolsIcon />
         </button>
+      )}
+      <button
+        className="pb-emulator-cheats"
+        onClick={() => setCheatsOpen(true)}
+        title="Cheats (buscar online ou adicionar manualmente)"
+      >
+        CHEATS
+      </button>
+      {cheatsOpen && (
+        <CheatsModal systemId={system.id} gamePath={game.path} onClose={() => setCheatsOpen(false)} />
       )}
       {discInfo && discInfo.supported && discInfo.num_images > 1 && (
         <button

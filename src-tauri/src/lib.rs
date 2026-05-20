@@ -1302,6 +1302,86 @@ fn scan_roms(roms_root: Option<String>) -> Vec<SystemInfo> {
     EMULATORS.iter().map(|cfg| scan_system(&root_path, &emu_root, cfg)).collect()
 }
 
+// v0.9.2: navegador de arquivos real. Antes o picker de pasta no Android era uma
+// lista fixa de caminhos comuns ("engessado") — agora o user navega o
+// armazenamento de verdade (o app ja tem MANAGE_EXTERNAL_STORAGE, entao
+// std::fs::read_dir le /storage/emulated/0 numa boa). Tambem serve no desktop.
+#[derive(serde::Serialize)]
+struct DirEntry {
+    name: String,
+    path: String,
+    is_dir: bool,
+    rom_count: u32, // qtd de arquivos com extensao de ROM dentro (so p/ dirs, shallow)
+}
+
+#[derive(serde::Serialize)]
+struct DirListing {
+    path: String,
+    parent: Option<String>,
+    entries: Vec<DirEntry>,
+}
+
+fn is_rom_ext(name: &str) -> bool {
+    // extensoes que algum core libretro do Ludex carrega (lista ampla, lowercase)
+    const EXTS: &[&str] = &[
+        "zip","7z","chd","iso","bin","cue","img","nrg","mdf","gdi","cso","pbp",
+        "nes","fds","unf","sfc","smc","fig","swc","gba","gb","gbc","gg","sms",
+        "md","gen","smd","32x","sg","n64","z64","v64","ndd","nds","dsi","srl",
+        "3ds","cci","cxi","app","cia","gcm","gcz","rvz","wbfs","wad","wia",
+        "pce","sgx","cue","ws","wsc","ngp","ngc","vb","col","a78","lnx","d64",
+        "dol","elf","ciso","wud","wux","rpx","nsp","xci","exe","xbe","cdi","m3u",
+    ];
+    name.rsplit('.').next().map(|e| EXTS.contains(&e.to_lowercase().as_str())).unwrap_or(false)
+}
+
+fn shallow_rom_count(dir: &std::path::Path) -> u32 {
+    let mut n = 0u32;
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            if e.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                let fname = e.file_name().to_string_lossy().to_string();
+                if is_rom_ext(&fname) { n += 1; if n >= 999 { break; } }
+            }
+        }
+    }
+    n
+}
+
+#[tauri::command]
+fn list_dir(path: Option<String>) -> Result<DirListing, String> {
+    let root = match path {
+        Some(s) if !s.is_empty() => s,
+        _ => {
+            #[cfg(target_os = "android")] { "/storage/emulated/0".to_string() }
+            #[cfg(not(target_os = "android"))] {
+                dirs::home_dir().map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/".to_string())
+            }
+        }
+    };
+    let p = std::path::Path::new(&root);
+    if !p.is_dir() {
+        return Err(format!("Nao e uma pasta: {}", root));
+    }
+    let mut entries: Vec<DirEntry> = Vec::new();
+    let rd = std::fs::read_dir(p).map_err(|e| format!("Sem acesso a {}: {}", root, e))?;
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') { continue; } // esconde ocultos
+        let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        let full = e.path().to_string_lossy().to_string();
+        let rom_count = if is_dir { shallow_rom_count(&e.path()) } else { 0 };
+        entries.push(DirEntry { name, path: full, is_dir, rom_count });
+    }
+    // pastas primeiro, depois alfabetico (case-insensitive)
+    entries.sort_by(|a, b| {
+        b.is_dir.cmp(&a.is_dir)
+            .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    let parent = p.parent().map(|pp| pp.to_string_lossy().to_string());
+    Ok(DirListing { path: root, parent, entries })
+}
+
 /// v0.9.1: Reescreve paths absolutos do xemu.toml (BIOS, HDD, snapshots etc)
 /// pra apontar pros arquivos que realmente existem no projeto atual. Necessario
 /// pq o user moveu Playbox -> Ludex e o config ficou stale ("Failed to open BootROM").
@@ -2838,8 +2918,10 @@ fn libretro_skip_frames(n: u32) -> Result<(), String> {
         for _ in 0..n.min(16) {
             unsafe { let _ = core.run(); }
         }
-        // v0.8.35: audio_buf agora em mutex separado
-        libretro::audio_buf().lock().unwrap().clear();
+        // v0.9.2: NAO limpar audio_buf aqui. O pacing por relogio de audio do
+        // frontend roda frames extras (skip) pra catch-up e PRECISA do audio
+        // produzido nesses frames, senao volta o underrun/stutter. O proprio
+        // AUDIO_BUF_LIMIT (drop-oldest) protege contra acumulo se o front travar.
     }
     Ok(())
 }
@@ -2904,6 +2986,155 @@ fn libretro_take_audio() -> tauri::ipc::Response {
         buf.extend_from_slice(&sample.to_le_bytes());
     }
     tauri::ipc::Response::new(buf)
+}
+
+// ===== v0.9.2: CHEATS =====
+#[derive(serde::Deserialize)]
+struct CheatInput { code: String, enabled: bool }
+
+/// Aplica cheats no core carregado. Reseta tudo e re-aplica os habilitados em
+/// ordem. Codigo pode ter varias linhas (separadas por \n ou +). Retorna quantos
+/// foram aplicados.
+#[tauri::command]
+fn libretro_apply_cheats(cheats: Vec<CheatInput>) -> Result<u32, String> {
+    let slot = libretro_slot();
+    let g = slot.lock().unwrap();
+    let core = g.as_ref().ok_or("nenhum jogo carregado")?;
+    unsafe {
+        core.cheat_reset()?;
+        let mut idx = 0u32;
+        for c in cheats.iter().filter(|c| c.enabled && !c.code.trim().is_empty()) {
+            let code = c.code.trim().replace(['\n', '\r'], "+");
+            core.cheat_set(idx, true, &code)?;
+            idx += 1;
+        }
+        log::info!("[cheats] aplicados {} cheats", idx);
+        Ok(idx)
+    }
+}
+
+#[derive(serde::Serialize)]
+struct CheatEntry { desc: String, code: String }
+
+fn normalize_name(s: &str) -> String {
+    // tira tags entre () e [], deixa so alfanumerico lowercase
+    let mut out = String::new();
+    let mut depth = 0i32;
+    for ch in s.chars() {
+        match ch {
+            '(' | '[' => depth += 1,
+            ')' | ']' => { if depth > 0 { depth -= 1; } }
+            _ if depth == 0 && ch.is_alphanumeric() => out.push(ch.to_ascii_lowercase()),
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Busca cheats abertos no libretro-database (GitHub) pro jogo+sistema. Lista a
+/// pasta cht/<db_folder>, faz match fuzzy pelo nome do jogo e baixa+parseia o .cht
+/// (formato RetroArch: cheatN_desc / cheatN_code). Best-effort: GitHub limita
+/// requests anonimos, entao paramos cedo ao achar bom match.
+#[tauri::command]
+async fn fetch_cheats(db_folder: String, game_name: String) -> Result<Vec<CheatEntry>, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Ludex/0.9.2")
+        .build().map_err(|e| e.to_string())?;
+    let target = normalize_name(&game_name);
+    if target.is_empty() { return Err("nome do jogo vazio".into()); }
+
+    let mut best_url: Option<String> = None;
+    let mut best_score = 0usize;
+    // pagina a listagem da pasta (ate 8 paginas = 800 arquivos)
+    for page in 1..=8 {
+        let api = format!(
+            "https://api.github.com/repos/libretro/libretro-database/contents/cht/{}?per_page=100&page={}",
+            urlencode_path(&db_folder), page
+        );
+        let resp = client.get(&api).send().await.map_err(|e| e.to_string())?;
+        if !resp.status().is_success() {
+            if page == 1 {
+                return Err(format!("sistema sem base de cheats (HTTP {})", resp.status()));
+            }
+            break;
+        }
+        let arr: Vec<serde_json::Value> = resp.json().await.map_err(|e| e.to_string())?;
+        if arr.is_empty() { break; }
+        for item in &arr {
+            let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            if !name.to_lowercase().ends_with(".cht") { continue; }
+            let stem = &name[..name.len() - 4];
+            let norm = normalize_name(stem);
+            if norm.is_empty() { continue; }
+            // pontuacao: match exato > prefixo > containment
+            let score = if norm == target { 1000 }
+                else if target.starts_with(&norm) || norm.starts_with(&target) { 500 + norm.len().min(target.len()) }
+                else if norm.contains(&target) || target.contains(&norm) { 100 + common_prefix_len(&norm, &target) }
+                else { 0 };
+            if score > best_score {
+                best_score = score;
+                best_url = item.get("download_url").and_then(|v| v.as_str()).map(String::from);
+            }
+        }
+        if best_score >= 1000 { break; } // match exato, nao precisa mais paginas
+        if arr.len() < 100 { break; }     // ultima pagina
+    }
+
+    let url = best_url.ok_or("nenhum cheat encontrado pra esse jogo")?;
+    if best_score < 100 {
+        return Err("nenhum cheat encontrado pra esse jogo".into());
+    }
+    let txt = client.get(&url).send().await.map_err(|e| e.to_string())?
+        .text().await.map_err(|e| e.to_string())?;
+    Ok(parse_cht(&txt))
+}
+
+fn common_prefix_len(a: &str, b: &str) -> usize {
+    a.chars().zip(b.chars()).take_while(|(x, y)| x == y).count()
+}
+
+fn urlencode_path(s: &str) -> String {
+    // encoda so o que quebra URL em path segment (espaco, etc), mantem '/'
+    s.chars().map(|c| match c {
+        ' ' => "%20".to_string(),
+        '#' => "%23".to_string(),
+        '?' => "%3F".to_string(),
+        _ => c.to_string(),
+    }).collect()
+}
+
+fn parse_cht(txt: &str) -> Vec<CheatEntry> {
+    use std::collections::HashMap;
+    let mut descs: HashMap<usize, String> = HashMap::new();
+    let mut codes: HashMap<usize, String> = HashMap::new();
+    for line in txt.lines() {
+        let line = line.trim();
+        let Some((key, val)) = line.split_once('=') else { continue; };
+        let key = key.trim();
+        let val = val.trim().trim_matches('"').to_string();
+        if let Some(rest) = key.strip_prefix("cheat") {
+            if let Some((num, field)) = rest.split_once('_') {
+                if let Ok(i) = num.parse::<usize>() {
+                    match field {
+                        "desc" => { descs.insert(i, val); }
+                        "code" => { codes.insert(i, val); }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    let mut keys: Vec<usize> = codes.keys().copied().collect();
+    keys.sort_unstable();
+    for i in keys {
+        if let Some(code) = codes.get(&i) {
+            if code.is_empty() { continue; }
+            let desc = descs.get(&i).cloned().unwrap_or_else(|| format!("Cheat {}", i + 1));
+            out.push(CheatEntry { desc, code: code.clone() });
+        }
+    }
+    out
 }
 
 #[tauri::command]
@@ -5226,6 +5457,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             scan_roms,
+            list_dir,
+            libretro_apply_cheats,
+            fetch_cheats,
             launch_game,
             kill_running_game,
             get_default_roms_root,
