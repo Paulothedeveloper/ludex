@@ -31,6 +31,7 @@ import {
   formatPlayTime, formatRelative,
 } from "./ludexMobileFeatures";
 import { SystemSettingsModal, SuggestionsModal } from "./LudexExtras"; // v0.9.1: + SuggestionsModal pra paridade com desktop
+import { DEFAULT_AVATARS, avatarUrl } from "./LudexOnboarding"; // v0.9.1: reusa avatares SVG do desktop (regra: NUNCA emoji em UI prod)
 import { hasOptionsForSystem, applySystemOptions, effectivePadMap } from "./ludexSystemOptions";
 
 // ============================================================
@@ -2348,8 +2349,11 @@ function AmbientMusicToggle() {
           : "Chiptune sintético (Web Audio). Pra ter MP3s curados igual o Windows, copia arquivos pra /storage/emulated/0/Ludex/music/"}
       </p>
       {on && trackName && (
-        <div style={{ marginBottom: 8, padding: "8px 10px", borderRadius: 8, background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.25)", fontSize: 12, color: "#c4b5fd" }}>
-          ♪ {trackName}
+        <div style={{ marginBottom: 8, padding: "8px 10px", borderRadius: 8, background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.25)", fontSize: 12, color: "#c4b5fd", display: "flex", alignItems: "center", gap: 8 }}>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden>
+            <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+          </svg>
+          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{trackName}</span>
         </div>
       )}
       <div style={{ display: "flex", gap: 6 }}>
@@ -2357,8 +2361,10 @@ function AmbientMusicToggle() {
           {on ? "Desligar música" : "Ligar música"}
         </button>
         {on && tracks.length > 1 && (
-          <button className="lmx-settings-btn ghost" onClick={skip}>
-            ⏭
+          <button className="lmx-settings-btn ghost" onClick={skip} title="Próxima faixa" style={{ minWidth: 56 }}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <polygon points="5 4 15 12 5 20 5 4" /><line x1="19" y1="5" x2="19" y2="19" />
+            </svg>
           </button>
         )}
       </div>
@@ -2373,21 +2379,12 @@ function AmbientMusicToggle() {
 // trocar, renomear, deletar. Conquistas/recents/stats sao por dispositivo
 // (localStorage), mas o profile ativo determina o name/avatar mostrado.
 // Salva no config.json via save_config (mesmo backend Rust do desktop).
-const AVATAR_PRESETS = [
-  { id: "controller", label: "Controle", emoji: "🎮", color: "#7c3aed" },
-  { id: "star",       label: "Estrela",  emoji: "⭐", color: "#eab308" },
-  { id: "heart",      label: "Coração",  emoji: "❤", color: "#ef4444" },
-  { id: "fire",       label: "Fogo",     emoji: "🔥", color: "#f97316" },
-  { id: "lightning",  label: "Raio",     emoji: "⚡", color: "#facc15" },
-  { id: "ghost",      label: "Fantasma", emoji: "👻", color: "#94a3b8" },
-  { id: "crown",      label: "Coroa",    emoji: "👑", color: "#facc15" },
-  { id: "skull",      label: "Caveira",  emoji: "💀", color: "#64748b" },
-];
+// v0.9.1: usa DEFAULT_AVATARS (SVG glyphs Unicode, sem emoji) — paridade total com desktop.
 
 function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newAvatar, setNewAvatar] = useState("controller");
+  const [newAvatarId, setNewAvatarId] = useState(DEFAULT_AVATARS[0].id);
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
   const [msg, setMsg] = useState(null);
@@ -2409,7 +2406,7 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
     const newProfile = {
       id: `p${Math.random().toString(36).slice(2, 10)}`,
       name: n,
-      avatar_id: newAvatar,
+      avatar_id: newAvatarId,
       photo_path: null,
       created_at: Math.floor(Date.now() / 1000),
     };
@@ -2463,7 +2460,7 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
 
       {profiles.map(p => {
         const isActive = p.id === config?.active_profile_id;
-        const av = AVATAR_PRESETS.find(a => a.id === p.avatar_id) || AVATAR_PRESETS[0];
+        const av = DEFAULT_AVATARS.find(a => a.id === p.avatar_id) || DEFAULT_AVATARS[0];
         const isEditing = editingId === p.id;
         return (
           <div key={p.id} style={{
@@ -2471,11 +2468,11 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
             borderRadius: 10, background: isActive ? "rgba(124,58,237,0.15)" : "rgba(255,255,255,0.03)",
             border: `1px solid ${isActive ? "rgba(124,58,237,0.4)" : "rgba(255,255,255,0.06)"}`,
           }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 10, background: av.color, color: "#fff",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
-              flexShrink: 0,
-            }}>{av.emoji}</div>
+            <img
+              src={avatarUrl(av)}
+              alt={av.label}
+              style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, objectFit: "cover" }}
+            />
             {isEditing ? (
               <input
                 value={editName}
@@ -2525,17 +2522,21 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
             autoFocus
             style={{ width: "100%", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(124,58,237,0.4)", color: "#fff", padding: "8px 10px", borderRadius: 6, fontSize: 14, marginBottom: 8, boxSizing: "border-box" }}
           />
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 8 }}>
-            {AVATAR_PRESETS.map(av => (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginBottom: 8 }}>
+            {DEFAULT_AVATARS.map(av => (
               <button
                 key={av.id}
-                onClick={() => setNewAvatar(av.id)}
+                onClick={() => setNewAvatarId(av.id)}
+                title={av.label}
                 style={{
-                  aspectRatio: "1/1", borderRadius: 8, background: av.color,
-                  border: `2px solid ${newAvatar === av.id ? "#fff" : "transparent"}`,
-                  color: "#fff", fontSize: 20, cursor: "pointer", padding: 0,
+                  aspectRatio: "1/1", borderRadius: 8,
+                  border: `2px solid ${newAvatarId === av.id ? "#fff" : "transparent"}`,
+                  cursor: "pointer", padding: 0, overflow: "hidden",
+                  background: "rgba(0,0,0,0.3)",
                 }}
-              >{av.emoji}</button>
+              >
+                <img src={avatarUrl(av)} alt={av.label} style={{ width: "100%", height: "100%", display: "block" }} />
+              </button>
             ))}
           </div>
           <div style={{ display: "flex", gap: 6 }}>
