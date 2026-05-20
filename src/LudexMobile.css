@@ -1374,8 +1374,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* v0.9.7: transição suave de toque */
+  transition: background 0.1s ease, transform 0.09s cubic-bezier(0.22,1,0.36,1), box-shadow 0.12s ease;
 }
-.lmx-emu-dpad button:active { background: rgba(124, 58, 237, 0.6); }
+.lmx-emu-dpad button:active,
+.lmx-emu-dpad button.pressing {
+  background: rgba(124, 92, 255, 0.7);
+  transform: scale(0.9);
+  box-shadow: 0 0 18px rgba(124, 92, 255, 0.6), inset 0 0 10px rgba(255,255,255,0.2);
+}
 .lmx-emu-dpad-up    { grid-column: 2; grid-row: 1; border-radius: 8px 8px 0 0; }
 .lmx-emu-dpad-left  { grid-column: 1; grid-row: 2; border-radius: 8px 0 0 8px; }
 .lmx-emu-dpad-right { grid-column: 3; grid-row: 2; border-radius: 0 8px 8px 0; }
@@ -1402,8 +1409,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* v0.9.7: toque suave com escala + glow (animação própria) */
+  transition: background 0.1s ease, transform 0.09s cubic-bezier(0.22,1,0.36,1), box-shadow 0.13s ease, filter 0.1s ease;
 }
-.lmx-emu-btn:active { background: rgba(236, 72, 153, 0.65); }
+.lmx-emu-btn:active,
+.lmx-emu-btn.pressing {
+  transform: scale(0.86);
+  filter: brightness(1.35);
+  box-shadow: 0 0 20px rgba(124, 92, 255, 0.55), inset 0 0 12px rgba(255,255,255,0.25);
+}
 
 /* Cores semanticas: a=vermelho (Nintendo A), b=amarelo (Nintendo B),
    x=azul (SNES X), y=verde (SNES Y / Sega C / N64 C / PS triangle) */
@@ -2021,3 +2035,48 @@
 }
 .lmx-emu-controls-dim { opacity: 0.25; transition: opacity 200ms; }
 .lmx-emu-controls-dim:active, .lmx-emu-controls-dim:hover { opacity: 1; }
+
+/* ===== v0.9.7: SPLASH DE ABERTURA (wordmark + barra, fundo sólido) ===== */
+.lmx-splash {
+  position: fixed; inset: 0; z-index: 100001;
+  background: #0a0220;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  animation: lmx-splash-out 1.55s ease forwards;
+}
+@keyframes lmx-splash-out {
+  0%, 68% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+.lmx-splash-word {
+  font-size: 46px; font-weight: 900; letter-spacing: 0.2em; padding-left: 0.2em;
+  background: var(--lmx-gradient); -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: lmx-splash-word 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes lmx-splash-word {
+  from { opacity: 0; transform: translateY(14px) scale(0.92); letter-spacing: 0.05em; }
+  to   { opacity: 1; transform: translateY(0) scale(1); letter-spacing: 0.2em; }
+}
+.lmx-splash-bar { width: 150px; height: 3px; background: rgba(255,255,255,0.12); border-radius: 2px; overflow: hidden; }
+.lmx-splash-bar span { display: block; height: 100%; width: 0; background: var(--lmx-gradient); border-radius: 2px; animation: lmx-splash-fill 1.35s cubic-bezier(0.4, 0, 0.2, 1) both; }
+@keyframes lmx-splash-fill { from { width: 0; } to { width: 100%; } }
+
+/* ===== v0.9.7: ENTRADA SUAVE DOS CATÁLOGOS (home) — toca conforme o splash some ===== */
+.lmx-home > * { animation: lmx-enter-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.lmx-home > *:nth-child(1) { animation-delay: 1.02s; }
+.lmx-home > *:nth-child(2) { animation-delay: 1.12s; }
+.lmx-home > *:nth-child(3) { animation-delay: 1.22s; }
+.lmx-home > *:nth-child(4) { animation-delay: 1.32s; }
+.lmx-home > *:nth-child(n+5) { animation-delay: 1.42s; }
+@keyframes lmx-enter-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+/* Cards dos carrosséis entram com leve escala (sutil, não pesa em celular antigo) */
+.lmx-card { animation: lmx-card-pop 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes lmx-card-pop {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lmx-home > *, .lmx-card, .lmx-systems-row { animation: none !important; }
+}

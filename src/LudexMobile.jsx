@@ -163,6 +163,17 @@ function saveSystemFolder(systemId, path) {
   return m;
 }
 
+// v0.9.7: splash de abertura minimalista (wordmark + barra, fundo sólido) —
+// igual ao espírito do launcher do PC. Some sozinho via animação.
+function MobileSplash() {
+  return (
+    <div className="lmx-splash">
+      <div className="lmx-splash-word">LUDEX</div>
+      <div className="lmx-splash-bar"><span /></div>
+    </div>
+  );
+}
+
 // ============================================================
 // === COMPONENTE PRINCIPAL ===================================
 // ============================================================
@@ -176,6 +187,7 @@ export default function LudexMobile() {
   // rerender" — mas setar o MESMO valor é no-op no React, então o overlay NUNCA
   // sumia (botão "Começar" travado). Agora é state de verdade.
   const [tutorialDone, setTutorialDone] = useState(() => isFirstRunDone());
+  const [splashDone, setSplashDone] = useState(false); // v0.9.7: splash de abertura
   const [profileEditorOpen, setProfileEditorOpen] = useState(false); // v0.9.4
   const [sysFolderPick, setSysFolderPick] = useState(null); // v0.9.5: systemId sendo configurado
 
@@ -296,6 +308,12 @@ export default function LudexMobile() {
       } catch (e) { console.error("scan_roms", e); }
       setLoading(false);
     })();
+  }, []);
+
+  // v0.9.7: splash de abertura (some sozinho; entrada dos catalogos roda atras)
+  useEffect(() => {
+    const t = setTimeout(() => setSplashDone(true), 1550);
+    return () => clearTimeout(t);
   }, []);
 
   // ============ AUDIO: unlock no primeiro toque (autoplay policy) ============
@@ -678,8 +696,10 @@ export default function LudexMobile() {
         </div>
       )}
 
+      {/* v0.9.7: splash de abertura */}
+      {!splashDone && <MobileSplash />}
       {/* Tutorial first run */}
-      {!tutorialDone && (
+      {!tutorialDone && splashDone && (
         <TutorialOverlay onDone={() => { markFirstRunDone(); setTutorialDone(true); }} />
       )}
       {/* v0.9.4: editor de perfil (foto + nome + avatar) */}
@@ -2161,13 +2181,15 @@ function MobileEmulatorView({ system, game, onClose }) {
     raf = requestAnimationFrame(poll);
     return () => { if (raf) cancelAnimationFrame(raf); };
   }, [info, onClose, autoPaused, gamepadConnected]);
+  // v0.9.7: toggla a classe "pressing" no proprio botao pra animacao de toque
+  // suave e confiavel (o :active do CSS falha com preventDefault no touch).
   const btnProps = (id) => ({
-    onTouchStart: (e) => { e.preventDefault(); press(id, true); },
-    onTouchEnd:   (e) => { e.preventDefault(); press(id, false); },
-    onTouchCancel:(e) => { e.preventDefault(); press(id, false); },
-    onMouseDown:  () => press(id, true),
-    onMouseUp:    () => press(id, false),
-    onMouseLeave: () => press(id, false),
+    onTouchStart: (e) => { e.preventDefault(); e.currentTarget.classList.add("pressing"); press(id, true); haptic(8); },
+    onTouchEnd:   (e) => { e.preventDefault(); e.currentTarget.classList.remove("pressing"); press(id, false); },
+    onTouchCancel:(e) => { e.preventDefault(); e.currentTarget.classList.remove("pressing"); press(id, false); },
+    onMouseDown:  (e) => { e.currentTarget.classList.add("pressing"); press(id, true); },
+    onMouseUp:    (e) => { e.currentTarget.classList.remove("pressing"); press(id, false); },
+    onMouseLeave: (e) => { e.currentTarget.classList.remove("pressing"); press(id, false); },
   });
 
   if (error) {
