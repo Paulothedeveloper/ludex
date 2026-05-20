@@ -387,6 +387,33 @@ export default function LudexMobile() {
   // tauri-plugin-dialog NAO suporta directory picker em Android.
   // LudexMobile so roda em Android (App.jsx faz routing) -> sempre modal custom.
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+
+  // v0.9.3: BACK do Android (gesto de swipe / botao) navega DENTRO do app em vez
+  // de MINIMIZAR. Antes qualquer back minimizava o app em qualquer aba (bug) e o
+  // user era obrigado a usar as setas. Agora usa History API: mantemos um "trap"
+  // no historico; ao voltar, desfazemos UM nivel de navegacao e re-armamos o
+  // trap. So na raiz (Inicio, nada aberto) o proximo back sai do app.
+  const navStateRef = useRef({});
+  navStateRef.current = { activeTab, openSystem, openGame, playingGame, folderPickerOpen };
+  const closeEmulatorRef = useRef(closeEmulator);
+  closeEmulatorRef.current = closeEmulator;
+  useEffect(() => {
+    try { history.pushState({ lx: 1 }, ""); } catch {}
+    const onPop = () => {
+      const s = navStateRef.current;
+      let handled = true;
+      if (s.playingGame) closeEmulatorRef.current && closeEmulatorRef.current();
+      else if (s.folderPickerOpen) setFolderPickerOpen(false);
+      else if (s.openGame) setOpenGame(null);
+      else if (s.openSystem) setOpenSystem(null);
+      else if (s.activeTab && s.activeTab !== "home") setActiveTab("home");
+      else handled = false; // raiz -> deixa o proximo back sair do app
+      if (handled) { try { history.pushState({ lx: 1 }, ""); } catch {} }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   const dbg = useCallback((msg) => {
     // v0.8.12 debug: WebView release nao loga console no logcat,
     // entao usa frontend_log (Tauri tauri_plugin_log -> LogDir).
@@ -461,20 +488,14 @@ export default function LudexMobile() {
         info={updateInfo}
         state={updateState}
         onInstall={async () => {
-          setUpdateState({ stage: "downloading", msg: "Baixando atualizacao... (pode demorar 1-3min)" });
+          // v0.9.3: em vez de baixar/instalar dentro do app (instavel no WebView),
+          // abre a release no GitHub no NAVEGADOR PADRAO do celular. O user baixa
+          // o APK por la e instala. Mais confiavel e e o que o Paulo pediu.
+          setUpdateState({ stage: "installing", msg: "Abrindo a pagina da atualizacao no navegador..." });
           try {
-            const path = await invoke("android_download_apk", { apkUrl: updateInfo.apk_url });
-            setUpdateState({ stage: "installing", msg: "Abrindo instalador do Android..." });
-            // installApk retorna true quando o intent abriu o PackageInstaller. O app vai pra
-            // background e o user confirma o install. Se retornar false sem erro, mostra dica.
-            const ok = await invoke("android_install_apk", { apkPath: path });
-            if (!ok) {
-              setUpdateState({ stage: "error", msg: "O instalador nao abriu. Tente de novo ou habilita 'Instalar apps desconhecidos' pro Ludex nas Configuracoes." });
-            }
+            await invoke("open_url", { url: "https://github.com/EllaeMyApp/ludex/releases/latest" });
           } catch (e) {
-            // Backend traz mensagem amigavel (404, APK corrompido, permissao etc)
-            const msg = String(e).replace(/^Error:\s*/, "");
-            setUpdateState({ stage: "error", msg });
+            setUpdateState({ stage: "error", msg: "Nao consegui abrir o navegador. Acesse manualmente: github.com/EllaeMyApp/ludex/releases/latest" });
           }
         }}
       />
@@ -552,6 +573,7 @@ export default function LudexMobile() {
             onPickFolder={pickRomsFolder}
             hasFilesAccess={hasFilesAccess}
             onRequestAccess={requestFilesAccess}
+            onOpenProfile={() => changeTab("settings")}
           />
         )}
         {activeTab === "systems" && (
@@ -638,9 +660,10 @@ function TabBtn({ icon, label, active, onClick }) {
 // === HOME TAB ===============================================
 // Hero (perfil + DEMO) + Recentes + Carrossel por sistema
 // ============================================================
-function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents, onPickSystem, onPickGame, onResume, onPickFolder, hasFilesAccess, onRequestAccess }) {
+function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents, onPickSystem, onPickGame, onResume, onPickFolder, hasFilesAccess, onRequestAccess, onOpenProfile }) {
   const nonEmptySystems = systems.filter((s) => s.games.length > 0);
   const topSystems = nonEmptySystems.slice(0, 6);
+  const profileAv = DEFAULT_AVATARS.find(a => a.id === activeProfile?.avatar_id) || DEFAULT_AVATARS[0];
 
   // Internal: jogos por modified_at (usado por carrosseis), distinto de recents (props - last played)
   const recentByMtime = useMemo(() => {
@@ -658,8 +681,12 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
     <div className="lmx-home">
       {/* Hero header */}
       <header className="lmx-home-hero">
+        {/* v0.9.3: avatar do perfil presente na home (toca = abre Ajustes/perfil) */}
+        <button className="lmx-home-avatar" onClick={onOpenProfile} aria-label="Perfil">
+          <img src={avatarUrl(profileAv)} alt={profileAv.label} />
+        </button>
         <div className="lmx-home-greeting">
-          <div className="lmx-home-hello">Ola</div>
+          <div className="lmx-home-hello">Olá</div>
           <div className="lmx-home-name">{activeProfile?.name || "Player"}</div>
         </div>
         {androidDemo && !androidDemo.is_admin_unlocked && androidDemo.days_left > 0 && (
@@ -804,6 +831,7 @@ function SystemsTab({ systems, onPickSystem }) {
               <button
                 key={sys.id}
                 className="lmx-systems-row"
+                style={{ "--sys-color": sys.color }}
                 onClick={() => onPickSystem(sys)}
               >
                 <div className="lmx-systems-row-icon" style={{ background: sys.color }}>
@@ -921,16 +949,16 @@ function UpdateRequiredScreen({ info, state, onInstall }) {
             <polyline points="14 7 21 7 21 14" />
           </svg>
         </div>
-        <h1>Atualizacao disponivel</h1>
+        <h1>Atualização disponível</h1>
         <div className="lmx-update-version">
           <span>v{info.current}</span>
           <span className="lmx-update-arrow">→</span>
           <span className="lmx-update-target">v{info.latest}</span>
         </div>
-        <p className="lmx-update-notes">{info.notes}</p>
+        {info.notes && <p className="lmx-update-notes">{info.notes}</p>}
         <p className="lmx-update-required-text">
-          Atualizacao obrigatoria pra usar o Ludex.<br />
-          A versao Windows e gratuita pra quem comprou.
+          Toque em "Atualizar agora" para abrir a página de download no navegador.<br />
+          A versão Windows é gratuita pra quem comprou.
         </p>
         {state.stage === "downloading" && (
           <div className="lmx-update-loading">
@@ -1216,20 +1244,45 @@ function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder }) {
 function GameDetailScreen({ system, game, coverSrc, onClose, onLaunch }) {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
+  // v0.9.3: nota (estrelas), acesso ao arquivo e mods (paridade com PC)
+  const [rating, setRating] = useState(game.rating || 0);
+  const [modCount, setModCount] = useState(null);
+  const modsDir = `/storage/emulated/0/Ludex/mods/${system.id}`;
+  const gameDir = String(game.path || "").replace(/[\\/][^\\/]+$/, "") || game.path;
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setDetails(null);
+    setRating(game.rating || 0);
     (async () => {
       try {
         const d = await invoke("fetch_game_details", { systemId: system.id, gameName: game.name });
         if (!cancelled) setDetails(d);
       } catch {}
+      // conta mods do sistema (pasta Ludex/mods/<sistema>)
+      try {
+        const listing = await invoke("list_dir", { path: modsDir });
+        if (!cancelled) setModCount((listing?.entries || []).filter(e => !e.is_dir).length);
+      } catch { if (!cancelled) setModCount(0); }
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [system.id, game.path, game.name]);
+
+  const setStars = async (n) => {
+    setRating(n);
+    sfx.confirm(); haptic(8);
+    try { await invoke("set_game_rating", { systemId: system.id, romPath: game.path, rating: n }); } catch {}
+  };
+  const openGameFolder = async () => {
+    try { await invoke("android_open_folder", { absPath: gameDir }); }
+    catch (e) { mAlert("Nao consegui abrir a pasta: " + e); }
+  };
+  const openModsFolder = async () => {
+    try { await invoke("android_open_folder", { absPath: modsDir }); }
+    catch (e) { mAlert("Nao consegui abrir a pasta de mods: " + e); }
+  };
 
   const heroSrc = details?.cover_path ? convertFileSrc(details.cover_path) : coverSrc;
   const youtubeId = details?.videos?.[0]?.youtube_id;
@@ -1273,6 +1326,33 @@ function GameDetailScreen({ system, game, coverSrc, onClose, onLaunch }) {
         <button className="lmx-detail-play" onClick={onLaunch}>
           <IconPlay /> JOGAR
         </button>
+
+        {/* v0.9.3: nota do usuario (estrelas) */}
+        <div className="lmx-detail-rating">
+          <span className="lmx-detail-rating-label">Sua nota</span>
+          <div className="lmx-detail-stars">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} className={"lmx-detail-star" + (n <= rating ? " on" : "")} onClick={() => setStars(n === rating ? 0 : n)} aria-label={`${n} estrelas`}>
+                <IconStar filled={n <= rating} />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* v0.9.3: arquivo + mods (acesso direto pela tela do jogo) */}
+        <div className="lmx-detail-files">
+          <button className="lmx-detail-filebtn" onClick={openGameFolder}>
+            <IconFolder withRoms={false} />
+            <span>Abrir pasta do jogo</span>
+          </button>
+          <button className="lmx-detail-filebtn" onClick={openModsFolder}>
+            <IconFolder withRoms={modCount > 0} />
+            <span>Mods{modCount != null ? ` (${modCount})` : ""}</span>
+          </button>
+        </div>
+        <p className="lmx-detail-files-hint">
+          Coloque traduções/hacks em <code>Ludex/mods/{system.id}/</code> — renomeie ou aplique o patch na ROM antes de jogar.
+        </p>
 
         {loading && <div className="lmx-detail-loading">Buscando info...</div>}
         {summary && <p className="lmx-detail-summary">{summary}</p>}
@@ -2531,6 +2611,7 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
   const [newAvatarId, setNewAvatarId] = useState(DEFAULT_AVATARS[0].id);
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
+  const [editAvatarId, setEditAvatarId] = useState(null); // v0.9.3: editar avatar tb
   const [msg, setMsg] = useState(null);
   const profiles = config?.profiles || [];
 
@@ -2574,16 +2655,20 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
     setTimeout(() => setMsg(null), 3000);
   };
 
-  const rename = async (id) => {
+  // v0.9.3: salva nome E avatar (antes so nome, com onBlur que quebrava no mobile)
+  const saveEdit = async (id) => {
     const n = editName.trim();
-    if (n.length < 2) return;
+    if (n.length < 2) { setMsg({ kind: "error", text: "Nome muito curto (mínimo 2 letras)" }); return; }
     const updated = {
       ...config,
-      profiles: profiles.map(p => p.id === id ? { ...p, name: n } : p),
+      profiles: profiles.map(p => p.id === id ? { ...p, name: n, avatar_id: editAvatarId || p.avatar_id } : p),
     };
     await save(updated);
     setEditingId(null);
     setEditName("");
+    setEditAvatarId(null);
+    setMsg({ kind: "ok", text: "Perfil atualizado." });
+    setTimeout(() => setMsg(null), 2500);
   };
 
   const del = async (id) => {
@@ -2606,6 +2691,36 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
         const isActive = p.id === config?.active_profile_id;
         const av = DEFAULT_AVATARS.find(a => a.id === p.avatar_id) || DEFAULT_AVATARS[0];
         const isEditing = editingId === p.id;
+        if (isEditing) {
+          // v0.9.3: painel de edicao com nome + avatar + botoes explicitos
+          // (sem onBlur, que fechava antes de trocar o avatar no celular)
+          return (
+            <div key={p.id} style={{ padding: 12, marginBottom: 6, borderRadius: 10, background: "rgba(124,58,237,0.10)", border: "1px solid rgba(124,58,237,0.3)" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#c4b5fd", marginBottom: 8 }}>Editar perfil</div>
+              <input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Nome do perfil"
+                maxLength={28}
+                autoFocus
+                style={{ width: "100%", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(124,58,237,0.4)", color: "#fff", padding: "8px 10px", borderRadius: 6, fontSize: 14, marginBottom: 8, boxSizing: "border-box" }}
+              />
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 6 }}>Avatar</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginBottom: 8 }}>
+                {DEFAULT_AVATARS.map(a => (
+                  <button key={a.id} onClick={() => setEditAvatarId(a.id)} title={a.label}
+                    style={{ aspectRatio: "1/1", borderRadius: 8, border: `2px solid ${(editAvatarId || p.avatar_id) === a.id ? "#fff" : "transparent"}`, cursor: "pointer", padding: 0, overflow: "hidden", background: "rgba(0,0,0,0.3)" }}>
+                    <img src={avatarUrl(a)} alt={a.label} style={{ width: "100%", height: "100%", display: "block" }} />
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button className="lmx-settings-btn primary" onClick={() => saveEdit(p.id)} style={{ flex: 1 }}>Salvar</button>
+                <button className="lmx-settings-btn ghost" onClick={() => { setEditingId(null); setEditName(""); setEditAvatarId(null); }} style={{ flex: 1 }}>Cancelar</button>
+              </div>
+            </div>
+          );
+        }
         return (
           <div key={p.id} style={{
             display: "flex", alignItems: "center", gap: 10, padding: 10, marginBottom: 6,
@@ -2617,33 +2732,19 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
               alt={av.label}
               style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, objectFit: "cover" }}
             />
-            {isEditing ? (
-              <input
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                onBlur={() => rename(p.id)}
-                onKeyDown={(e) => e.key === "Enter" && rename(p.id)}
-                autoFocus
-                maxLength={28}
-                style={{ flex: 1, background: "rgba(0,0,0,0.3)", border: "1px solid #c4b5fd", color: "#fff", padding: "6px 10px", borderRadius: 6, fontSize: 14 }}
-              />
-            ) : (
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
-                {isActive && <div style={{ fontSize: 10, color: "#c4b5fd", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Ativo</div>}
-              </div>
-            )}
-            {!isActive && !isEditing && (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+              {isActive && <div style={{ fontSize: 10, color: "#c4b5fd", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Ativo</div>}
+            </div>
+            {!isActive && (
               <button onClick={() => switchTo(p.id)} style={{ background: "#7c3aed", border: "none", color: "#fff", padding: "6px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600 }}>
                 Usar
               </button>
             )}
-            {!isEditing && (
-              <button onClick={() => { setEditingId(p.id); setEditName(p.name); }} style={{ background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", padding: "6px 8px", borderRadius: 6, fontSize: 11 }}>
-                Editar
-              </button>
-            )}
-            {profiles.length > 1 && !isEditing && !isActive && (
+            <button onClick={() => { setEditingId(p.id); setEditName(p.name); setEditAvatarId(p.avatar_id); }} style={{ background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", padding: "6px 8px", borderRadius: 6, fontSize: 11 }}>
+              Editar
+            </button>
+            {profiles.length > 1 && !isActive && (
               <button onClick={() => del(p.id)} style={{ background: "rgba(239,68,68,0.15)", border: "none", color: "#ef4444", padding: "6px 8px", borderRadius: 6, fontSize: 11 }}>
                 Excluir
               </button>

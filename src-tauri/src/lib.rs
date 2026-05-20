@@ -3870,11 +3870,30 @@ fn open_url(url: String) -> Result<(), String> {
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return Err("URL invalida (precisa http/https)".into());
     }
-    Command::new("cmd")
-        .args(["/C", "start", "", &url])
-        .spawn()
-        .map_err(|e| format!("abrir url: {}", e))?;
-    Ok(())
+    #[cfg(target_os = "android")]
+    {
+        use jni::objects::{JObject, JString};
+        let ctx = ndk_context::android_context();
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.map_err(|e| e.to_string())?;
+        let mut env = vm.attach_current_thread().map_err(|e| e.to_string())?;
+        let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+        let jurl: JString = env.new_string(&url).map_err(|e| e.to_string())?;
+        env.call_static_method(
+            "gg/ludex/app/Permissions",
+            "openUrl",
+            "(Landroid/app/Activity;Ljava/lang/String;)V",
+            &[(&activity).into(), (&jurl).into()],
+        ).map_err(|e| format!("JNI openUrl: {}", e))?;
+        return Ok(());
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Command::new("cmd")
+            .args(["/C", "start", "", &url])
+            .spawn()
+            .map_err(|e| format!("abrir url: {}", e))?;
+        Ok(())
+    }
 }
 
 #[tauri::command]

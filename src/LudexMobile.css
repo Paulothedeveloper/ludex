@@ -149,8 +149,24 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: calc(24px + var(--lmx-safe-top)) 20px 16px;
 }
+/* v0.9.3: avatar do perfil na home */
+.lmx-home-avatar {
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  overflow: hidden;
+  border: 2px solid rgba(124, 92, 255, 0.55);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lmx-home-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lmx-home-greeting { flex: 1; min-width: 0; }
 .lmx-home-hello {
   font-size: 12px;
   color: var(--lmx-text-dim);
@@ -387,11 +403,33 @@
   transition: background 0.12s;
   -webkit-tap-highlight-color: transparent;
 }
-.lmx-systems-row:active { background: var(--lmx-surface-2); }
+/* v0.9.3: Systems tab mais interativa (animação de entrada + press com glow da cor do sistema) */
+.lmx-systems-row {
+  transition: transform 0.13s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.16s, background 0.16s, box-shadow 0.16s;
+  animation: lmx-row-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes lmx-row-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.lmx-systems-list .lmx-systems-row:nth-child(1) { animation-delay: 0.02s; }
+.lmx-systems-list .lmx-systems-row:nth-child(2) { animation-delay: 0.06s; }
+.lmx-systems-list .lmx-systems-row:nth-child(3) { animation-delay: 0.10s; }
+.lmx-systems-list .lmx-systems-row:nth-child(4) { animation-delay: 0.14s; }
+.lmx-systems-list .lmx-systems-row:nth-child(5) { animation-delay: 0.18s; }
+.lmx-systems-list .lmx-systems-row:nth-child(n+6) { animation-delay: 0.22s; }
+.lmx-systems-row:active {
+  background: var(--lmx-surface-2);
+  transform: scale(0.97);
+  border-color: var(--sys-color, var(--lmx-accent));
+  box-shadow: 0 0 0 1px var(--sys-color, transparent), 0 6px 22px -6px var(--sys-color, transparent);
+}
+.lmx-systems-row:active .lmx-systems-row-icon { transform: scale(1.06); }
 .lmx-systems-row-icon {
   width: 44px;
   height: 44px;
   border-radius: 12px;
+  transition: transform 0.13s cubic-bezier(0.22, 1, 0.36, 1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -797,6 +835,27 @@
 }
 .lmx-detail-play svg { width: 18px; height: 18px; }
 .lmx-detail-play:active { transform: scale(0.98); }
+/* v0.9.3: nota (estrelas) + arquivo/mods na tela do jogo */
+.lmx-detail-rating {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 16px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.lmx-detail-rating-label { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.75); }
+.lmx-detail-stars { display: flex; gap: 4px; }
+.lmx-detail-star { background: none; border: none; padding: 4px; cursor: pointer; color: rgba(255,255,255,0.3); -webkit-tap-highlight-color: transparent; }
+.lmx-detail-star.on { color: #ffce5c; }
+.lmx-detail-star svg { width: 22px; height: 22px; }
+.lmx-detail-files { display: flex; gap: 10px; margin-top: 14px; }
+.lmx-detail-filebtn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 8px; border-radius: 12px; background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08); color: #fff; font-family: inherit;
+  font-size: 12.5px; font-weight: 600; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.lmx-detail-filebtn:active { background: rgba(255,255,255,0.1); }
+.lmx-detail-filebtn svg { width: 22px; height: 22px; color: var(--lmx-accent); }
+.lmx-detail-files-hint { font-size: 11px; color: rgba(255,255,255,0.5); margin: 8px 0 0; line-height: 1.5; }
+.lmx-detail-files-hint code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; font-size: 10.5px; }
 .lmx-detail-loading {
   font-size: 12px;
   color: var(--lmx-text-dim);
@@ -1718,11 +1777,13 @@
 .lmx-update-card {
   max-width: 420px;
   width: 100%;
-  background: var(--lmx-surface-2);
-  border: 1px solid var(--lmx-border);
+  /* v0.9.3: fundo SÓLIDO (era rgba 0.06, quase transparente, sumia no fundo) */
+  background: #17122b;
+  border: 1px solid rgba(124, 92, 255, 0.45);
   border-radius: var(--lmx-radius-lg);
   padding: 28px;
   text-align: center;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
   animation: lmx-slide-up 380ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .lmx-update-icon {
@@ -1742,6 +1803,7 @@
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.01em;
+  color: #fff; /* v0.9.3: contraste — antes herdava cor escura e sumia no fundo */
 }
 .lmx-update-version {
   display: inline-flex;
@@ -1765,7 +1827,7 @@
 .lmx-update-notes {
   font-size: 13px;
   line-height: 1.5;
-  color: var(--lmx-text-muted);
+  color: rgba(255, 255, 255, 0.8); /* v0.9.3: era text-muted (0.6), pouco legivel */
   margin: 0 0 20px;
   max-height: 200px;
   overflow-y: auto;
@@ -1829,7 +1891,9 @@
 
 /* Tutorial overlay */
 .lmx-tutorial-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 99998; display: flex; align-items: center; justify-content: center; padding: 24px; animation: lmx-fade-in 280ms ease-out; }
-.lmx-tutorial-card { background: var(--lmx-surface-2); border: 1px solid var(--lmx-border); border-radius: var(--lmx-radius-lg); padding: 28px; max-width: 380px; text-align: center; animation: lmx-scale-in 320ms cubic-bezier(0.22, 1, 0.36, 1); }
+.lmx-tutorial-card { background: #17122b; border: 1px solid rgba(124, 92, 255, 0.45); border-radius: var(--lmx-radius-lg); padding: 28px; max-width: 380px; text-align: center; box-shadow: 0 24px 70px rgba(0,0,0,0.6); animation: lmx-scale-in 320ms cubic-bezier(0.22, 1, 0.36, 1); }
+.lmx-tutorial-card h2 { color: #fff; }
+.lmx-tutorial-card p { color: rgba(255,255,255,0.8) !important; }
 .lmx-tutorial-icon { width: 64px; height: 64px; margin: 0 auto 16px; background: var(--lmx-gradient); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; }
 .lmx-tutorial-icon svg { width: 32px; height: 32px; }
 .lmx-tutorial-card h2 { margin: 0 0 10px; font-size: 20px; }

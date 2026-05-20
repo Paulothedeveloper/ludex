@@ -118,6 +118,21 @@ class Permissions {
         }
 
         /**
+         * Abre uma URL http/https no navegador padrao do celular.
+         * v0.9.3: usado pelo banner de atualizacao (abre a release no GitHub).
+         */
+        @JvmStatic
+        fun openUrl(activity: Activity, url: String) {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                activity.startActivity(intent)
+            } catch (e: Throwable) {
+                throw IllegalStateException("Nao consegui abrir o navegador: ${e.message}")
+            }
+        }
+
+        /**
          * Verifica se um package esta instalado no device.
          */
         @JvmStatic
