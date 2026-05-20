@@ -1987,6 +1987,21 @@ fn ludex_base_dir() -> Option<PathBuf> {
     }
 }
 
+/// v0.9.2: base dos ASSETS acessiveis pelo usuario (system/BIOS, saves-libretro,
+/// save states). DIFERENTE de ludex_base_dir() (config/profiles/caches, que ficam
+/// no storage privado do app). No Android tem que ser a pasta PUBLICA
+/// /storage/emulated/0/Ludex — e onde o core libretro (libretro.rs) ja le BIOS/
+/// saves E onde o usuario consegue acessar pelo gerenciador de arquivos. Antes
+/// system/saves usavam o path privado /data/data/... entao: (a) BIOS colocada
+/// pelo user na pasta publica era rejeitada pelo check ("BIOS missing"), e (b)
+/// save states davam path invalido no Android (dirs::data_dir() nao confiavel la).
+fn ludex_assets_base() -> PathBuf {
+    #[cfg(target_os = "android")]
+    { PathBuf::from("/storage/emulated/0/Ludex") }
+    #[cfg(not(target_os = "android"))]
+    { dirs::data_dir().map(|d| d.join("Ludex")).unwrap_or_else(|| PathBuf::from(".")) }
+}
+
 fn config_path() -> Option<PathBuf> {
     Some(ludex_base_dir()?.join("config.json"))
 }
@@ -2634,9 +2649,10 @@ struct LibretroLoadResult {
 
 /// Diretorio system/ do libretro (mesma logica usada em libretro.rs::state).
 fn libretro_system_dir() -> PathBuf {
-    let base = ludex_base_dir()
-        .unwrap_or_else(|| dirs::data_dir().map(|d| d.join("Ludex")).unwrap_or_else(|| PathBuf::from(".")));
-    let dir = base.join("system");
+    // v0.9.2: usa o MESMO path que o core le (ludex_assets_base / publico no
+    // Android). Antes usava ludex_base_dir() (privado) e o check de BIOS olhava
+    // numa pasta diferente da que o core usa -> rejeitava BIOS valida.
+    let dir = ludex_assets_base().join("system");
     std::fs::create_dir_all(&dir).ok();
     dir
 }
@@ -3230,8 +3246,9 @@ fn libretro_replace_disc(path: String) -> Result<(), String> {
 }
 
 fn save_state_path(rom_path: &str, slot: u32) -> Option<PathBuf> {
-    let base = dirs::data_dir()?;
-    let dir = base.join("Ludex").join("saves-libretro");
+    // v0.9.2: ludex_assets_base (publico no Android). dirs::data_dir() nao e
+    // confiavel no Android -> save states davam path invalido / falhavam.
+    let dir = ludex_assets_base().join("saves-libretro");
     std::fs::create_dir_all(&dir).ok()?;
     let stem = Path::new(rom_path).file_stem()?.to_string_lossy().to_string();
     let safe = sanitize_filename(&stem);
@@ -3239,8 +3256,7 @@ fn save_state_path(rom_path: &str, slot: u32) -> Option<PathBuf> {
 }
 
 fn save_thumb_path(rom_path: &str, slot: u32) -> Option<PathBuf> {
-    let base = dirs::data_dir()?;
-    let dir = base.join("Ludex").join("saves-libretro");
+    let dir = ludex_assets_base().join("saves-libretro");
     std::fs::create_dir_all(&dir).ok()?;
     let stem = Path::new(rom_path).file_stem()?.to_string_lossy().to_string();
     let safe = sanitize_filename(&stem);
@@ -3548,7 +3564,11 @@ fn android_is_package_installed(package_name: String) -> bool {
 #[cfg(target_os = "android")]
 #[tauri::command]
 fn android_ludex_base_path() -> String {
-    "/data/data/gg.ludex.app/files/Ludex".to_string()
+    // v0.9.2: pasta PUBLICA — o botao "Abrir pasta Ludex no Files" precisa abrir
+    // um caminho que o gerenciador de arquivos consiga acessar. /data/data/... e
+    // storage privado do app (file manager nao abre) e nem e onde BIOS/saves
+    // ficam de verdade. Aqui ficam roms/, system/, saves-libretro/, music/.
+    "/storage/emulated/0/Ludex".to_string()
 }
 
 // Stubs desktop
@@ -3816,10 +3836,8 @@ fn get_system_folders(system_id: String) -> Result<SystemFolders, String> {
     let _ = std::fs::create_dir_all(&base);
     let _ = std::fs::create_dir_all(&dlc);
     let _ = std::fs::create_dir_all(&mods);
-    // v0.8.47: saves libretro ficam em <data>/Ludex/saves-libretro/
-    let saves_dir = dirs::data_dir()
-        .map(|d| d.join("Ludex").join("saves-libretro"))
-        .unwrap_or_else(|| PathBuf::from("."));
+    // v0.9.2: saves libretro em ludex_assets_base/saves-libretro (publico no Android)
+    let saves_dir = ludex_assets_base().join("saves-libretro");
     let _ = std::fs::create_dir_all(&saves_dir);
     Ok(SystemFolders {
         system_id: cfg.id.to_string(),

@@ -822,22 +822,28 @@ function SystemsTab({ systems, onPickSystem }) {
 // ============================================================
 // === SEARCH TAB =============================================
 // ============================================================
+// v0.9.2: normaliza pra busca sem acento/maiuscula ("Pokémon" casa "pokemon")
+const normSearch = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
 function SearchTab({ systems, covers, search, setSearch, onPickGame }) {
-  const trimmed = search.trim().toLowerCase();
+  const trimmed = search.trim();
+  // multi-termo: cada palavra precisa aparecer (em qualquer ordem)
+  const terms = useMemo(() => normSearch(trimmed).split(/\s+/).filter(Boolean), [trimmed]);
   const results = useMemo(() => {
-    if (trimmed.length < 2) return [];
+    if (normSearch(trimmed).length < 2) return [];
     const out = [];
     for (const sys of systems) {
       for (const g of sys.games) {
-        if (g.name.toLowerCase().includes(trimmed)) {
+        const hay = normSearch(g.name);
+        if (terms.every((t) => hay.includes(t))) {
           out.push({ system: sys, game: g });
-          if (out.length > 60) break;
+          if (out.length > 120) break;
         }
       }
-      if (out.length > 60) break;
+      if (out.length > 120) break;
     }
     return out;
-  }, [systems, trimmed]);
+  }, [systems, terms, trimmed]);
 
   return (
     <div className="lmx-search">
