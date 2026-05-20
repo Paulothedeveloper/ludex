@@ -159,6 +159,11 @@ export default function LudexMobile() {
   const [config, setConfig] = useState({ profiles: [], active_profile_id: null });
   const [covers, setCovers] = useState({});
   const [activeTab, setActiveTab] = useState("home"); // home | systems | search | settings
+  // v0.9.4: estado REAL do tutorial. Antes usava setActiveTab((t)=>t) pra "forçar
+  // rerender" — mas setar o MESMO valor é no-op no React, então o overlay NUNCA
+  // sumia (botão "Começar" travado). Agora é state de verdade.
+  const [tutorialDone, setTutorialDone] = useState(() => isFirstRunDone());
+  const [profileEditorOpen, setProfileEditorOpen] = useState(false); // v0.9.4
   const [openSystem, setOpenSystem] = useState(null); // sistema selecionado (mostra grid)
   const [openGame, setOpenGame] = useState(null); // jogo selecionado (mostra detail)
   const [search, setSearch] = useState("");
@@ -394,7 +399,7 @@ export default function LudexMobile() {
   // no historico; ao voltar, desfazemos UM nivel de navegacao e re-armamos o
   // trap. So na raiz (Inicio, nada aberto) o proximo back sai do app.
   const navStateRef = useRef({});
-  navStateRef.current = { activeTab, openSystem, openGame, playingGame, folderPickerOpen };
+  navStateRef.current = { activeTab, openSystem, openGame, playingGame, folderPickerOpen, profileEditorOpen };
   const closeEmulatorRef = useRef(closeEmulator);
   closeEmulatorRef.current = closeEmulator;
   useEffect(() => {
@@ -403,6 +408,7 @@ export default function LudexMobile() {
       const s = navStateRef.current;
       let handled = true;
       if (s.playingGame) closeEmulatorRef.current && closeEmulatorRef.current();
+      else if (s.profileEditorOpen) setProfileEditorOpen(false);
       else if (s.folderPickerOpen) setFolderPickerOpen(false);
       else if (s.openGame) setOpenGame(null);
       else if (s.openSystem) setOpenSystem(null);
@@ -573,7 +579,7 @@ export default function LudexMobile() {
             onPickFolder={pickRomsFolder}
             hasFilesAccess={hasFilesAccess}
             onRequestAccess={requestFilesAccess}
-            onOpenProfile={() => changeTab("settings")}
+            onOpenProfile={() => setProfileEditorOpen(true)}
           />
         )}
         {activeTab === "systems" && (
@@ -629,8 +635,17 @@ export default function LudexMobile() {
       )}
 
       {/* Tutorial first run */}
-      {!isFirstRunDone() && (
-        <TutorialOverlay onDone={() => { markFirstRunDone(); setActiveTab((t) => t); /* force rerender */ }} />
+      {!tutorialDone && (
+        <TutorialOverlay onDone={() => { markFirstRunDone(); setTutorialDone(true); }} />
+      )}
+      {/* v0.9.4: editor de perfil (foto + nome + avatar) */}
+      {profileEditorOpen && activeProfile && (
+        <ProfileEditorModal
+          config={config}
+          activeProfile={activeProfile}
+          onConfigChange={setConfig}
+          onClose={() => setProfileEditorOpen(false)}
+        />
       )}
 
       {/* Bottom tab bar (estilo iOS/Android nativo) */}
@@ -663,7 +678,7 @@ function TabBtn({ icon, label, active, onClick }) {
 function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents, onPickSystem, onPickGame, onResume, onPickFolder, hasFilesAccess, onRequestAccess, onOpenProfile }) {
   const nonEmptySystems = systems.filter((s) => s.games.length > 0);
   const topSystems = nonEmptySystems.slice(0, 6);
-  const profileAv = DEFAULT_AVATARS.find(a => a.id === activeProfile?.avatar_id) || DEFAULT_AVATARS[0];
+  const profileImg = profileImgSrc(activeProfile);
 
   // Internal: jogos por modified_at (usado por carrosseis), distinto de recents (props - last played)
   const recentByMtime = useMemo(() => {
@@ -682,8 +697,8 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
       {/* Hero header */}
       <header className="lmx-home-hero">
         {/* v0.9.3: avatar do perfil presente na home (toca = abre Ajustes/perfil) */}
-        <button className="lmx-home-avatar" onClick={onOpenProfile} aria-label="Perfil">
-          <img src={avatarUrl(profileAv)} alt={profileAv.label} />
+        <button className="lmx-home-avatar" onClick={onOpenProfile} aria-label="Editar perfil">
+          <img src={profileImg} alt="Perfil" />
         </button>
         <div className="lmx-home-greeting">
           <div className="lmx-home-hello">Olá</div>
@@ -1398,7 +1413,18 @@ const IconUp = () => (
   </svg>
 );
 
-function FolderPickerModal({ onClose, onPick }) {
+// v0.9.4: mode="folder" (escolher pasta de ROMs) | "image" (escolher foto de perfil).
+// Em image mode, arquivos de imagem ficam CLICAVEIS e onPick recebe o caminho do arquivo.
+const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|heic)$/i;
+const IMG_SHORTCUTS = [
+  { path: "/storage/emulated/0/DCIM/Camera", label: "Câmera" },
+  { path: "/storage/emulated/0/Pictures", label: "Fotos" },
+  { path: "/storage/emulated/0/Download", label: "Download" },
+  { path: "/storage/emulated/0", label: "Início" },
+];
+
+function FolderPickerModal({ onClose, onPick, mode = "folder", title }) {
+  const isImage = mode === "image";
   const [cwd, setCwd] = useState(null);
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1417,7 +1443,7 @@ function FolderPickerModal({ onClose, onPick }) {
     }
   }, []);
 
-  useEffect(() => { load(null); }, [load]);
+  useEffect(() => { load(isImage ? "/storage/emulated/0/DCIM/Camera" : null); }, [load, isImage]);
 
   const folders = (listing?.entries || []).filter((e) => e.is_dir);
   const files = (listing?.entries || []).filter((e) => !e.is_dir);
@@ -1439,13 +1465,13 @@ function FolderPickerModal({ onClose, onPick }) {
       <div className="lmx-folder-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="lmx-sheet-handle" />
         <div className="lmx-sheet-header">
-          <h3>Escolher pasta de ROMs</h3>
+          <h3>{title || (isImage ? "Escolher foto" : "Escolher pasta de ROMs")}</h3>
           <button className="lmx-back-btn" onClick={onClose} aria-label="Fechar"><IconClose /></button>
         </div>
 
         {/* Atalhos rapidos */}
         <div className="lmx-fb-shortcuts">
-          {QUICK_SHORTCUTS.map((s) => (
+          {(isImage ? IMG_SHORTCUTS : QUICK_SHORTCUTS).map((s) => (
             <button key={s.path} className="lmx-fb-chip" onClick={() => load(s.path)}>{s.label}</button>
           ))}
         </div>
@@ -1482,26 +1508,148 @@ function FolderPickerModal({ onClose, onPick }) {
               {f.rom_count > 0 && <span className="lmx-fb-badge">{f.rom_count} ROM{f.rom_count > 1 ? "s" : ""}</span>}
             </button>
           ))}
-          {!loading && !err && files.map((f) => (
-            <div key={f.path} className="lmx-fb-item lmx-fb-file">
-              <span className="lmx-fb-icon"><IconFile /></span>
-              <span className="lmx-fb-name">{f.name}</span>
-            </div>
-          ))}
+          {!loading && !err && files.map((f) => {
+            const pickable = isImage && IMG_RE.test(f.name);
+            if (pickable) {
+              return (
+                <button key={f.path} className="lmx-fb-item" onClick={() => onPick(f.path)}>
+                  <span className="lmx-fb-thumb"><img src={convertFileSrc(f.path)} alt="" loading="lazy" /></span>
+                  <span className="lmx-fb-name">{f.name}</span>
+                </button>
+              );
+            }
+            return (
+              <div key={f.path} className="lmx-fb-item lmx-fb-file">
+                <span className="lmx-fb-icon"><IconFile /></span>
+                <span className="lmx-fb-name">{f.name}</span>
+              </div>
+            );
+          })}
         </div>
 
-        {/* Acao: usar pasta atual */}
-        <div className="lmx-fb-footer">
-          {romsHere > 0 && (
-            <div className="lmx-fb-foundhint">{romsHere} ROM{romsHere > 1 ? "s" : ""} nesta pasta</div>
+        {/* Acao: usar pasta atual (so no modo pasta) */}
+        {isImage ? (
+          <div className="lmx-fb-footer">
+            <div className="lmx-fb-foundhint">Toque numa imagem para usar como foto</div>
+          </div>
+        ) : (
+          <div className="lmx-fb-footer">
+            {romsHere > 0 && (
+              <div className="lmx-fb-foundhint">{romsHere} ROM{romsHere > 1 ? "s" : ""} nesta pasta</div>
+            )}
+            <button
+              className="lmx-settings-btn primary"
+              disabled={!cwd || loading}
+              onClick={() => onPick(cwd)}
+            >
+              Usar esta pasta
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// v0.9.4: src da imagem do perfil — foto custom (photo_path) OU avatar SVG.
+function profileImgSrc(profile, bust) {
+  if (profile?.photo_path) {
+    try { return convertFileSrc(profile.photo_path) + (bust ? "?v=" + bust : ""); } catch {}
+  }
+  const av = DEFAULT_AVATARS.find(a => a.id === profile?.avatar_id) || DEFAULT_AVATARS[0];
+  return avatarUrl(av);
+}
+
+// ============================================================
+// === PROFILE EDITOR MODAL (v0.9.4) ==========================
+// Editor de perfil DIRETO (abre tocando no avatar da home): trocar FOTO de
+// verdade (picker de imagem), nome e avatar. Antes nao tinha como trocar foto
+// nem o nome era facil de achar — Paulo pediu varias vezes.
+function ProfileEditorModal({ config, activeProfile, onConfigChange, onClose }) {
+  const [name, setName] = useState(activeProfile?.name || "");
+  const [avatarId, setAvatarId] = useState(activeProfile?.avatar_id || DEFAULT_AVATARS[0].id);
+  const [photoPath, setPhotoPath] = useState(activeProfile?.photo_path || null);
+  const [bust, setBust] = useState(0);
+  const [picking, setPicking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const onPickImage = async (srcPath) => {
+    setPicking(false); setBusy(true); setMsg(null);
+    try {
+      const saved = await invoke("save_profile_photo_from_path", { profileId: activeProfile.id, sourcePath: srcPath });
+      setPhotoPath(saved); setBust((v) => v + 1);
+      setMsg({ kind: "ok", text: "Foto pronta. Toque em Salvar." });
+    } catch (e) {
+      setMsg({ kind: "error", text: "Falha na foto: " + String(e) });
+    } finally { setBusy(false); }
+  };
+
+  const removePhoto = async () => {
+    try { await invoke("delete_profile_photo", { profileId: activeProfile.id }); } catch {}
+    setPhotoPath(null); setBust((v) => v + 1);
+  };
+
+  const save = async () => {
+    const n = name.trim();
+    if (n.length < 2) { setMsg({ kind: "error", text: "Nome muito curto (mínimo 2 letras)" }); return; }
+    const updated = {
+      ...config,
+      profiles: (config.profiles || []).map(p => p.id === activeProfile.id ? { ...p, name: n, avatar_id: avatarId, photo_path: photoPath || null } : p),
+    };
+    setBusy(true);
+    try {
+      await invoke("save_config", { config: updated });
+      onConfigChange && onConfigChange(updated);
+      sfx.confirm(); haptic(12);
+      onClose();
+    } catch (e) {
+      setMsg({ kind: "error", text: "Falha ao salvar: " + String(e) });
+      setBusy(false);
+    }
+  };
+
+  if (picking) {
+    return <FolderPickerModal mode="image" title="Escolher foto do perfil" onClose={() => setPicking(false)} onPick={onPickImage} />;
+  }
+
+  const previewSrc = photoPath
+    ? convertFileSrc(photoPath) + "?v=" + bust
+    : avatarUrl(DEFAULT_AVATARS.find(a => a.id === avatarId) || DEFAULT_AVATARS[0]);
+
+  return (
+    <div className="lmx-sheet-backdrop" onClick={onClose}>
+      <div className="lmx-folder-sheet" onClick={(e) => e.stopPropagation()} style={{ paddingBottom: "calc(24px + var(--lmx-safe-bottom))" }}>
+        <div className="lmx-sheet-handle" />
+        <div className="lmx-sheet-header">
+          <h3>Editar perfil</h3>
+          <button className="lmx-back-btn" onClick={onClose} aria-label="Fechar"><IconClose /></button>
+        </div>
+        <div style={{ padding: "4px 18px 0", overflowY: "auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 14 }}>
+            <img src={previewSrc} alt="" style={{ width: 96, height: 96, borderRadius: 26, objectFit: "cover", border: "2px solid rgba(124,92,255,0.55)", background: "rgba(0,0,0,0.3)" }} />
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 12 }}>
+              <button className="lmx-settings-btn primary" onClick={() => setPicking(true)} disabled={busy} style={{ width: "auto", padding: "9px 18px" }}>Escolher foto</button>
+              {photoPath && <button className="lmx-settings-btn ghost" onClick={removePhoto} style={{ width: "auto", padding: "9px 18px" }}>Remover</button>}
+            </div>
+          </div>
+          <label style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", display: "block", marginBottom: 6 }}>Nome</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={28} placeholder="Seu nome" autoFocus
+            style={{ width: "100%", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(124,92,255,0.4)", color: "#fff", padding: "11px 13px", borderRadius: 9, fontSize: 15, boxSizing: "border-box", marginBottom: 14 }} />
+          {!photoPath && (
+            <>
+              <label style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", display: "block", marginBottom: 6 }}>Ou um avatar</label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6, marginBottom: 14 }}>
+                {DEFAULT_AVATARS.map(a => (
+                  <button key={a.id} onClick={() => setAvatarId(a.id)} style={{ aspectRatio: "1/1", borderRadius: 8, border: `2px solid ${avatarId === a.id ? "#fff" : "transparent"}`, padding: 0, overflow: "hidden", background: "rgba(0,0,0,0.3)" }}>
+                    <img src={avatarUrl(a)} alt="" style={{ width: "100%", height: "100%", display: "block" }} />
+                  </button>
+                ))}
+              </div>
+            </>
           )}
-          <button
-            className="lmx-settings-btn primary"
-            disabled={!cwd || loading}
-            onClick={() => onPick(cwd)}
-          >
-            Usar esta pasta
-          </button>
+          {msg && <p className={`lmx-settings-msg ${msg.kind}`}>{msg.text}</p>}
+          <button className="lmx-settings-btn primary" onClick={save} disabled={busy} style={{ marginTop: 4 }}>{busy ? "Salvando..." : "Salvar"}</button>
         </div>
       </div>
     </div>
@@ -2728,7 +2876,7 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
             border: `1px solid ${isActive ? "rgba(124,58,237,0.4)" : "rgba(255,255,255,0.06)"}`,
           }}>
             <img
-              src={avatarUrl(av)}
+              src={profileImgSrc(p)}
               alt={av.label}
               style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, objectFit: "cover" }}
             />
