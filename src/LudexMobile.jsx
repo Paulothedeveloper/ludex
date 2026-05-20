@@ -15,7 +15,14 @@
  */
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, message as nativeMessage, ask as nativeAsk } from "@tauri-apps/plugin-dialog";
+
+// v0.9.2: window.alert/confirm/prompt sao NO-OP no WebView do Android (Tauri) —
+// por isso varios botoes "nao funcionavam" no APK. Usa os dialogs NATIVOS do
+// plugin-dialog. mAlert/mConfirm sao async (await). Pra prompt (sem equivalente
+// nativo) usamos input in-app (modais proprios).
+const mAlert = (msg) => { try { return nativeMessage(String(msg), { title: "Ludex" }); } catch { return Promise.resolve(); } };
+const mConfirm = (msg) => { try { return nativeAsk(String(msg), { title: "Ludex" }); } catch { return Promise.resolve(false); } };
 import { sfx, playPlatformJingle, unlockAudio, haptic, setMuted as setSfxMuted, isMutedNow } from "./ludexMobileAudio";
 import {
   loadRecents, pushRecent, trackSession, statsFor, totalPlayTime, loadStats,
@@ -173,7 +180,7 @@ export default function LudexMobile() {
   const requestFilesAccess = useCallback(async () => {
     try {
       await invoke("android_open_all_files_settings");
-    } catch (e) { alert("Nao consegui abrir Configuracoes: " + e); }
+    } catch (e) { mAlert("Nao consegui abrir Configuracoes: " + e); }
   }, []);
   // Quando user volta de Settings, re-checa
   useEffect(() => {
@@ -350,7 +357,7 @@ export default function LudexMobile() {
   const sessionStartRef = useRef(null);
   const launchGame = useCallback((system, game) => {
     if (!system.libretro_core) {
-      alert(`Sistema "${system.name}" nao tem core libretro embedded pra Android.`);
+      mAlert(`Sistema "${system.name}" nao tem core libretro embedded pra Android.`);
       return;
     }
     playPlatformJingle(system.id);
@@ -424,18 +431,17 @@ export default function LudexMobile() {
         let hasAccess = true;
         try { hasAccess = await invoke("android_has_all_files_access"); } catch {}
         if (!hasAccess) {
-          const ok = window.confirm(
+          const ok = await mConfirm(
             "O Ludex precisa de permissao para acessar seus arquivos.\n\n" +
-            "Vou abrir Configuracoes -- ative 'Permitir gerenciar todos os arquivos' e volte aqui.\n\n" +
-            "Abrir agora?"
+            "Vou abrir Configuracoes -- ative 'Permitir gerenciar todos os arquivos' e volte aqui.\n\nAbrir agora?"
           );
           if (ok) {
             try { await invoke("android_open_all_files_settings"); } catch (err) {
-              alert("Nao consegui abrir Configuracoes: " + err);
+              await mAlert("Nao consegui abrir Configuracoes: " + err);
             }
           }
         } else {
-          alert(
+          await mAlert(
             "Nenhum jogo encontrado em:\n" + path + "\n\n" +
             "ROMs supported: .nes .smc .sfc .gba .gb .gbc .iso .bin .cue .z64 .n64 .md .smd .gen .sms .gg .pce .ws .ngc .lnx .a26 .j64 .zip .7z e outras."
           );
@@ -443,7 +449,7 @@ export default function LudexMobile() {
       }
     } catch (e) {
       dbg(`setRomsFolder falhou: ${e}`);
-      alert(`Falha: ${e}`);
+      await mAlert(`Falha: ${e}`);
     }
   }, [dbg]);
 
@@ -1115,7 +1121,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
           try {
             const base = await invoke("android_ludex_base_path");
             await invoke("android_open_folder", { absPath: base });
-          } catch (e) { alert("Nao consegui abrir Files Manager: " + e); }
+          } catch (e) { mAlert("Nao consegui abrir Files Manager: " + e); }
         }}>
           Abrir pasta Ludex no Files
         </button>
@@ -2298,20 +2304,26 @@ function ChildModeCard() {
   const [on, setOnState] = useState(isChildModeOn());
   const [pinInput, setPinInput] = useState("");
   const [setupOpen, setSetupOpen] = useState(false);
+  // v0.9.2: window.prompt/alert nao funcionam no WebView Android -> input in-app
+  const [disableOpen, setDisableOpen] = useState(false);
+  const [disablePin, setDisablePin] = useState("");
+  const [err, setErr] = useState(null);
   const enable = () => {
-    if (pinInput.length !== 4) { alert("PIN deve ter 4 digitos"); return; }
+    if (pinInput.length !== 4) { setErr("PIN deve ter 4 digitos"); return; }
     setChildModeStore(true, pinInput);
     setOnState(true);
     setPinInput("");
     setSetupOpen(false);
+    setErr(null);
     sfx.confirm();
   };
-  const disable = () => {
-    const pin = window.prompt("Digite o PIN pra desativar:");
-    if (!pin) return;
-    if (!verifyChildPin(pin)) { alert("PIN incorreto"); return; }
+  const doDisable = () => {
+    if (!verifyChildPin(disablePin)) { setErr("PIN incorreto"); return; }
     setChildModeStore(false);
     setOnState(false);
+    setDisableOpen(false);
+    setDisablePin("");
+    setErr(null);
     sfx.confirm();
   };
   return (
@@ -2322,7 +2334,18 @@ function ChildModeCard() {
         Precisa PIN de 4 digitos pra desativar.
       </p>
       {on ? (
-        <button className="lmx-settings-btn ghost" onClick={disable}>Desativar Modo crianca</button>
+        !disableOpen ? (
+          <button className="lmx-settings-btn ghost" onClick={() => { setDisableOpen(true); setErr(null); }}>Desativar Modo crianca</button>
+        ) : (
+          <div className="lmx-settings-key">
+            <input
+              type="tel" inputMode="numeric" maxLength={4} placeholder="PIN pra desativar"
+              value={disablePin} onChange={(e) => setDisablePin(e.target.value.replace(/\D/g, ""))}
+              autoFocus
+            />
+            <button className="lmx-settings-btn primary" onClick={doDisable} disabled={disablePin.length !== 4}>Confirmar</button>
+          </div>
+        )
       ) : !setupOpen ? (
         <button className="lmx-settings-btn primary" onClick={() => setSetupOpen(true)}>Ativar Modo crianca</button>
       ) : (
@@ -2335,6 +2358,7 @@ function ChildModeCard() {
           <button className="lmx-settings-btn primary" onClick={enable} disabled={pinInput.length !== 4}>Confirmar</button>
         </div>
       )}
+      {err && <p className="lmx-settings-msg error">{err}</p>}
     </section>
   );
 }
@@ -2344,26 +2368,30 @@ function ChildModeCard() {
 // ============================================================
 function BackupRestoreCard() {
   const [msg, setMsg] = useState(null);
+  // v0.9.2: navigator.clipboard e window.prompt nao funcionam no WebView Android.
+  // Export mostra o JSON num textarea selecionavel (+ tenta clipboard como bonus).
+  // Import usa textarea in-app em vez de prompt.
+  const [exportText, setExportText] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const taStyle = { width: "100%", height: 92, marginTop: 8, padding: 10, borderRadius: 8, background: "rgba(0,0,0,0.3)", border: "1px solid var(--lmx-border)", color: "var(--lmx-text)", fontFamily: "monospace", fontSize: 11, boxSizing: "border-box", resize: "vertical" };
   const doExport = () => {
     const json = exportConfig();
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(json).then(() => {
-        setMsg({ kind: "ok", text: "Config copiada pro clipboard. Cola no outro dispositivo em 'Importar'." });
-      }).catch(() => setMsg({ kind: "info", text: json.slice(0, 200) + "..." }));
-    }
+    setExportText(json);
+    try { if (navigator.clipboard) navigator.clipboard.writeText(json).catch(() => {}); } catch {}
     try { notifyBackupMade && notifyBackupMade(() => {}); } catch {}
     sfx.confirm();
-    setTimeout(() => setMsg(null), 6000);
   };
   const doImport = () => {
-    const json = window.prompt("Cola o JSON da config exportada (do Windows ou de outro celular):");
+    const json = importText.trim();
     if (!json) return;
     if (importConfig(json)) {
-      setMsg({ kind: "ok", text: "Config importada com sucesso. Reabra o app pra aplicar — perfil, conquistas, recents, favoritos e custom covers vieram do outro dispositivo." });
+      setMsg({ kind: "ok", text: "Config importada. Reabra o app pra aplicar — perfil, conquistas, recents, favoritos e capas custom vieram do outro dispositivo." });
+      setImportOpen(false); setImportText("");
     } else {
       setMsg({ kind: "error", text: "Falha ao importar. Verifica se o JSON ta completo." });
     }
-    setTimeout(() => setMsg(null), 6000);
+    setTimeout(() => setMsg(null), 8000);
   };
   return (
     <section className="lmx-settings-card">
@@ -2372,7 +2400,23 @@ function BackupRestoreCard() {
         Exporta recents, conquistas, stats, cheats e capas custom em JSON.
       </p>
       <button className="lmx-settings-btn primary" onClick={doExport}>Exportar config</button>
-      <button className="lmx-settings-btn ghost" onClick={doImport} style={{ marginTop: 8 }}>Importar config</button>
+      {exportText && (
+        <>
+          <p className="lmx-settings-hint" style={{ marginTop: 8 }}>
+            Tentei copiar pro clipboard. Se nao colar, segura no texto abaixo, "Selecionar tudo" e copia:
+          </p>
+          <textarea readOnly value={exportText} onFocus={(e) => e.target.select()} style={taStyle} />
+        </>
+      )}
+      <button className="lmx-settings-btn ghost" onClick={() => { setImportOpen(o => !o); setMsg(null); }} style={{ marginTop: 8 }}>
+        {importOpen ? "Cancelar import" : "Importar config"}
+      </button>
+      {importOpen && (
+        <>
+          <textarea value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="Cola aqui o JSON exportado do outro dispositivo" style={taStyle} />
+          <button className="lmx-settings-btn primary" onClick={doImport} disabled={!importText.trim()} style={{ marginTop: 8 }}>Aplicar import</button>
+        </>
+      )}
       {msg && <p className={`lmx-settings-msg ${msg.kind}`}>{msg.text}</p>}
     </section>
   );
@@ -2544,7 +2588,7 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
 
   const del = async (id) => {
     if (profiles.length <= 1) { setMsg({ kind: "error", text: "Não pode deletar o único profile." }); return; }
-    if (!confirm("Deletar esse profile? Tempo/conquistas locais ficam (são por dispositivo).")) return;
+    if (!(await mConfirm("Deletar esse profile? Tempo/conquistas locais ficam (são por dispositivo)."))) return;
     const newProfiles = profiles.filter(p => p.id !== id);
     const newActive = config.active_profile_id === id ? newProfiles[0].id : config.active_profile_id;
     await save({ ...config, profiles: newProfiles, active_profile_id: newActive });
@@ -2807,9 +2851,14 @@ function LogsViewerCard() {
       setText("Erro: " + String(e));
     } finally { setBusy(false); }
   };
-  const copy = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(text);
+  // v0.9.2: clipboard pode falhar no WebView Android. Tenta, e dá feedback;
+  // se falhar, o usuario segura no <pre> e seleciona manual.
+  const copy = async () => {
+    try {
+      if (navigator.clipboard) { await navigator.clipboard.writeText(text); mAlert("Log copiado."); return; }
+      throw new Error("sem clipboard");
+    } catch {
+      mAlert("Nao consegui copiar automatico. Segura no texto do log e seleciona/copia manual.");
     }
   };
   return (
