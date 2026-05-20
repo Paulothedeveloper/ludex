@@ -349,18 +349,23 @@ export function startAmbient() {
   if (_ambientCtx) return;
   try {
     _ambientCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // v0.9.5: RESUME — no Android o AudioContext nasce suspenso; sem isso a
+    // musica chiptune nao saia som nenhum. E o volume era 0.012 (inaudivel) ->
+    // subido pra 0.06.
+    _ambientCtx.resume().catch(() => {});
     // Loop simples C-E-G-C arpejo lento 4s
     const notes = [261.63, 329.63, 392.00, 523.25, 392.00, 329.63];
     let i = 0;
     const playOne = () => {
       if (!_ambientCtx) return;
+      if (_ambientCtx.state === "suspended") _ambientCtx.resume().catch(() => {});
       const osc = _ambientCtx.createOscillator();
       const g = _ambientCtx.createGain();
       osc.type = "triangle";
       osc.frequency.value = notes[i % notes.length];
       const t = _ambientCtx.currentTime;
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.012, t + 0.5);
+      g.gain.exponentialRampToValueAtTime(0.06, t + 0.5);
       g.gain.exponentialRampToValueAtTime(0.0005, t + 2.2);
       osc.connect(g); g.connect(_ambientCtx.destination);
       osc.start(t); osc.stop(t + 2.3);

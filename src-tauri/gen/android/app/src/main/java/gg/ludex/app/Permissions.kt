@@ -47,26 +47,40 @@ class Permissions {
         fun openFolder(activity: Activity, absPath: String) {
             val file = File(absPath)
             try { file.mkdirs() } catch (_: Throwable) {}
-            // Tenta DocumentsUI primeiro (Samsung Files / Files by Google)
+            // v0.9.5: lanca exception se NADA abriu (antes engolia tudo -> botao
+            // "nao funcionava" em silencio). O frontend mostra o caminho no fallback.
+            // 1) DocumentsUI (Samsung Files / Files by Google)
             try {
                 val uri = Uri.parse("content://com.android.externalstorage.documents/document/primary:" +
                     absPath.removePrefix("/storage/emulated/0/"))
                 val intent = Intent(Intent.ACTION_VIEW).apply {
                     setDataAndType(uri, "vnd.android.document/directory")
-                    flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 }
                 activity.startActivity(intent)
                 return
             } catch (_: Throwable) {}
-            // Fallback: file://
+            // 2) Samsung My Files explicito
+            try {
+                val intent = activity.packageManager.getLaunchIntentForPackage("com.sec.android.app.myfiles")
+                if (intent != null) { activity.startActivity(intent); return }
+            } catch (_: Throwable) {}
+            // 3) file://
             try {
                 val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(Uri.fromFile(file), "*/*")
+                    setDataAndType(Uri.fromFile(file), "resource/folder")
                     flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
                 }
                 activity.startActivity(intent)
+                return
             } catch (_: Throwable) {}
+            // 4) qualquer file manager generico
+            try {
+                val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE) }
+                activity.startActivity(Intent.createChooser(intent, "Abrir arquivos"))
+                return
+            } catch (_: Throwable) {}
+            throw IllegalStateException("Nenhum gerenciador de arquivos disponivel")
         }
 
         /**

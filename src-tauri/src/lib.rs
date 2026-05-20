@@ -1302,6 +1302,25 @@ fn scan_roms(roms_root: Option<String>) -> Vec<SystemInfo> {
     EMULATORS.iter().map(|cfg| scan_system(&root_path, &emu_root, cfg)).collect()
 }
 
+// v0.9.5: scan com pasta POR SISTEMA. overrides: { systemId: folderPath }. Pra
+// cada sistema com override, escaneia ESSA pasta (scan_system cai no flat-scan
+// quando a pasta nao tem subpasta com o folder_name). Sem override, usa o
+// roms_root padrao. Atende o pedido do Paulo de escolher uma pasta por emulador.
+#[tauri::command]
+fn scan_roms_overrides(roms_root: Option<String>, overrides: std::collections::HashMap<String, String>) -> Vec<SystemInfo> {
+    let root_path = match roms_root {
+        Some(s) if !s.is_empty() => PathBuf::from(s),
+        _ => current_roms_root(),
+    };
+    let emu_root = current_emulators_root();
+    EMULATORS.iter().map(|cfg| {
+        match overrides.get(cfg.id) {
+            Some(ov) if !ov.is_empty() => scan_system(&PathBuf::from(ov), &emu_root, cfg),
+            _ => scan_system(&root_path, &emu_root, cfg),
+        }
+    }).collect()
+}
+
 // v0.9.2: navegador de arquivos real. Antes o picker de pasta no Android era uma
 // lista fixa de caminhos comuns ("engessado") — agora o user navega o
 // armazenamento de verdade (o app ja tem MANAGE_EXTERNAL_STORAGE, entao
@@ -5494,6 +5513,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             scan_roms,
+            scan_roms_overrides,
             list_dir,
             libretro_apply_cheats,
             fetch_cheats,

@@ -150,6 +150,19 @@ function categoryOfSystem(systemId) {
   return CATEGORIES[CATEGORIES.length - 1];
 }
 
+// v0.9.5: pasta POR SISTEMA. { systemId: folderPath }. Permite o user apontar
+// uma pasta diferente pra cada emulador. Persistido no localStorage.
+const SYSFOLDERS_KEY = "ludex.systemFolders";
+function loadSystemFolders() {
+  try { return JSON.parse(localStorage.getItem(SYSFOLDERS_KEY) || "{}"); } catch { return {}; }
+}
+function saveSystemFolder(systemId, path) {
+  const m = loadSystemFolders();
+  if (path) m[systemId] = path; else delete m[systemId];
+  try { localStorage.setItem(SYSFOLDERS_KEY, JSON.stringify(m)); } catch {}
+  return m;
+}
+
 // ============================================================
 // === COMPONENTE PRINCIPAL ===================================
 // ============================================================
@@ -164,6 +177,19 @@ export default function LudexMobile() {
   // sumia (botão "Começar" travado). Agora é state de verdade.
   const [tutorialDone, setTutorialDone] = useState(() => isFirstRunDone());
   const [profileEditorOpen, setProfileEditorOpen] = useState(false); // v0.9.4
+  const [sysFolderPick, setSysFolderPick] = useState(null); // v0.9.5: systemId sendo configurado
+
+  // v0.9.5: re-scaneia usando overrides por sistema. Retorna a lista filtrada.
+  const rescanSystems = useCallback(async () => {
+    try {
+      const sys = await invoke("scan_roms_overrides", { romsRoot: null, overrides: loadSystemFolders() });
+      const filtered = (sys || [])
+        .filter((s) => ANDROID_SUPPORTED.has(s.id))
+        .map(s => ({ ...s, games: filterChildSafe(s.games || []) }));
+      setSystems(filtered);
+      return filtered;
+    } catch (e) { console.error("rescan", e); return []; }
+  }, []);
   const [openSystem, setOpenSystem] = useState(null); // sistema selecionado (mostra grid)
   const [openGame, setOpenGame] = useState(null); // jogo selecionado (mostra detail)
   const [search, setSearch] = useState("");
@@ -259,7 +285,7 @@ export default function LudexMobile() {
       }, 1500);
 
       try {
-        const sys = await invoke("scan_roms", { romsRoot: null });
+        const sys = await invoke("scan_roms_overrides", { romsRoot: null, overrides: loadSystemFolders() });
         // Filtra: APK so mostra sistemas com core libretro ARM (autenticos embedded).
         // Switch/Wii U/PS3/Xbox/etc nao tem core ARM = nao funcionam em Android.
         // v0.8.22: child mode filtra ROMs adultas por keyword no nome
@@ -399,7 +425,7 @@ export default function LudexMobile() {
   // no historico; ao voltar, desfazemos UM nivel de navegacao e re-armamos o
   // trap. So na raiz (Inicio, nada aberto) o proximo back sai do app.
   const navStateRef = useRef({});
-  navStateRef.current = { activeTab, openSystem, openGame, playingGame, folderPickerOpen, profileEditorOpen };
+  navStateRef.current = { activeTab, openSystem, openGame, playingGame, folderPickerOpen, profileEditorOpen, sysFolderPick };
   const closeEmulatorRef = useRef(closeEmulator);
   closeEmulatorRef.current = closeEmulator;
   useEffect(() => {
@@ -408,6 +434,7 @@ export default function LudexMobile() {
       const s = navStateRef.current;
       let handled = true;
       if (s.playingGame) closeEmulatorRef.current && closeEmulatorRef.current();
+      else if (s.sysFolderPick) setSysFolderPick(null);
       else if (s.profileEditorOpen) setProfileEditorOpen(false);
       else if (s.folderPickerOpen) setFolderPickerOpen(false);
       else if (s.openGame) setOpenGame(null);
@@ -448,7 +475,7 @@ export default function LudexMobile() {
     try {
       await invoke("set_paths_config", { emulatorsRoot: null, romsRoot: path });
       dbg("set_paths_config OK");
-      const sys = await invoke("scan_roms", { romsRoot: path });
+      const sys = await invoke("scan_roms_overrides", { romsRoot: path, overrides: loadSystemFolders() });
       dbg(`scan_roms retornou ${sys?.length || 0} sistemas`);
       const filtered = (sys || []).filter((s) => ANDROID_SUPPORTED.has(s.id));
       const totalGames = filtered.reduce((acc, s) => acc + (s.games?.length || 0), 0);
@@ -540,13 +567,30 @@ export default function LudexMobile() {
   // ============ SISTEMA ABERTO (grid de jogos do sistema) ============
   if (openSystem) {
     return (
-      <SystemScreen
-        system={openSystem}
-        covers={covers}
-        onBack={() => { sfx.back(); haptic(8); setOpenSystem(null); }}
-        onPickGame={(game) => { sfx.open(); haptic(10); setOpenGame({ system: openSystem, game }); }}
-        onPickFolder={pickRomsFolder}
-      />
+      <>
+        <SystemScreen
+          system={openSystem}
+          covers={covers}
+          onBack={() => { sfx.back(); haptic(8); setOpenSystem(null); }}
+          onPickGame={(game) => { sfx.open(); haptic(10); setOpenGame({ system: openSystem, game }); }}
+          onPickFolder={pickRomsFolder}
+          onPickSystemFolder={() => { sfx.click(); setSysFolderPick(openSystem.id); }}
+          currentSystemFolder={loadSystemFolders()[openSystem.id]}
+        />
+        {sysFolderPick && (
+          <FolderPickerModal
+            title={`Pasta de ${openSystem.name}`}
+            onClose={() => setSysFolderPick(null)}
+            onPick={async (folder) => {
+              saveSystemFolder(sysFolderPick, folder);
+              setSysFolderPick(null);
+              const list = await rescanSystems();
+              const updated = list.find((s) => s.id === openSystem.id);
+              setOpenSystem(updated || openSystem);
+            }}
+          />
+        )}
+      </>
     );
   }
 
@@ -1161,10 +1205,18 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
           <div><strong>Mods/traducoes:</strong> <code>Ludex/mods/&lt;sistema&gt;/</code></div>
         </div>
         <button className="lmx-settings-btn primary" onClick={async () => {
-          try {
-            const base = await invoke("android_ludex_base_path");
-            await invoke("android_open_folder", { absPath: base });
-          } catch (e) { mAlert("Nao consegui abrir Files Manager: " + e); }
+          // v0.9.5: abrir uma pasta especifica e instavel entre gerenciadores de
+          // arquivos do Android. Tenta abrir, mas SEMPRE mostra o caminho como
+          // fallback (antes falhava em silencio = "nao funciona").
+          const base = await invoke("android_ludex_base_path").catch(() => "/storage/emulated/0/Ludex");
+          let opened = false;
+          try { await invoke("android_open_folder", { absPath: base }); opened = true; } catch {}
+          if (!opened) {
+            await mAlert(
+              "Abra o app de Arquivos (Meus Arquivos) do seu celular e vá até:\n\n" + base +
+              "\n\nColoque BIOS em " + base + "/system/ e mods em " + base + "/mods/<sistema>/"
+            );
+          }
         }}>
           Abrir pasta Ludex no Files
         </button>
@@ -1209,7 +1261,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
 // ============================================================
 // === SYSTEM SCREEN (grid de jogos do sistema selecionado) ===
 // ============================================================
-function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder }) {
+function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder, onPickSystemFolder, currentSystemFolder }) {
   return (
     <div className="lmx-systemview">
       <header className="lmx-page-header has-back">
@@ -1221,18 +1273,35 @@ function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder }) {
             <div className="lmx-systemview-count">{system.games.length} jogo{system.games.length === 1 ? "" : "s"}</div>
           </div>
         </div>
+        {/* v0.9.5: pasta exclusiva deste sistema */}
+        {onPickSystemFolder && (
+          <button className="lmx-sysfolder-btn" onClick={onPickSystemFolder} title="Escolher pasta só deste sistema" aria-label="Pasta deste sistema">
+            <IconFolder withRoms={!!currentSystemFolder} />
+          </button>
+        )}
       </header>
+      {currentSystemFolder && (
+        <div className="lmx-sysfolder-bar">
+          <span>Pasta deste sistema: <code>{currentSystemFolder}</code></span>
+          <button onClick={onPickSystemFolder}>Trocar</button>
+        </div>
+      )}
       {system.games.length === 0 ? (
         <div className="lmx-empty-state">
           <div className="lmx-empty-icon"><IconGrid /></div>
           <h2>Sem jogos de {system.name}</h2>
           <p>
-            Escolha onde estao suas ROMs de {system.name} no celular.
-            Pode ser qualquer pasta -- o Ludex vai detectar pela extensao.
+            Escolha uma pasta SÓ pra {system.name} — assim cada emulador pode ter
+            a sua. O Ludex detecta as ROMs pela extensão.
           </p>
+          {onPickSystemFolder && (
+            <button className="lmx-settings-btn primary" onClick={onPickSystemFolder} style={{ maxWidth: 280, margin: "16px auto 8px" }}>
+              Escolher pasta de {system.name}
+            </button>
+          )}
           {onPickFolder && (
-            <button className="lmx-settings-btn primary" onClick={onPickFolder} style={{ maxWidth: 280, margin: "16px auto 0" }}>
-              Escolher pasta de ROMs
+            <button className="lmx-settings-btn ghost" onClick={onPickFolder} style={{ maxWidth: 280, margin: "0 auto" }}>
+              Usar a pasta geral de ROMs
             </button>
           )}
         </div>
@@ -1884,6 +1953,7 @@ function MobileEmulatorView({ system, game, onClose }) {
   const [error, setError] = useState(null);
   const audioCtxRef = useRef(null);
   const audioNextTimeRef = useRef(0);
+  const audioResumeCleanupRef = useRef(null); // v0.9.5: remove o listener de resume no unmount
   const audioRateRef = useRef(32040);
   const stoppedRef = useRef(false);
 
@@ -1910,10 +1980,19 @@ function MobileEmulatorView({ system, game, onClose }) {
           canvasRef.current.height = result.base_height;
         }
         try {
-          const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: result.sample_rate });
+          // v0.9.5: NAO forcar sampleRate do core no AudioContext. No Android,
+          // se o device nao suporta a taxa exata do core (ex: GBA 32768Hz), o
+          // construtor lanca NotSupportedError -> ficava SEM SOM. Usa a taxa
+          // padrao do device; o createBuffer abaixo usa a taxa do core e o
+          // contexto faz o resample no playback.
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
           await ctx.resume();
           audioCtxRef.current = ctx;
           audioNextTimeRef.current = ctx.currentTime + 0.05;
+          // resume tambem em qualquer toque (autoplay policy do WebView Android)
+          const resumeOnTouch = () => { ctx.resume().catch(() => {}); };
+          window.addEventListener("pointerdown", resumeOnTouch, { capture: true });
+          audioResumeCleanupRef.current = () => window.removeEventListener("pointerdown", resumeOnTouch, { capture: true });
         } catch (e) { console.warn("AudioContext", e); }
       } catch (e) {
         if (!cancelled) setError(String(e));
@@ -1923,6 +2002,7 @@ function MobileEmulatorView({ system, game, onClose }) {
       cancelled = true;
       stoppedRef.current = true;
       invoke("libretro_unload").catch(() => {});
+      if (audioResumeCleanupRef.current) { try { audioResumeCleanupRef.current(); } catch {} audioResumeCleanupRef.current = null; }
       if (audioCtxRef.current) {
         try { audioCtxRef.current.close(); } catch {}
         audioCtxRef.current = null;
@@ -2488,9 +2568,8 @@ function WhyWindowsCard() {
         <li>Notificacao quando controle conecta/desconecta</li>
         <li>Auto-update do app + cores libretro</li>
       </ul>
-      <button className="lmx-settings-btn primary" onClick={() => invoke("open_url", { url: "https://pauloadriel98.gumroad.com/l/ludex" }).catch(() => {})}>
-        Comprar Windows (R$ 49,90)
-      </button>
+      {/* v0.9.5: botao de compra removido daqui — ja existe no card de status da
+          licenca acima (estava aparecendo 2x). */}
     </section>
   );
 }

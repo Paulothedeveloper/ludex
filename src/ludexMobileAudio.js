@@ -38,6 +38,10 @@ export function setMuted(v) {
 
 export function isMutedNow() { return isMuted(); }
 
+// v0.9.5: boost global — os volumes (0.015-0.04) eram quase inaudiveis no
+// alto-falante do celular. 3x deixa audivel sem distorcer.
+const SFX_BOOST = 3.0;
+
 function playTone(freq, duration, type = "sine", volume = 0.03, when = 0) {
   if (isMuted()) return;
   const ctx = audioCtx();
@@ -49,7 +53,7 @@ function playTone(freq, duration, type = "sine", volume = 0.03, when = 0) {
     osc.frequency.value = freq;
     const start = ctx.currentTime + when;
     gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(volume, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(volume * SFX_BOOST, start + 0.01);
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(start);
@@ -71,10 +75,10 @@ function playNote(freq, duration, volume = 0.04, when = 0) {
     osc.frequency.value = freq;
     sub.type = "sine";
     sub.frequency.value = freq * 2;
-    subGain.gain.value = volume * 0.22;
+    subGain.gain.value = volume * 0.22 * SFX_BOOST;
     const start = ctx.currentTime + when;
     gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(volume, start + 0.012);
+    gain.gain.exponentialRampToValueAtTime(volume * SFX_BOOST, start + 0.012);
     gain.gain.exponentialRampToValueAtTime(0.0005, start + duration);
     osc.connect(gain);
     sub.connect(subGain);
