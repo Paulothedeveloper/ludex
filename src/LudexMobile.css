@@ -56,60 +56,66 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: calc(var(--lmx-tab-height) + var(--lmx-safe-bottom) + 12px);
+  padding-bottom: calc(var(--lmx-safe-bottom) + 96px); /* v0.9.11: limpa a nav flutuante */
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
 
-/* ============ BOTTOM TAB BAR ============ */
+/* ============ BOTTOM TAB BAR — FLUTUANTE estilo console (v0.9.11) ============ */
 .lmx-tabs {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: calc(var(--lmx-tab-height) + var(--lmx-safe-bottom));
-  padding-bottom: var(--lmx-safe-bottom);
-  background: rgba(10, 2, 32, 0.92);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-top: 1px solid var(--lmx-border);
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--lmx-safe-bottom) + 14px);
+  height: 62px;
+  padding: 0 8px;
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 4px;
+  background: rgba(18, 10, 38, 0.72);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 32px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.06);
   z-index: 100;
 }
 .lmx-tab {
-  flex: 1;
+  position: relative;
+  width: 56px;
+  height: 46px;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 8px 4px;
   background: transparent;
   border: none;
+  border-radius: 23px;
   color: var(--lmx-text-dim);
   font-family: inherit;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
   cursor: pointer;
-  transition: color 0.15s;
+  transition: color 0.18s ease, background 0.22s cubic-bezier(0.22,1,0.36,1), transform 0.16s ease;
   -webkit-tap-highlight-color: transparent;
 }
+.lmx-tab:active { transform: scale(0.9); }
 .lmx-tab.active {
-  color: var(--lmx-accent);
+  color: #fff;
+  background: linear-gradient(135deg, rgba(124,92,255,0.95), rgba(236,72,153,0.9));
+  box-shadow: 0 4px 16px rgba(124, 92, 255, 0.5);
 }
 .lmx-tab-icon {
-  width: 22px;
-  height: 22px;
+  width: 25px;
+  height: 25px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .lmx-tab-icon svg { width: 100%; height: 100%; }
-.lmx-tab-label {
-  font-size: 10px;
-  letter-spacing: 0.02em;
+
+/* v0.9.11: animacao de troca de aba */
+.lmx-tab-page { animation: lmx-tab-in 0.30s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes lmx-tab-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
 }
 
 /* ============ PAGE HEADER (comum entre tabs) ============ */
@@ -1973,9 +1979,11 @@
 
 /* Achievement toast (top-right slide) */
 .lmx-ach-toast {
+  /* v0.9.11: conquista aparece EMBAIXO, logo acima da nav flutuante (Paulo). */
   position: fixed;
-  top: calc(env(safe-area-inset-top, 14px) + 14px);
-  right: 14px;
+  left: 50%;
+  bottom: calc(var(--lmx-safe-bottom) + 86px);
+  transform: translateX(-50%);
   z-index: 10002;
   display: flex;
   gap: 10px;
@@ -1983,9 +1991,14 @@
   background: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%);
   border-radius: 14px;
   color: #fff;
-  max-width: 320px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.6);
-  animation: lmx-slide-from-right 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  width: calc(100% - 32px);
+  max-width: 360px;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.6);
+  animation: lmx-ach-up 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes lmx-ach-up {
+  from { opacity: 0; transform: translate(-50%, 16px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
 }
 .lmx-ach-toast-icon { width: 36px; height: 36px; flex-shrink: 0; background: rgba(255,255,255,0.18); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 .lmx-ach-toast-icon svg { width: 20px; height: 20px; color: #fff; }

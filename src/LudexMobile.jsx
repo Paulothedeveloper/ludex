@@ -59,6 +59,12 @@ const IconPlay = () => (<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden
 const IconStar = ({ filled }) => (<svg viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9 12 2" /></svg>);
 const IconClose = () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>);
 const IconClock = () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>);
+// v0.9.11: icones da nav flutuante — estilo console (PS5/Xbox), preenchidos e
+// arredondados, sem texto embaixo. Sistemas = gamepad (mais "console" que grade).
+const IconNavHome = () => (<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M11.3 3.3a1 1 0 0 1 1.4 0l8 7.3a1 1 0 0 1 .3.74V19a2 2 0 0 1-2 2h-3.5a1 1 0 0 1-1-1v-4.5a.8.8 0 0 0-.8-.8h-3.4a.8.8 0 0 0-.8.8V20a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2v-7.66a1 1 0 0 1 .3-.73z" /></svg>);
+const IconNavLibrary = () => (<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M7.5 6h9A5.5 5.5 0 0 1 22 11.5v3.2a3.3 3.3 0 0 1-6.2 1.55l-.5-.95a1.2 1.2 0 0 0-1.06-.65H9.76c-.45 0-.85.25-1.06.65l-.5.95A3.3 3.3 0 0 1 2 14.7v-3.2A5.5 5.5 0 0 1 7.5 6zM7 9.4v1.35H5.65v1.5H7v1.35h1.5v-1.35h1.35v-1.5H8.5V9.4zm9.4.35a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm-1.8 2.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" /></svg>);
+const IconNavSearch = () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.8" y2="16.8" /></svg>);
+const IconNavSettings = () => (<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z" /><path d="M19.4 13a7.6 7.6 0 0 0 .05-1 7.6 7.6 0 0 0-.05-1l1.7-1.3a.5.5 0 0 0 .12-.64l-1.6-2.78a.5.5 0 0 0-.6-.22l-2 .8a6.5 6.5 0 0 0-1.74-1l-.3-2.13a.5.5 0 0 0-.5-.42h-3.2a.5.5 0 0 0-.5.42l-.3 2.13a6.5 6.5 0 0 0-1.74 1l-2-.8a.5.5 0 0 0-.6.22L2.78 8.43a.5.5 0 0 0 .12.64L4.6 10.4a7.6 7.6 0 0 0 0 2L2.9 13.7a.5.5 0 0 0-.12.64l1.6 2.78a.5.5 0 0 0 .6.22l2-.8a6.5 6.5 0 0 0 1.74 1l.3 2.13a.5.5 0 0 0 .5.42h3.2a.5.5 0 0 0 .5-.42l.3-2.13a6.5 6.5 0 0 0 1.74-1l2 .8a.5.5 0 0 0 .6-.22l1.6-2.78a.5.5 0 0 0-.12-.64z" /></svg>);
 
 // ============================================================
 // === ICONES DE SISTEMAS (compactos pra mobile) ==============
@@ -679,6 +685,8 @@ export default function LudexMobile() {
       )}
 
       <main className="lmx-content">
+        {/* v0.9.11: key={activeTab} remonta -> dispara animacao de entrada por aba */}
+        <div className="lmx-tab-page" key={activeTab}>
         {activeTab === "home" && (
           <HomeTab
             systems={systems}
@@ -726,6 +734,7 @@ export default function LudexMobile() {
             onConfigChange={setConfig}
           />
         )}
+        </div>
       </main>
 
       {/* Folder picker modal (Android nao tem SAF nativo no Tauri ainda) */}
@@ -772,12 +781,13 @@ export default function LudexMobile() {
         />
       )}
 
-      {/* Bottom tab bar (estilo iOS/Android nativo) */}
-      <nav className="lmx-tabs">
-        <TabBtn icon={<IconHome />} label="Inicio" active={activeTab === "home"} onClick={() => changeTab("home")} />
-        <TabBtn icon={<IconGrid />} label="Sistemas" active={activeTab === "systems"} onClick={() => changeTab("systems")} />
-        <TabBtn icon={<IconSearch />} label="Buscar" active={activeTab === "search"} onClick={() => changeTab("search")} />
-        <TabBtn icon={<IconSettings />} label="Ajustes" active={activeTab === "settings"} onClick={() => changeTab("settings")} />
+      {/* v0.9.11: bottom tab bar FLUTUANTE estilo console (PS5/Xbox) — sem texto,
+          icones novos, pilula de destaque no ativo. */}
+      <nav className="lmx-tabs lmx-tabs-float">
+        <TabBtn icon={<IconNavHome />} label="Inicio" active={activeTab === "home"} onClick={() => changeTab("home")} />
+        <TabBtn icon={<IconNavLibrary />} label="Sistemas" active={activeTab === "systems"} onClick={() => changeTab("systems")} />
+        <TabBtn icon={<IconNavSearch />} label="Buscar" active={activeTab === "search"} onClick={() => changeTab("search")} />
+        <TabBtn icon={<IconNavSettings />} label="Ajustes" active={activeTab === "settings"} onClick={() => changeTab("settings")} />
       </nav>
     </div>
   );
@@ -787,10 +797,10 @@ export default function LudexMobile() {
 // === TAB BUTTON =============================================
 // ============================================================
 function TabBtn({ icon, label, active, onClick }) {
+  // v0.9.11: sem texto embaixo — so o icone (label vira aria-label p/ acessibilidade).
   return (
-    <button className={`lmx-tab ${active ? "active" : ""}`} onClick={onClick}>
+    <button className={`lmx-tab ${active ? "active" : ""}`} onClick={onClick} aria-label={label}>
       <span className="lmx-tab-icon">{icon}</span>
-      <span className="lmx-tab-label">{label}</span>
     </button>
   );
 }
