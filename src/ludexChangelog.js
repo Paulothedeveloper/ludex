@@ -4,6 +4,16 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.12": [
+    "Modo desempenho pra celular fraco (video 30fps, menos travada).",
+    "Aceleracao agora e 1x / 1.25x / 1.5x / 2x.",
+    "Icones de sistema iguais aos do launcher do PC.",
+    "Configuracoes do emulador refeitas (tela cheia, fontes melhores, sem bugs).",
+    "Layout de telas DS/3DS nao duplica mais a tela.",
+    "Controle: corrigido travar direcao ao deslizar o dedo.",
+    "Tela inicial no modo horizontal com tamanhos ajustados.",
+    "Controle externo nos Ajustes + animacao ao abrir um sistema.",
+  ],
   "0.9.11": [
     "Controle: deslizar o dedo entre botoes funciona (nao trava mais a direcao).",
     "Barra de navegacao flutuante estilo console, com icones novos e sem texto.",
