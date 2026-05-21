@@ -4,6 +4,12 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.15": [
+    "Botao de acelerar (FF) agora liga/desliga com um toque.",
+    "Aba Sistemas em estilo roda (o do centro fica grande).",
+    "Guia de instalacao e sites de download/traducao em cada emulador.",
+    "Continua jogando: fundo bonito quando o jogo nao tem capa + botao de recarregar capas.",
+  ],
   "0.9.14": [
     "Tela de carregamento some assim que o jogo fica pronto (mais rapida).",
     "Destaque virou 'Mais jogados' (nao repete mais os recentes).",
