@@ -1181,6 +1181,45 @@ function SoundToggle() {
   );
 }
 
+// v0.9.12: #10 — controle externo (Bluetooth/USB), paridade com o launcher do PC.
+// Mostra status ao vivo da conexao. Funciona automatico no jogo; remap fica na
+// aba Controle das Opcoes do Emulador (por sistema, igual ao PC).
+function ExternalControllerCard() {
+  const [padName, setPadName] = useState(null);
+  useEffect(() => {
+    const tick = () => {
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      let found = null;
+      for (const p of pads) { if (p) { found = p; break; } }
+      setPadName(found ? (found.id || "Controle") : null);
+    };
+    tick();
+    const id = setInterval(tick, 900);
+    const onConn = () => tick();
+    window.addEventListener("gamepadconnected", onConn);
+    window.addEventListener("gamepaddisconnected", onConn);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("gamepadconnected", onConn);
+      window.removeEventListener("gamepaddisconnected", onConn);
+    };
+  }, []);
+  return (
+    <section className="lmx-settings-card">
+      <div className="lmx-settings-label">Controle externo</div>
+      <div className="lmx-ctrl-status">
+        <span className={`lmx-ctrl-dot ${padName ? "on" : ""}`} />
+        <span>{padName ? `Conectado: ${padName.slice(0, 42)}` : "Nenhum controle conectado"}</span>
+      </div>
+      <p className="lmx-settings-hint">
+        Controles Bluetooth/USB funcionam automaticamente dentro do jogo. Para
+        remapear os botoes, abra um jogo → menu (engrenagem) → Opcoes do Emulador →
+        aba Controle (por sistema, igual ao launcher do PC).
+      </p>
+    </section>
+  );
+}
+
 function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, currentRomsRoot, config, onConfigChange }) {
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [keyInput, setKeyInput] = useState("");
@@ -1223,6 +1262,8 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
           </div>
         </div>
       </section>
+
+      <ExternalControllerCard />
 
       {androidDemo && (
         <section className="lmx-settings-card">
