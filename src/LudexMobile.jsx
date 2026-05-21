@@ -843,6 +843,10 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
         </div>
       )}
 
+      {/* v0.9.9: Destaques — carrossel horizontal de capas grandes no topo
+          (paridade com o launcher do PC). Some sozinho se ainda nao ha capas. */}
+      <FeaturedCarousel items={recentByMtime} covers={covers} onPick={onPickGame} />
+
       {/* v0.8.22: Continue onde parou (recents) */}
       {recents && recents.length > 0 && (
         <RecentsBanner recents={recents} covers={covers} onResume={onResume} />
@@ -919,6 +923,41 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
         </section>
       ))}
     </div>
+  );
+}
+
+// ============================================================
+// === FEATURED CAROUSEL (v0.9.9 - paridade launcher PC) ======
+// Carrossel horizontal de capas GRANDES no topo da home. Usa os jogos mais
+// recentes que JA tem capa baixada (some inteiro enquanto nao ha capa, pra nao
+// mostrar placeholders feios). Scroll-snap horizontal premium.
+// ============================================================
+function FeaturedCarousel({ items, covers, onPick }) {
+  const withCover = (items || []).filter(
+    ({ game }) => typeof covers[game.path] === "string" && covers[game.path].length > 0
+  );
+  if (withCover.length === 0) return null;
+  const feat = withCover.slice(0, 6);
+  return (
+    <section className="lmx-featured">
+      <h3 className="lmx-section-title">Destaques</h3>
+      <div className="lmx-featured-row">
+        {feat.map(({ system, game }) => (
+          <button
+            key={game.path}
+            className="lmx-featured-card"
+            style={{ "--sys-color": system.color }}
+            onClick={() => onPick(system, game)}
+          >
+            <img className="lmx-featured-cover" src={covers[game.path]} alt={game.name} loading="lazy" />
+            <div className="lmx-featured-overlay">
+              <span className="lmx-featured-sys" style={{ color: system.color }}><SysGlyph id={system.id} /></span>
+              <span className="lmx-featured-name">{game.name}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
