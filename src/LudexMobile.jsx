@@ -182,6 +182,8 @@ export default function LudexMobile() {
   // v0.8.22: achievement toast + telemetria local
   const [achievementToast, setAchievementToast] = useState(null);
   const [recents, setRecents] = useState(() => loadRecents()); // [{ systemId, systemName, systemColor, gameName, gamePath, timestamp, playTime }]
+  const [appTheme, setAppThemeState] = useState(loadAppTheme); // v0.9.13: tema do app
+  const setAppTheme = useCallback((id) => { setAppThemeState(id); saveAppTheme(id); }, []);
   const [childMode, setChildMode] = useState(() => {
     try { return localStorage.getItem("ludex.childMode") === "1"; } catch { return false; }
   });
@@ -638,7 +640,7 @@ export default function LudexMobile() {
 
   // ============ APP NORMAL: tab bar + conteudo ============
   return (
-    <div className="lmx" style={lastGameCover ? { backgroundImage: `linear-gradient(180deg, rgba(10,2,32,0.85) 0%, rgba(10,2,32,0.98) 70%), url(${lastGameCover})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>
+    <div className="lmx" data-theme={appTheme} style={lastGameCover ? { backgroundImage: `linear-gradient(180deg, rgba(10,2,32,0.85) 0%, rgba(10,2,32,0.98) 70%), url(${lastGameCover})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>
       {!loading && launching && (
         <div className="lmx-loading-overlay">
           <div className="lmx-spinner" />
@@ -694,6 +696,8 @@ export default function LudexMobile() {
             currentRomsRoot={config?.roms_root}
             config={config}
             onConfigChange={setConfig}
+            appTheme={appTheme}
+            onSetTheme={setAppTheme}
           />
         )}
         </div>
@@ -1224,7 +1228,7 @@ function ExternalControllerCard() {
   );
 }
 
-function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, currentRomsRoot, config, onConfigChange }) {
+function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, currentRomsRoot, config, onConfigChange, appTheme, onSetTheme }) {
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [keyInput, setKeyInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1268,6 +1272,23 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
       </section>
 
       <ExternalControllerCard />
+
+      <section className="lmx-settings-card">
+        <div className="lmx-settings-label">Tema do app</div>
+        <div className="lmx-theme-grid">
+          {APP_THEMES.map(([id, lbl]) => (
+            <button
+              key={id}
+              className={`lmx-theme-chip ${appTheme === id ? "on" : ""}`}
+              data-theme={id}
+              onClick={() => onSetTheme && onSetTheme(id)}
+            >
+              <span className="lmx-theme-swatch" />
+              <span className="lmx-theme-name">{lbl}</span>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {androidDemo && (
         <section className="lmx-settings-card">
@@ -2003,6 +2024,50 @@ function saveCustomLayout(systemId, offsets) {
   } catch {}
 }
 
+// v0.9.13: preferencias GLOBAIS do controle virtual (vibracao, esconder com
+// gamepad, tema/skin, escala global e por grupo). Itens 5/6/7/9 do Paulo.
+const CONTROL_PREFS_KEY = "ludex.controlPrefs.v1";
+const CONTROL_THEMES = [
+  ["default", "Padrão (roxo)"],
+  ["mono", "Mono (vidro)"],
+  ["nintendo", "Nintendo"],
+  ["sony", "Sony"],
+  ["xbox", "Xbox"],
+];
+const DEFAULT_CONTROL_PREFS = {
+  vibration: true,
+  hideWhenGamepad: true,
+  theme: "default",
+  scale: 1,
+  groupScale: { dpad: 1, face: 1, shoulders: 1, system: 1 },
+};
+// v0.9.13: temas do app (paridade com o launcher do PC). Aplicado via data-theme.
+const APP_THEMES = [
+  ["roxo", "Roxo (padrão)"],
+  ["switch-dark", "Switch Dark"],
+  ["ps3-wave", "PS3 Wave"],
+  ["sunset", "Sunset"],
+  ["forest", "Forest"],
+  ["light", "Pure Light"],
+];
+const APP_THEME_KEY = "ludex.appTheme.v1";
+function loadAppTheme() {
+  try { return localStorage.getItem(APP_THEME_KEY) || "roxo"; } catch { return "roxo"; }
+}
+function saveAppTheme(id) {
+  try { localStorage.setItem(APP_THEME_KEY, id); } catch {}
+}
+
+function loadControlPrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem(CONTROL_PREFS_KEY) || "{}");
+    return { ...DEFAULT_CONTROL_PREFS, ...p, groupScale: { ...DEFAULT_CONTROL_PREFS.groupScale, ...(p.groupScale || {}) } };
+  } catch { return { ...DEFAULT_CONTROL_PREFS }; }
+}
+function saveControlPrefs(prefs) {
+  try { localStorage.setItem(CONTROL_PREFS_KEY, JSON.stringify(prefs)); } catch {}
+}
+
 // v0.9.10: portateis de 2 telas (DS/3DS) — atalho de layout DIRETO no menu in-game,
 // aplicado AO VIVO (libretro_set_option seta OPTIONS_DIRTY -> core re-le na hora).
 // Os mesmos keys/values do SystemSettingsModal, mas com label PT e 1 toque. Cobre o
@@ -2058,6 +2123,19 @@ function MobileEmulatorView({ system, game, onClose }) {
   const [editMode, setEditMode] = useState(false);
   const [offsets, setOffsets] = useState(() => loadCustomLayout(system.id) || {});
   const dragState = useRef(null);
+  // v0.9.13: preferencias do controle virtual (vibracao/esconder-com-gamepad/tema/escala)
+  const [ctrlPrefs, setCtrlPrefs] = useState(loadControlPrefs);
+  const ctrlPrefsRef = useRef(ctrlPrefs);
+  useEffect(() => { ctrlPrefsRef.current = ctrlPrefs; }, [ctrlPrefs]);
+  const updateCtrlPrefs = useCallback((patch) => {
+    setCtrlPrefs((prev) => { const next = { ...prev, ...patch }; saveControlPrefs(next); return next; });
+  }, []);
+  const setGroupScale = useCallback((key, delta) => {
+    setCtrlPrefs((prev) => {
+      const gs = { ...prev.groupScale, [key]: Math.max(0.6, Math.min(1.6, (prev.groupScale[key] || 1) + delta)) };
+      const next = { ...prev, groupScale: gs }; saveControlPrefs(next); return next;
+    });
+  }, []);
   // Sleep timer: pausa core se sem input por X min (v0.8.22)
   const lastInputRef = useRef(Date.now());
   const [autoPaused, setAutoPaused] = useState(false);
@@ -2114,10 +2192,12 @@ function MobileEmulatorView({ system, game, onClose }) {
     };
   }, [editMode, moveDrag, endDrag]);
   const groupStyle = useCallback((key) => {
-    const o = offsets[key];
-    if (!o) return undefined;
-    return { transform: `translate(${o.x}px, ${o.y}px)` };
-  }, [offsets]);
+    const o = offsets[key] || { x: 0, y: 0 };
+    const sc = (ctrlPrefs.scale || 1) * (ctrlPrefs.groupScale?.[key] || 1);
+    const moved = o.x || o.y;
+    if (!moved && sc === 1) return undefined;
+    return { transform: `translate(${o.x}px, ${o.y}px) scale(${sc})` };
+  }, [offsets, ctrlPrefs]);
   const resetLayout = useCallback(() => {
     setOffsets({});
     saveCustomLayout(system.id, {});
@@ -2375,7 +2455,7 @@ function MobileEmulatorView({ system, game, onClose }) {
     const prev = counts.get(id) || 0;
     const next = pressed ? prev + 1 : Math.max(0, prev - 1);
     counts.set(id, next);
-    if (prev === 0 && next > 0) { setBtnInput(id, true); haptic(8); }
+    if (prev === 0 && next > 0) { setBtnInput(id, true); if (ctrlPrefsRef.current.vibration) haptic(8); }
     else if (prev > 0 && next === 0) setBtnInput(id, false);
     const wrap = controlsRef.current;
     if (wrap) {
@@ -2638,13 +2718,36 @@ function MobileEmulatorView({ system, game, onClose }) {
             </div>
 
             <div className="lmx-emu-menu-section">
-              <div className="lmx-emu-menu-label">Controles</div>
+              <div className="lmx-emu-menu-label">Controle virtual</div>
               <button className="lmx-emu-menu-pill" onClick={() => { setEditMode(true); setMenuOpen(false); }}>
-                Editar layout (arrastar botoes)
+                Editar layout (arrastar + tamanho)
               </button>
               <button className="lmx-emu-menu-pill" onClick={resetLayout} style={{marginTop:6}}>
                 Resetar posicoes
               </button>
+              <div className="lmx-emu-menu-row" style={{ marginTop: 8 }}>
+                <button className={`lmx-emu-menu-pill ${ctrlPrefs.vibration ? "on" : ""}`}
+                        onClick={() => updateCtrlPrefs({ vibration: !ctrlPrefs.vibration })}>
+                  Vibracao: {ctrlPrefs.vibration ? "ligada" : "desligada"}
+                </button>
+                <button className={`lmx-emu-menu-pill ${ctrlPrefs.hideWhenGamepad ? "on" : ""}`}
+                        onClick={() => updateCtrlPrefs({ hideWhenGamepad: !ctrlPrefs.hideWhenGamepad })}>
+                  Esconder c/ controle: {ctrlPrefs.hideWhenGamepad ? "sim" : "nao"}
+                </button>
+              </div>
+              <div className="lmx-emu-menu-sublabel">Tamanho geral</div>
+              <div className="lmx-emu-menu-row">
+                <button className="lmx-emu-menu-pill" onClick={() => updateCtrlPrefs({ scale: Math.max(0.6, +(ctrlPrefs.scale - 0.1).toFixed(2)) })}>−</button>
+                <span className="lmx-emu-menu-val">{Math.round(ctrlPrefs.scale * 100)}%</span>
+                <button className="lmx-emu-menu-pill" onClick={() => updateCtrlPrefs({ scale: Math.min(1.6, +(ctrlPrefs.scale + 0.1).toFixed(2)) })}>+</button>
+              </div>
+              <div className="lmx-emu-menu-sublabel">Tema do controle</div>
+              <div className="lmx-emu-menu-row" style={{ flexWrap: "wrap" }}>
+                {CONTROL_THEMES.map(([id, lbl]) => (
+                  <button key={id} className={`lmx-emu-menu-pill ${ctrlPrefs.theme === id ? "on" : ""}`}
+                          onClick={() => updateCtrlPrefs({ theme: id })}>{lbl}</button>
+                ))}
+              </div>
             </div>
 
             {SCREEN_LAYOUTS[system.id] && (
@@ -2775,7 +2878,7 @@ function MobileEmulatorView({ system, game, onClose }) {
       )}
       {/* Touch controls — layout customizado por sistema. Esconde se gamepad ativo */}
       <div ref={controlsRef}
-           className={`lmx-emu-controls ${editMode ? "lmx-emu-edit" : ""} ${gamepadConnected && !editMode ? "lmx-emu-controls-dim" : ""}`}
+           className={`lmx-emu-controls lmx-ctrl-theme-${ctrlPrefs.theme} ${editMode ? "lmx-emu-edit" : ""} ${gamepadConnected && !editMode ? (ctrlPrefs.hideWhenGamepad ? "lmx-emu-controls-hidden" : "lmx-emu-controls-dim") : ""}`}
            data-face-count={layout.face.length}
            onTouchStart={onControlsTouchStart}
            onTouchMove={onControlsTouchMove}
@@ -2840,9 +2943,26 @@ function MobileEmulatorView({ system, game, onClose }) {
       {/* Banner edit mode */}
       {editMode && (
         <div className="lmx-emu-edit-banner">
-          <span>Arraste cada grupo de botoes pra reposicionar</span>
-          <button className="lmx-settings-btn ghost" onClick={resetLayout}>Resetar</button>
-          <button className="lmx-settings-btn primary" onClick={() => setEditMode(false)}>OK</button>
+          <span>Arraste pra mover. Ajuste o tamanho de cada grupo:</span>
+          <div className="lmx-emu-edit-sizes">
+            {[
+              ["dpad", "Direcional"],
+              ["face", "Acoes"],
+              ...(layout.shoulders ? [["shoulders", "L/R"]] : []),
+              ...(layout.selectStart ? [["system", "Select/Start"]] : []),
+            ].map(([key, lbl]) => (
+              <div key={key} className="lmx-emu-edit-size">
+                <span className="lmx-emu-edit-size-lbl">{lbl}</span>
+                <button onClick={() => setGroupScale(key, -0.1)}>−</button>
+                <span className="lmx-emu-edit-size-val">{Math.round((ctrlPrefs.groupScale?.[key] || 1) * 100)}%</span>
+                <button onClick={() => setGroupScale(key, 0.1)}>+</button>
+              </div>
+            ))}
+          </div>
+          <div className="lmx-emu-edit-actions">
+            <button className="lmx-settings-btn ghost" onClick={resetLayout}>Resetar posicao</button>
+            <button className="lmx-settings-btn primary" onClick={() => setEditMode(false)}>OK</button>
+          </div>
         </div>
       )}
     </div>

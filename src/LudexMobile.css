@@ -36,6 +36,15 @@
 
 * { box-sizing: border-box; }
 
+/* v0.9.13: temas do app (paridade com os temas do launcher do PC). Aplicados via
+   data-theme no root .lmx — sobrescrevem os tokens --lmx-*. "roxo" = padrao (:root). */
+.lmx[data-theme="switch-dark"] { --lmx-bg:#161616; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.08); --lmx-border:rgba(255,255,255,0.1); --lmx-text:#fff; --lmx-text-dim:rgba(255,255,255,0.5); --lmx-accent:#cbd5e1; }
+.lmx[data-theme="ps3-wave"] { --lmx-bg:#021232; --lmx-surface:rgba(255,255,255,0.06); --lmx-surface-2:rgba(255,255,255,0.1); --lmx-border:rgba(125,155,196,0.28); --lmx-text:#e8f1ff; --lmx-text-dim:#7d9bc4; --lmx-accent:#7db0ff; }
+.lmx[data-theme="sunset"] { --lmx-bg:#1a0a14; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.09); --lmx-border:rgba(252,211,77,0.22); --lmx-text:#fff8f0; --lmx-text-dim:#c9a8b8; --lmx-accent:#ffb066; }
+.lmx[data-theme="forest"] { --lmx-bg:#0a1612; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.09); --lmx-border:rgba(134,239,172,0.22); --lmx-text:#e8fff2; --lmx-text-dim:#9bc4a8; --lmx-accent:#86efac; }
+.lmx[data-theme="light"] { --lmx-bg:#ededed; --lmx-surface:rgba(0,0,0,0.04); --lmx-surface-2:rgba(0,0,0,0.07); --lmx-border:rgba(0,0,0,0.12); --lmx-text:#1a1a1a; --lmx-text-muted:rgba(0,0,0,0.6); --lmx-text-dim:rgba(0,0,0,0.5); --lmx-accent:#6d28d9; }
+.lmx[data-theme="light"] { background-image: none; }
+
 .lmx {
   position: fixed;
   inset: 0;
@@ -1602,6 +1611,46 @@
 .lmx-ctrl-dot { flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,0.25); }
 .lmx-ctrl-dot.on { background: #22c55e; box-shadow: 0 0 10px rgba(34,197,94,0.7); }
 
+/* ============ CONTROLE VIRTUAL: temas, esconder, tamanho (v0.9.13) ============ */
+.lmx-emu-controls-hidden { display: none !important; }
+.lmx-emu-controls { --ctrl-accent: #7c5cff; }
+.lmx-ctrl-theme-mono     { --ctrl-accent: #cbd5e1; }
+.lmx-ctrl-theme-nintendo { --ctrl-accent: #e60012; }
+.lmx-ctrl-theme-sony     { --ctrl-accent: #2e6bff; }
+.lmx-ctrl-theme-xbox     { --ctrl-accent: #107c10; }
+.lmx-emu-controls .lmx-emu-btn:active,
+.lmx-emu-controls .lmx-emu-btn.pressing,
+.lmx-emu-controls .lmx-emu-dpad button:active,
+.lmx-emu-controls .lmx-emu-dpad button.pressing {
+  background: color-mix(in srgb, var(--ctrl-accent) 62%, transparent) !important;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--ctrl-accent) 55%, transparent),
+              inset 0 0 12px rgba(255,255,255,0.22) !important;
+}
+/* sub-rotulos e valor no menu in-game */
+.lmx-emu-menu-sublabel { font-size: 11px; color: var(--lmx-text-dim); font-weight: 700; margin: 10px 0 4px; letter-spacing: 0.03em; }
+.lmx-emu-menu-val { min-width: 52px; text-align: center; font-weight: 800; font-size: 14px; color: #fff; align-self: center; }
+/* steppers de tamanho por grupo no editor */
+.lmx-emu-edit-sizes { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 8px 0; }
+.lmx-emu-edit-size { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 4px 8px; }
+.lmx-emu-edit-size-lbl { font-size: 11px; color: rgba(255,255,255,0.7); font-weight: 700; }
+.lmx-emu-edit-size-val { font-size: 12px; font-weight: 800; min-width: 38px; text-align: center; }
+.lmx-emu-edit-size button { width: 28px; height: 28px; border-radius: 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.16); color: #fff; font-size: 16px; font-weight: 800; }
+.lmx-emu-edit-actions { display: flex; gap: 10px; justify-content: center; margin-top: 6px; }
+
+/* ============ TEMA DO APP — picker nos Ajustes (v0.9.13) ============ */
+.lmx-theme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px; }
+.lmx-theme-chip { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--lmx-surface); border: 1px solid var(--lmx-border); color: var(--lmx-text); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.lmx-theme-chip.on { border-color: var(--lmx-accent); box-shadow: 0 0 0 1.5px var(--lmx-accent); }
+.lmx-theme-chip:active { transform: scale(0.97); }
+.lmx-theme-swatch { width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.2); }
+.lmx-theme-name { font-size: 13px; font-weight: 700; }
+.lmx-theme-chip[data-theme="roxo"] .lmx-theme-swatch { background: linear-gradient(135deg,#7c3aed,#ec4899); }
+.lmx-theme-chip[data-theme="switch-dark"] .lmx-theme-swatch { background: linear-gradient(135deg,#161616,#3a3a3a); }
+.lmx-theme-chip[data-theme="ps3-wave"] .lmx-theme-swatch { background: linear-gradient(135deg,#021232,#1d4ed8); }
+.lmx-theme-chip[data-theme="sunset"] .lmx-theme-swatch { background: linear-gradient(135deg,#2a0a1a,#ff6b35); }
+.lmx-theme-chip[data-theme="forest"] .lmx-theme-swatch { background: linear-gradient(135deg,#0a1a0a,#22c55e); }
+.lmx-theme-chip[data-theme="light"] .lmx-theme-swatch { background: linear-gradient(135deg,#ededed,#3b82f6); }
+
 /* Controles touch */
 .lmx-emu-controls {
   flex-shrink: 0;
@@ -1935,21 +1984,25 @@
 }
 .lmx-emu-edit-banner {
   position: fixed;
-  top: env(safe-area-inset-top, 14px);
+  top: calc(env(safe-area-inset-top, 14px) + 8px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 10001;
-  background: rgba(124, 58, 237, 0.95);
+  background: rgba(18, 10, 38, 0.97);
+  border: 1px solid rgba(124, 92, 255, 0.5);
   color: #fff;
-  padding: 10px 16px;
-  border-radius: var(--lmx-radius-pill);
+  padding: 12px 14px;
+  border-radius: 16px;
   font-size: 12px;
   font-weight: 600;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  max-width: 95vw;
-  box-shadow: 0 4px 18px rgba(0,0,0,0.6);
+  gap: 8px;
+  width: calc(100% - 24px);
+  max-width: 600px;
+  text-align: center;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.55);
 }
 .lmx-emu-edit-banner .lmx-settings-btn {
   width: auto;
