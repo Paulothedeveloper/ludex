@@ -505,6 +505,10 @@ const FRONTEND_OPTIONS = [
   sel('ludex_show_fps', 'Mostrar FPS', 'video',
     ['disabled', 'enabled'],
     'disabled'),
+  // v0.9.12: celular fraco — video em 30fps (emulacao/audio seguem 60fps) + menos IPC.
+  sel('ludex_performance_mode', 'Modo Desempenho (celular fraco)', 'performance',
+    ['disabled', 'enabled'],
+    'disabled'),
 ];
 
 // Adiciona FRONTEND_OPTIONS no fim de cada sistema (preserva opcoes especificas do core)

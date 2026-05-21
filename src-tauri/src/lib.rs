@@ -3006,6 +3006,51 @@ fn libretro_run_frame() -> tauri::ipc::Response {
     }
 }
 
+/// v0.9.12: roda 1 frame e devolve VIDEO + AUDIO numa unica resposta (1 IPC em vez
+/// de 2-3). Em celular fraco o gargalo e o round-trip WebView<->Rust, nao a emulacao.
+/// Formato do buffer: [video_len u32 LE][video: w u32, h u32, rgba][audio: i16 LE...].
+/// want_video=false descarta o frame de video (nao serializa o RGBA grande) — usado
+/// pelo "modo desempenho" pra renderizar video em 30fps mantendo audio/emulacao 60fps.
+#[tauri::command]
+fn libretro_run_frame_av(want_video: bool) -> tauri::ipc::Response {
+    {
+        let slot = libretro_slot();
+        let g = slot.lock().unwrap();
+        if let Some(core) = g.as_ref() {
+            unsafe { let _ = core.run(); }
+        } else {
+            return tauri::ipc::Response::new(vec![0u8, 0, 0, 0]);
+        }
+    }
+    let mut video: Vec<u8> = Vec::new();
+    {
+        let s = libretro::state();
+        let mut g = s.lock().unwrap();
+        if let Some(f) = g.frame.take() {
+            if want_video {
+                video.reserve(8 + f.rgba.len());
+                video.extend_from_slice(&f.width.to_le_bytes());
+                video.extend_from_slice(&f.height.to_le_bytes());
+                video.extend_from_slice(&f.rgba);
+            }
+        }
+    }
+    let mut audio: Vec<u8> = Vec::new();
+    {
+        let mut g = libretro::audio_buf().lock().unwrap();
+        if !g.is_empty() {
+            audio.reserve(g.len() * 2);
+            for sample in g.drain(..) { audio.extend_from_slice(&sample.to_le_bytes()); }
+        }
+    }
+    let vlen = video.len() as u32;
+    let mut buf = Vec::with_capacity(4 + video.len() + audio.len());
+    buf.extend_from_slice(&vlen.to_le_bytes());
+    buf.extend_from_slice(&video);
+    buf.extend_from_slice(&audio);
+    tauri::ipc::Response::new(buf)
+}
+
 /// v0.8.37: Override de opcao libretro (user UI > defaults).
 /// Aplicado no proximo GET_VARIABLE — pra ter efeito imediato, recarregar core.
 #[tauri::command]
@@ -5604,6 +5649,7 @@ pub fn run() {
             libretro_list_cores,
             libretro_load_game,
             libretro_run_frame,
+            libretro_run_frame_av,
             libretro_skip_frames,
             libretro_take_audio,
             libretro_set_input,

@@ -2225,6 +2225,10 @@ function MobileEmulatorView({ system, game, onClose }) {
     let audioStart = null; // ctx.currentTime quando comecamos a produzir
     let lastFf = 1;
     let raf = null;
+    // v0.9.12: modo desempenho (celular fraco) — renderiza video em 30fps mantendo
+    // emulacao/audio em 60fps (descarta o RGBA grande nos ticks impares = menos IPC).
+    const perfMode = loadSystemOptions(system.id).ludex_performance_mode === "enabled";
+    let videoTick = 0;
 
     function renderVideo(buf) {
       if (!buf || buf.byteLength < 8) return;
@@ -2241,10 +2245,7 @@ function MobileEmulatorView({ system, game, onClose }) {
     }
 
     // Conta o audio pra pacing SEMPRE; so agenda playback se nao estiver mutado.
-    function postAudio(audioBuf) {
-      if (!audioBuf || audioBuf.byteLength === 0) return;
-      const ab = audioBuf.buffer ? audioBuf.buffer : audioBuf;
-      const i16 = new Int16Array(ab, audioBuf.byteOffset || 0, audioBuf.byteLength / 2);
+    function postAudioI16(i16) {
       const frames = i16.length / 2;
       if (frames <= 0) return;
       producedPerCh += frames;
@@ -2258,6 +2259,25 @@ function MobileEmulatorView({ system, game, onClose }) {
       if (audioNextTimeRef.current < ct) audioNextTimeRef.current = ct + 0.04; // reseed pos-underrun/unmute
       src.start(audioNextTimeRef.current);
       audioNextTimeRef.current += frames / sampleRate;
+    }
+
+    // Parseia o buffer combinado [video_len u32][video][audio] do run_frame_av.
+    function applyAV(buf, renderThisTick) {
+      if (!buf || buf.byteLength < 4) return;
+      const ab = buf.buffer ? buf.buffer : buf;
+      const base = buf.byteOffset || 0;
+      const dv = new DataView(ab, base, buf.byteLength);
+      const vlen = dv.getUint32(0, true);
+      if (vlen >= 8 && renderThisTick) {
+        const w = dv.getUint32(4, true);
+        const h = dv.getUint32(8, true);
+        const rgba = new Uint8ClampedArray(ab, base + 12, w * h * 4);
+        if (w !== ctx.canvas.width || h !== ctx.canvas.height) { ctx.canvas.width = w; ctx.canvas.height = h; }
+        ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
+      }
+      const aOff = base + 4 + vlen;
+      const aBytes = buf.byteLength - 4 - vlen;
+      if (aBytes >= 2) postAudioI16(new Int16Array(ab, aOff, Math.floor(aBytes / 2)));
     }
 
     async function tick() {
@@ -2292,8 +2312,10 @@ function MobileEmulatorView({ system, game, onClose }) {
           }
           if (framesToRun > 0) {
             if (framesToRun > 1) { try { await invoke("libretro_skip_frames", { n: framesToRun - 1 }); } catch {} }
-            renderVideo(await invoke("libretro_run_frame"));
-            postAudio(await invoke("libretro_take_audio"));
+            // v0.9.12: 1 IPC (video+audio juntos) em vez de 2. Em perfMode pula o
+            // transfer do video nos ticks impares (30fps video / 60fps audio).
+            const renderThisTick = !perfMode || ((videoTick++ & 1) === 0);
+            applyAV(await invoke("libretro_run_frame_av", { wantVideo: renderThisTick }), renderThisTick);
           }
         }
       } catch (e) { console.error("frame tick", e); }
