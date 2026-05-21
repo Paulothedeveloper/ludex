@@ -4,6 +4,13 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.13": [
+    "Destaque no tamanho padrao com contorno colorido; Continua jogando com a capa do jogo.",
+    "Tela de carregamento do emulador refeita.",
+    "Controle: vibracao on/off, esconder com controle externo, ajuste de tamanho (por grupo e geral) e temas.",
+    "Temas do app (Switch Dark, PS3, Sunset, Forest, Light) nos Ajustes.",
+    "Config do emulador e menu in-game redesenhados.",
+  ],
   "0.9.12": [
     "Modo desempenho pra celular fraco (video 30fps, menos travada).",
     "Aceleracao agora e 1x / 1.25x / 1.5x / 2x.",
