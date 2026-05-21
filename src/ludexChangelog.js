@@ -4,6 +4,17 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.10": [
+    "Salvar e carregar estado (save state) voltou a funcionar no app.",
+    "Botoes L e R nao ficam mais em cima do Voltar e da engrenagem.",
+    "DS e 3DS: troca o layout das telas direto no menu (cima/baixo, lado a lado, uma menor no canto).",
+  ],
+  "0.9.9": [
+    "Capas dos jogos voltam a carregar no Android (rede com IPv6 instavel).",
+    "Som dos emuladores mais estavel: emulacao no ritmo do audio, sem engasgo.",
+    "App assinado com chave propria (some o alerta de seguranca no Android).",
+    "Crashes do app agora ficam registrados nos Logs pra diagnostico.",
+  ],
   "0.9.8": [
     "Banner de novidades: agora o app mostra o que mudou a cada atualizacao.",
   ],

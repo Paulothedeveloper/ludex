@@ -1592,9 +1592,13 @@
     left: 50%;
   }
   .lmx-emu-shoulders {
-    top: max(env(safe-area-inset-top, 16px), 16px);
-    /* Em landscape: deixa espaco a esquerda pro botao Voltar nao colidir com L */
-    left: 80px;
+    /* v0.9.10: L/R ficam ACIMA do dpad/face (como num controle de verdade), longe
+       da barra de cima (Voltar / FF / engrenagem). Antes ficavam em top:16px e o L
+       caia em cima do Voltar e o R em cima da engrenagem — alem de a barra de cima
+       (z-index 10) interceptar o toque, impedindo arrastar no modo editar. */
+    top: auto;
+    bottom: calc(max(env(safe-area-inset-bottom, 20px), 30px) + 156px);
+    left: 24px;
     right: 24px;
   }
   .lmx-emu-back {

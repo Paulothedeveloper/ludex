@@ -43,7 +43,7 @@ import {
 import { ambientMusic } from "./ludexAmbientMusic"; // v0.9.9: musica ambiente igual ao PC
 import { SystemSettingsModal, SuggestionsModal } from "./LudexExtras"; // v0.9.1: + SuggestionsModal pra paridade com desktop
 import { DEFAULT_AVATARS, avatarUrl } from "./LudexOnboarding"; // v0.9.1: reusa avatares SVG do desktop (regra: NUNCA emoji em UI prod)
-import { hasOptionsForSystem, applySystemOptions, effectivePadMap } from "./ludexSystemOptions";
+import { hasOptionsForSystem, applySystemOptions, effectivePadMap, loadSystemOptions, saveSystemOptions } from "./ludexSystemOptions";
 import { CheatsModal } from "./LudexCheatsModal";
 import { loadCheats as loadGameCheats, applyCheats as applyGameCheats } from "./ludexCheats";
 
@@ -1990,6 +1990,41 @@ function saveCustomLayout(systemId, offsets) {
   } catch {}
 }
 
+// v0.9.10: portateis de 2 telas (DS/3DS) — atalho de layout DIRETO no menu in-game,
+// aplicado AO VIVO (libretro_set_option seta OPTIONS_DIRTY -> core re-le na hora).
+// Os mesmos keys/values do SystemSettingsModal, mas com label PT e 1 toque. Cobre o
+// pedido do Paulo: tela de cima/baixo como principal, lado a lado, ou uma menor no canto.
+const SCREEN_LAYOUTS = {
+  ds: {
+    key: "melonds_screen_layout",
+    def: "Top/Bottom",
+    options: [
+      ["Top/Bottom", "Cima / Baixo"],
+      ["Bottom/Top", "Baixo / Cima"],
+      ["Left/Right", "Lado a lado"],
+      ["Hybrid Top", "Destaque cima"],
+      ["Hybrid Bottom", "Destaque baixo"],
+      ["Top Only", "Só de cima"],
+      ["Bottom Only", "Só de baixo"],
+    ],
+  },
+  "3ds": {
+    key: "citra_layout_option",
+    def: "Default Top-Bottom Screen",
+    options: [
+      ["Default Top-Bottom Screen", "Cima / Baixo"],
+      ["Side by Side", "Lado a lado"],
+      ["Large Screen, Small Screen", "Grande + pequena"],
+      ["Single Screen Only", "Tela única"],
+    ],
+    swap: {
+      key: "citra_swap_screen",
+      def: "Top",
+      options: [["Top", "Principal: Cima"], ["Bottom", "Principal: Baixo"]],
+    },
+  },
+};
+
 function MobileEmulatorView({ system, game, onClose }) {
   const layout = SYSTEM_LAYOUTS[system.id] || DEFAULT_LAYOUT;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -2073,6 +2108,16 @@ function MobileEmulatorView({ system, game, onClose }) {
   const resetLayout = useCallback(() => {
     setOffsets({});
     saveCustomLayout(system.id, {});
+  }, [system.id]);
+  // v0.9.10: layout de telas DS/3DS aplicado AO VIVO (sem reabrir o jogo).
+  const [screenLayoutVals, setScreenLayoutVals] = useState(() => loadSystemOptions(system.id));
+  const setCoreOptionLive = useCallback((key, value) => {
+    const cur = { ...loadSystemOptions(system.id), [key]: value };
+    saveSystemOptions(system.id, cur);
+    setScreenLayoutVals(cur);
+    invoke("libretro_set_option", { key, value }).catch(() => {});
+    setStateMsg("Layout aplicado");
+    setTimeout(() => setStateMsg(null), 1400);
   }, [system.id]);
   const canvasRef = useRef(null);
   const [info, setInfo] = useState(null);
@@ -2342,7 +2387,7 @@ function MobileEmulatorView({ system, game, onClose }) {
   // Save / Load state (com thumbnail v0.8.22)
   const saveState = useCallback(async (slot) => {
     try {
-      await invoke("libretro_save_state", { slot });
+      await invoke("libretro_save_state", { romPath: game.path, slot });
       // Captura thumbnail do canvas atual (data URL)
       try {
         if (canvasRef.current) {
@@ -2354,14 +2399,14 @@ function MobileEmulatorView({ system, game, onClose }) {
       setStateMsg(`Salvo no slot ${slot}`);
     } catch (e) { setStateMsg(`Falha ao salvar: ${e}`); }
     setTimeout(() => setStateMsg(null), 2500);
-  }, [system.id]);
+  }, [system.id, game.path]);
   const loadState = useCallback(async (slot) => {
     try {
-      await invoke("libretro_load_state", { slot });
+      await invoke("libretro_load_state", { romPath: game.path, slot });
       setStateMsg(`Carregado slot ${slot}`);
     } catch (e) { setStateMsg(`Falha ao carregar: ${e}`); }
     setTimeout(() => setStateMsg(null), 2500);
-  }, []);
+  }, [game.path]);
 
   // Sleep timer: a cada 60s, checa idle > 30min e auto-pause (v0.8.22)
   useEffect(() => {
@@ -2480,6 +2525,37 @@ function MobileEmulatorView({ system, game, onClose }) {
                 Resetar posicoes
               </button>
             </div>
+
+            {SCREEN_LAYOUTS[system.id] && (
+              <div className="lmx-emu-menu-section">
+                <div className="lmx-emu-menu-label">Telas (portátil de 2 telas)</div>
+                <div className="lmx-emu-menu-row">
+                  {SCREEN_LAYOUTS[system.id].options.map(([val, lbl]) => {
+                    const cfg = SCREEN_LAYOUTS[system.id];
+                    const active = (screenLayoutVals[cfg.key] ?? cfg.def) === val;
+                    return (
+                      <button key={val} className={`lmx-emu-menu-pill ${active ? "on" : ""}`}
+                              onClick={() => setCoreOptionLive(cfg.key, val)}>{lbl}</button>
+                    );
+                  })}
+                </div>
+                {SCREEN_LAYOUTS[system.id].swap && (
+                  <div className="lmx-emu-menu-row">
+                    {SCREEN_LAYOUTS[system.id].swap.options.map(([val, lbl]) => {
+                      const sw = SCREEN_LAYOUTS[system.id].swap;
+                      const active = (screenLayoutVals[sw.key] ?? sw.def) === val;
+                      return (
+                        <button key={val} className={`lmx-emu-menu-pill ${active ? "on" : ""}`}
+                                onClick={() => setCoreOptionLive(sw.key, val)}>{lbl}</button>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="lmx-settings-hint" style={{ marginTop: 6 }}>
+                  Aplica na hora. Cima/baixo principal, lado a lado, ou uma menor no canto.
+                </p>
+              </div>
+            )}
 
             <div className="lmx-emu-menu-section">
               <div className="lmx-emu-menu-label">Velocidade (fast-forward)</div>
