@@ -389,6 +389,16 @@ export default function LudexMobile() {
     return () => { cancelled = true; };
   }, [systems, recents]);
 
+  // v0.9.15: recarregar capas — limpa o cache no disco e o estado, forcando re-fetch.
+  const [reloadingCovers, setReloadingCovers] = useState(false);
+  const reloadCovers = useCallback(async () => {
+    if (reloadingCovers) return;
+    setReloadingCovers(true);
+    try { await invoke("clear_covers_cache", {}); } catch {}
+    setCovers({});
+    setTimeout(() => setReloadingCovers(false), 1200);
+  }, [reloadingCovers]);
+
   // ============ LANCAR JOGO ============
   // Android: so libretro embedded. Sistemas sem core ARM nao aparecem na lista
   // (filtrados por ANDROID_SUPPORTED). PS2/PS3/PS4/Vita/Xbox/Switch: nao suportados.
@@ -670,6 +680,8 @@ export default function LudexMobile() {
             hasFilesAccess={hasFilesAccess}
             onRequestAccess={requestFilesAccess}
             onOpenProfile={() => setProfileEditorOpen(true)}
+            onReloadCovers={reloadCovers}
+            reloadingCovers={reloadingCovers}
           />
         )}
         {activeTab === "systems" && (
@@ -775,7 +787,7 @@ function TabBtn({ icon, label, active, onClick }) {
 // === HOME TAB ===============================================
 // Hero (perfil + DEMO) + Recentes + Carrossel por sistema
 // ============================================================
-function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents, onPickSystem, onPickGame, onResume, onPickFolder, hasFilesAccess, onRequestAccess, onOpenProfile }) {
+function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents, onPickSystem, onPickGame, onResume, onPickFolder, hasFilesAccess, onRequestAccess, onOpenProfile, onReloadCovers, reloadingCovers }) {
   const nonEmptySystems = systems.filter((s) => s.games.length > 0);
   const topSystems = nonEmptySystems.slice(0, 6);
   const profileImg = profileImgSrc(activeProfile);
@@ -824,6 +836,17 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
             <span>{androidDemo.days_left}d demo</span>
           </div>
         )}
+        {/* v0.9.15: recarregar capas (ao lado do badge de demo) */}
+        <button
+          className={`lmx-home-reload ${reloadingCovers ? "spinning" : ""}`}
+          onClick={() => onReloadCovers && onReloadCovers()}
+          aria-label="Recarregar capas"
+          title="Recarregar capas"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 9 15 9" />
+          </svg>
+        </button>
       </header>
 
       {loading && (
@@ -2667,18 +2690,14 @@ function MobileEmulatorView({ system, game, onClose }) {
       <button className="lmx-emu-menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
       </button>
-      {/* v0.8.23: botao Fast-Forward — hold pra acelerar 2x, indicador visual */}
+      {/* v0.9.15: Fast-forward agora e TAP-TOGGLE (segurar/touch-hold era flaky no
+          WebView — "nao funcionava"). Toca = liga 2x, toca de novo = desliga. */}
       <button
         className={`lmx-emu-ff-btn ${ffActive || ffSpeed > 1 ? "active" : ""}`}
-        onTouchStart={(e) => { e.preventDefault(); setFfActive(true); haptic(8); }}
-        onTouchEnd={(e) => { e.preventDefault(); setFfActive(false); }}
-        onTouchCancel={(e) => { e.preventDefault(); setFfActive(false); }}
-        onMouseDown={() => setFfActive(true)}
-        onMouseUp={() => setFfActive(false)}
-        onMouseLeave={() => setFfActive(false)}
-        aria-label="Fast forward"
+        onClick={() => { setFfActive((a) => !a); haptic(10); }}
+        aria-label="Fast forward (liga/desliga)"
       >
-        {ffSpeed > 1 && !ffActive ? `${ffSpeed}x` : "FF"}
+        {ffActive ? `${Math.max(ffSpeed, 2)}x` : (ffSpeed > 1 ? `${ffSpeed}x` : "FF")}
       </button>
       <div className={`lmx-emu-canvas-wrap lmx-emu-scale-${scaleMode}`}>
         <canvas ref={canvasRef} className="lmx-emu-canvas" />
@@ -2995,7 +3014,11 @@ function RecentsBanner({ recents, covers, onResume }) {
     <section className="lmx-recents">
       <h3 className="lmx-section-title">Continue onde parou</h3>
       <button className="lmx-recents-card" onClick={() => onResume(top)} style={{ "--sys-color": top.systemColor }}>
-        {cover && <img className="lmx-recents-bg" src={cover} alt="" aria-hidden />}
+        {cover ? (
+          <img className="lmx-recents-bg" src={cover} alt="" aria-hidden />
+        ) : (
+          <div className="lmx-recents-fallback" aria-hidden><SysGlyph id={top.systemId} /></div>
+        )}
         <div className="lmx-recents-overlay" />
         <div className="lmx-recents-body">
           <span className="lmx-recents-sys">{top.systemName}</span>

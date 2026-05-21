@@ -1676,6 +1676,24 @@
 .lmx-theme-chip[data-theme="forest"] .lmx-theme-swatch { background: linear-gradient(135deg,#0a1a0a,#22c55e); }
 .lmx-theme-chip[data-theme="light"] .lmx-theme-swatch { background: linear-gradient(135deg,#ededed,#3b82f6); }
 
+/* v0.9.15: botao recarregar capas (home hero) + fallback do "Continua jogando" */
+.lmx-home-reload {
+  flex-shrink: 0; width: 40px; height: 40px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--lmx-surface); border: 1px solid var(--lmx-border); color: var(--lmx-text);
+  -webkit-tap-highlight-color: transparent; cursor: pointer;
+}
+.lmx-home-reload:active { transform: scale(0.92); }
+.lmx-home-reload.spinning svg { animation: lmx-spin 0.8s linear infinite; }
+@keyframes lmx-spin { to { transform: rotate(360deg); } }
+.lmx-recents-fallback {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--sys-color) 75%, #160826), #160826);
+  color: rgba(255,255,255,0.16);
+}
+.lmx-recents-fallback svg { width: 92px; height: 92px; }
+
 /* Controles touch */
 .lmx-emu-controls {
   flex-shrink: 0;
