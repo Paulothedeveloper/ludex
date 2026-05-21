@@ -458,13 +458,13 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
         background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
         fontSize: '0.85em', lineHeight: 1.5,
       }}>
-        <div style={{ marginBottom: 4 }}>
-          <span style={{ color: '#22c55e', fontWeight: 700 }}>⚡ TEMPO REAL</span>
-          {' — '}aplica na hora, sem reiniciar o jogo.
+        <div style={{ marginBottom: 4, display: 'flex', alignItems: 'baseline', gap: 7 }}>
+          <span style={{ flexShrink: 0, width: 8, height: 8, borderRadius: '50%', background: '#22c55e', transform: 'translateY(1px)' }} />
+          <span><span style={{ color: '#22c55e', fontWeight: 700 }}>TEMPO REAL</span>{' — '}aplica na hora, sem reiniciar o jogo.</span>
         </div>
-        <div>
-          <span style={{ color: '#ef4444', fontWeight: 700 }}>⟳ REINICIAR JOGO</span>
-          {' — '}o core (PCSX2, Dolphin, etc) só aplica essa opção no próximo "Jogar". Fecha o jogo e abre de novo.
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+          <span style={{ flexShrink: 0, width: 8, height: 8, borderRadius: '50%', background: '#ef4444', transform: 'translateY(1px)' }} />
+          <span><span style={{ color: '#ef4444', fontWeight: 700 }}>REINICIAR JOGO</span>{' — '}o core só aplica essa opção no próximo "Jogar". Fecha o jogo e abre de novo.</span>
         </div>
       </div>
       {categories.map((cat) => (
@@ -479,8 +479,8 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
                 <div key={opt.key} className="lx-settings-row">
                   <label className="lx-settings-label" title={opt.key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span>{opt.label}</span>
-                    {isHotReload && <span style={{ fontSize: '0.65em', padding: '2px 6px', borderRadius: 999, background: 'rgba(34,197,94,0.15)', color: '#22c55e', fontWeight: 700 }} title="Aplica em tempo real">⚡ TEMPO REAL</span>}
-                    {needsRestart && <span style={{ fontSize: '0.65em', padding: '2px 6px', borderRadius: 999, background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontWeight: 700 }} title="Esse core libretro só lê essa opção quando o jogo abre. Reinicie o jogo pra efeito.">⟳ REINICIAR</span>}
+                    {isHotReload && <span style={{ fontSize: '0.62em', letterSpacing: '0.04em', padding: '2px 7px', borderRadius: 999, background: 'rgba(34,197,94,0.15)', color: '#22c55e', fontWeight: 800 }} title="Aplica em tempo real">TEMPO REAL</span>}
+                    {needsRestart && <span style={{ fontSize: '0.62em', letterSpacing: '0.04em', padding: '2px 7px', borderRadius: 999, background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontWeight: 800 }} title="Esse core libretro só lê essa opção quando o jogo abre. Reinicie o jogo pra efeito.">REINICIAR</span>}
                   </label>
                   <select
                     className="lx-settings-select"
@@ -511,7 +511,7 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
           }}
           onClick={() => setRestartToast(null)}
         >
-          <span style={{ fontSize: '1.4em' }}>⟳</span>
+          <span style={{ flexShrink: 0, width: 10, height: 10, borderRadius: '50%', background: '#fff', opacity: 0.9 }} />
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 800, marginBottom: 2 }}>{restartToast.label} — exige reiniciar o jogo</div>
             <div style={{ fontSize: '0.85em', opacity: 0.95 }}>

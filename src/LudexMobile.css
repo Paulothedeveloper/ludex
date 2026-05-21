@@ -1515,6 +1515,51 @@
 }
 @keyframes lmx-boot-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
+/* ============ CONFIG DO EMULADOR no mobile (v0.9.12) ============ */
+/* O modal de config vem do launcher do PC (classes lx-*). No celular ele ficava
+   espremido (largura/fontes de desktop). Aqui vira uma folha full-screen, com
+   tipografia e alvos de toque adequados — "profissional", como o Paulo pediu. */
+[data-android] .lx-modal-overlay { padding: 0; align-items: stretch; justify-content: stretch; background: rgba(7,3,15,0.78); }
+[data-android] .lx-modal {
+  max-width: 100% !important;
+  width: 100%; height: 100%; max-height: 100%;
+  border-radius: 0;
+  display: flex; flex-direction: column;
+  background: #0d0720;
+  padding: var(--lmx-safe-top) 0 0;
+  animation: lmx-tab-in 0.26s cubic-bezier(0.22,1,0.36,1);
+}
+[data-android] .lx-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px 14px; border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+[data-android] .lx-modal-header h2 { font-size: 18px; font-weight: 800; margin: 0; letter-spacing: -0.01em; }
+[data-android] .lx-modal-close { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #fff; }
+[data-android] .lx-settings-tabs { display: flex; gap: 8px; padding: 12px 18px 0; }
+[data-android] .lx-settings-tab {
+  flex: 1; padding: 11px 8px; font-size: 13.5px; font-weight: 700;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+  border-bottom: none; border-radius: 12px 12px 0 0; color: var(--lmx-text-dim);
+}
+[data-android] .lx-settings-tab.active { background: rgba(124,92,255,0.18); color: #fff; border-color: rgba(124,92,255,0.5); }
+[data-android] .lx-settings-body { flex: 1; overflow-y: auto; padding: 14px 18px 8px; -webkit-overflow-scrolling: touch; }
+[data-android] .lx-settings-cat { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lmx-accent); font-weight: 800; margin: 16px 0 8px; }
+[data-android] .lx-settings-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+[data-android] .lx-settings-label { font-size: 14px; flex: 1; min-width: 0; color: #fff; }
+[data-android] .lx-settings-select {
+  flex-shrink: 0; max-width: 52%; padding: 10px 12px; font-size: 14px;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 10px; color: #fff;
+}
+[data-android] .lx-settings-footer {
+  display: flex; gap: 10px; padding: 12px 18px calc(12px + var(--lmx-safe-bottom));
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+[data-android] .lx-settings-btn { flex: 1; padding: 13px 16px; font-size: 14px; font-weight: 700; border-radius: 12px; }
+
 /* Controles touch */
 .lmx-emu-controls {
   flex-shrink: 0;
