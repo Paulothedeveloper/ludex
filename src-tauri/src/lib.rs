@@ -5221,6 +5221,45 @@ fn version_is_newer(latest: &str, current: &str) -> bool {
     false
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_compare() {
+        assert!(version_is_newer("0.9.9", "0.9.8"));
+        assert!(version_is_newer("0.9.10", "0.9.9")); // numerico, nao lexicografico
+        assert!(version_is_newer("1.0.0", "0.9.99"));
+        assert!(!version_is_newer("0.9.8", "0.9.8"));
+        assert!(!version_is_newer("0.9.7", "0.9.8"));
+        assert!(!version_is_newer("0.9.8", "0.9.8.1")); // ignora alem do 3o componente
+    }
+
+    #[test]
+    fn sanitize_strips_path_chars() {
+        assert_eq!(sanitize_filename("Mario/Bros: 3*?"), "Mario_Bros_ 3__");
+        assert_eq!(sanitize_filename("Pokemon Red"), "Pokemon Red");
+    }
+
+    #[test]
+    fn igdb_url_normalizes_and_resizes() {
+        assert_eq!(igdb_url("//images.igdb.com/x/t_thumb/abc.jpg", "t_cover_big"),
+                   "https://images.igdb.com/x/t_cover_big/abc.jpg");
+        assert_eq!(igdb_url("https://h/t_thumb/a.jpg", "t_cover_big"),
+                   "https://h/t_cover_big/a.jpg");
+    }
+
+    #[test]
+    fn search_variants_breaks_down_titles() {
+        let v = search_variants("Final Fantasy VII - International");
+        assert_eq!(v[0], "Final Fantasy VII - International");
+        assert!(v.contains(&"Final Fantasy VII".to_string()));
+        assert!(search_variants("").is_empty());
+        let sub = search_variants("Zelda: Ocarina of Time");
+        assert!(sub.contains(&"Zelda".to_string()));
+    }
+}
+
 // ============================================================
 // === RETROACHIEVEMENTS — login + summary + recent ach ======
 // ============================================================
@@ -5515,6 +5554,18 @@ pub fn run() {
                     .max_file_size(2_000_000) // 2MB rotation
                     .build(),
             )?;
+            // v0.9.9: panics do Rust (inclusive de threads spawnadas) vao pro log/
+            // logcat. Sem isso um panic so aparecia como abort silencioso, invisivel
+            // no "Logs do app" — entao crash do backend ficava impossivel de diagnosticar.
+            let default_hook = std::panic::take_hook();
+            std::panic::set_hook(Box::new(move |info| {
+                let loc = info.location().map(|l| format!("{}:{}", l.file(), l.line())).unwrap_or_default();
+                let msg = info.payload().downcast_ref::<&str>().map(|s| s.to_string())
+                    .or_else(|| info.payload().downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "panic".to_string());
+                log::error!("[panic] {} @ {}", msg, loc);
+                default_hook(info);
+            }));
             let _ = APP_HANDLE.set(app.handle().clone());
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {

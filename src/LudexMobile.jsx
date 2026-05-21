@@ -253,15 +253,19 @@ export default function LudexMobile() {
       try {
         const c = await invoke("load_config");
         if (c) setConfig(c);
-        // Auto-cria profile se nao tem
+        // Auto-cria profile se nao tem — e PERSISTE na hora. Sem o save_config o
+        // profile vivia so no state do React: a cada cold start gerava um id novo,
+        // entao stats e saves chaveados por profile id se perdiam silenciosamente.
         if (!c?.profiles?.length) {
           const id = `p${Math.random().toString(36).slice(2, 10)}`;
-          setConfig((prev) => ({
-            ...prev,
+          const seeded = {
+            ...(c || {}),
             profiles: [{ id, name: "Player", avatar_id: "controller", photo_path: null, created_at: Math.floor(Date.now() / 1000) }],
             active_profile_id: id,
             first_run_done: true,
-          }));
+          };
+          setConfig(seeded);
+          try { await invoke("save_config", { config: seeded }); } catch (e) { console.error("seed profile save", e); }
           try { await invoke("complete_first_run"); } catch {}
         }
       } catch (e) { console.error("load_config", e); }
