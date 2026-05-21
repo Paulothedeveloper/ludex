@@ -1452,6 +1452,18 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
 // === SYSTEM SCREEN (grid de jogos do sistema selecionado) ===
 // ============================================================
 function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder, onPickSystemFolder, currentSystemFolder }) {
+  const [guideOpen, setGuideOpen] = useState(false); // v0.9.15: sites por sistema
+  const showInstallGuide = useCallback(() => {
+    mAlert(
+      `Como colocar jogos de ${system.name} no Ludex:\n\n` +
+      "1) Baixe a ROM no celular (veja 'Onde baixar' aqui embaixo).\n" +
+      "2) Coloque o arquivo na pasta de ROMs (geral ou a pasta só deste sistema).\n" +
+      "3) Volte aqui — o Ludex detecta pela extensão (ex: .gba, .sfc, .nes, .z64).\n" +
+      "4) Traduções/hacks: aplique o patch na ROM antes (ou use a ROM já traduzida).\n" +
+      "5) BIOS (Saturn/PSP/PS1/Dreamcast): pasta Ludex/system/.\n\n" +
+      "Use jogos que você possui."
+    );
+  }, [system.name]);
   return (
     <div className="lmx-systemview">
       <header className="lmx-page-header has-back">
@@ -1463,6 +1475,10 @@ function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder, onPick
             <div className="lmx-systemview-count">{system.games.length} jogo{system.games.length === 1 ? "" : "s"}</div>
           </div>
         </div>
+        {/* v0.9.15: guia de download (sites de ROMs/traducoes/mods) por sistema */}
+        <button className="lmx-sysfolder-btn" onClick={() => { sfx.confirm(); setGuideOpen(true); }} title="Onde baixar jogos / traduções" aria-label="Onde baixar">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+        </button>
         {/* v0.9.5: pasta exclusiva deste sistema */}
         {onPickSystemFolder && (
           <button className="lmx-sysfolder-btn" onClick={onPickSystemFolder} title="Escolher pasta só deste sistema" aria-label="Pasta deste sistema">
@@ -1494,6 +1510,14 @@ function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder, onPick
               Usar a pasta geral de ROMs
             </button>
           )}
+          <div style={{ display: "flex", gap: 8, maxWidth: 280, margin: "16px auto 0" }}>
+            <button className="lmx-settings-btn ghost" onClick={showInstallGuide} style={{ flex: 1, marginTop: 0 }}>
+              Como instalar
+            </button>
+            <button className="lmx-settings-btn primary" onClick={() => { sfx.confirm(); setGuideOpen(true); }} style={{ flex: 1, marginTop: 0 }}>
+              Onde baixar
+            </button>
+          </div>
         </div>
       ) : (
         <div className="lmx-systemview-grid">
@@ -1508,6 +1532,7 @@ function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder, onPick
           ))}
         </div>
       )}
+      <SuggestionsModal open={guideOpen} onClose={() => setGuideOpen(false)} defaultTab="roms" />
     </div>
   );
 }
