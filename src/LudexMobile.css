@@ -1418,6 +1418,10 @@
   position: relative;
   padding: 8px 16px env(safe-area-inset-bottom, 16px);
 }
+/* v0.9.10: o tracker global de toque precisa que o browser NAO trate o deslize
+   do dedo como scroll/gesto, senao o touchmove e cancelado e o botao trava. */
+.lmx-emu-dpad, .lmx-emu-face, .lmx-emu-system, .lmx-emu-shoulders,
+.lmx-emu-controls button { touch-action: none; }
 .lmx-emu-dpad {
   position: absolute;
   bottom: 28px;

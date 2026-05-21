@@ -2284,12 +2284,73 @@ function MobileEmulatorView({ system, game, onClose }) {
     return () => { if (raf) cancelAnimationFrame(raf); };
   }, [info]);
 
-  // Touch handlers: button id libretro (joypad)
-  const press = useCallback((id, pressed) => {
-    lastInputRef.current = Date.now(); // reset sleep timer
-    if (autoPaused) setAutoPaused(false);
+  // v0.9.10: input de toque com TRACKER GLOBAL no container dos controles.
+  // Antes cada botao tinha onTouchStart/End proprio; o touchend so dispara no
+  // elemento onde o toque COMECOU, entao "segurar pra baixo e deslizar o dedo pro
+  // analogico/outro botao" deixava o pra-baixo preso. Agora cada dedo (por
+  // identifier) sabe qual botao esta embaixo dele via elementFromPoint, e ao
+  // deslizar soltamos o antigo e apertamos o novo. Refcount por botao trata 2
+  // dedos no mesmo botao. Botoes so tem data-btn; quem ouve e o container.
+  const controlsRef = useRef(null);
+  const pressCounts = useRef(new Map()); // btnId -> nº de dedos em cima
+  const touchMap = useRef(new Map());    // touch.identifier -> btnId atual
+  const setBtnInput = useCallback((id, pressed) => {
+    lastInputRef.current = Date.now();
+    if (pressed && autoPaused) setAutoPaused(false);
     invoke("libretro_set_input", { buttonId: id, pressed }).catch(() => {});
   }, [autoPaused]);
+  const pressBtn = useCallback((id, pressed) => {
+    if (id == null || Number.isNaN(id)) return;
+    const counts = pressCounts.current;
+    const prev = counts.get(id) || 0;
+    const next = pressed ? prev + 1 : Math.max(0, prev - 1);
+    counts.set(id, next);
+    if (prev === 0 && next > 0) { setBtnInput(id, true); haptic(8); }
+    else if (prev > 0 && next === 0) setBtnInput(id, false);
+    const wrap = controlsRef.current;
+    if (wrap) {
+      const el = wrap.querySelector(`[data-btn="${id}"]`);
+      if (el) el.classList.toggle("pressing", next > 0);
+    }
+  }, [setBtnInput]);
+  const btnIdAtPoint = useCallback((x, y) => {
+    const el = document.elementFromPoint(x, y);
+    const target = el && el.closest ? el.closest("[data-btn]") : null;
+    if (!target) return null;
+    const v = target.getAttribute("data-btn");
+    return v == null ? null : parseInt(v, 10);
+  }, []);
+  const onControlsTouchStart = useCallback((e) => {
+    if (editMode) return;
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      const id = btnIdAtPoint(t.clientX, t.clientY);
+      touchMap.current.set(t.identifier, id);
+      if (id != null) pressBtn(id, true);
+    }
+  }, [editMode, btnIdAtPoint, pressBtn]);
+  const onControlsTouchMove = useCallback((e) => {
+    if (editMode) return;
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      const oldId = touchMap.current.get(t.identifier);
+      const newId = btnIdAtPoint(t.clientX, t.clientY);
+      if (newId !== oldId) {
+        if (oldId != null) pressBtn(oldId, false);
+        if (newId != null) pressBtn(newId, true);
+        touchMap.current.set(t.identifier, newId);
+      }
+    }
+  }, [editMode, btnIdAtPoint, pressBtn]);
+  const onControlsTouchEnd = useCallback((e) => {
+    if (editMode) return;
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      const oldId = touchMap.current.get(t.identifier);
+      if (oldId != null) pressBtn(oldId, false);
+      touchMap.current.delete(t.identifier);
+    }
+  }, [editMode, pressBtn]);
 
   // v0.8.26: gamepad fisico (Bluetooth/USB) — Android WebView suporta nativo.
   // Standard mapping -> libretro RetroPad (mesma logica do desktop).
@@ -2361,16 +2422,6 @@ function MobileEmulatorView({ system, game, onClose }) {
     raf = requestAnimationFrame(poll);
     return () => { if (raf) cancelAnimationFrame(raf); };
   }, [info, onClose, autoPaused, gamepadConnected]);
-  // v0.9.7: toggla a classe "pressing" no proprio botao pra animacao de toque
-  // suave e confiavel (o :active do CSS falha com preventDefault no touch).
-  const btnProps = (id) => ({
-    onTouchStart: (e) => { e.preventDefault(); e.currentTarget.classList.add("pressing"); press(id, true); haptic(8); },
-    onTouchEnd:   (e) => { e.preventDefault(); e.currentTarget.classList.remove("pressing"); press(id, false); },
-    onTouchCancel:(e) => { e.preventDefault(); e.currentTarget.classList.remove("pressing"); press(id, false); },
-    onMouseDown:  (e) => { e.currentTarget.classList.add("pressing"); press(id, true); },
-    onMouseUp:    (e) => { e.currentTarget.classList.remove("pressing"); press(id, false); },
-    onMouseLeave: (e) => { e.currentTarget.classList.remove("pressing"); press(id, false); },
-  });
 
   if (error) {
     return (
@@ -2645,15 +2696,21 @@ function MobileEmulatorView({ system, game, onClose }) {
         </div>
       )}
       {/* Touch controls — layout customizado por sistema. Esconde se gamepad ativo */}
-      <div className={`lmx-emu-controls ${editMode ? "lmx-emu-edit" : ""} ${gamepadConnected && !editMode ? "lmx-emu-controls-dim" : ""}`} data-face-count={layout.face.length}>
+      <div ref={controlsRef}
+           className={`lmx-emu-controls ${editMode ? "lmx-emu-edit" : ""} ${gamepadConnected && !editMode ? "lmx-emu-controls-dim" : ""}`}
+           data-face-count={layout.face.length}
+           onTouchStart={onControlsTouchStart}
+           onTouchMove={onControlsTouchMove}
+           onTouchEnd={onControlsTouchEnd}
+           onTouchCancel={onControlsTouchEnd}>
         {/* D-pad esquerda (todos os sistemas tem D-pad) */}
         <div className="lmx-emu-dpad" style={groupStyle("dpad")}
              onTouchStart={editMode ? startDrag("dpad") : undefined}
              onMouseDown={editMode ? startDrag("dpad") : undefined}>
-          <button className="lmx-emu-dpad-up"    {...(editMode ? {} : btnProps(4))}>▲</button>
-          <button className="lmx-emu-dpad-left"  {...(editMode ? {} : btnProps(6))}>◀</button>
-          <button className="lmx-emu-dpad-right" {...(editMode ? {} : btnProps(7))}>▶</button>
-          <button className="lmx-emu-dpad-down"  {...(editMode ? {} : btnProps(5))}>▼</button>
+          <button className="lmx-emu-dpad-up"    data-btn={4}>▲</button>
+          <button className="lmx-emu-dpad-left"  data-btn={6}>◀</button>
+          <button className="lmx-emu-dpad-right" data-btn={7}>▶</button>
+          <button className="lmx-emu-dpad-down"  data-btn={5}>▼</button>
         </div>
         {/* Face buttons (A/B/X/Y/C/etc — varia por sistema) */}
         <div className={`lmx-emu-face lmx-emu-face-${layout.face.length}`}
@@ -2664,7 +2721,7 @@ function MobileEmulatorView({ system, game, onClose }) {
             <button
               key={btn.id}
               className={`lmx-emu-btn lmx-emu-face-pos-${i} lmx-emu-color-${btn.color}`}
-              {...(editMode ? {} : btnProps(btn.id))}
+              data-btn={btn.id}
             >{btn.label}</button>
           ))}
         </div>
@@ -2675,8 +2732,8 @@ function MobileEmulatorView({ system, game, onClose }) {
             <div className="lmx-emu-system" style={groupStyle("system")}
                  onTouchStart={editMode ? startDrag("system") : undefined}
                  onMouseDown={editMode ? startDrag("system") : undefined}>
-              {labels[0] && <button className="lmx-emu-btn lmx-emu-btn-select" {...(editMode ? {} : btnProps(2))}>{labels[0]}</button>}
-              {labels[1] && <button className="lmx-emu-btn lmx-emu-btn-start"  {...(editMode ? {} : btnProps(3))}>{labels[1]}</button>}
+              {labels[0] && <button className="lmx-emu-btn lmx-emu-btn-select" data-btn={2}>{labels[0]}</button>}
+              {labels[1] && <button className="lmx-emu-btn lmx-emu-btn-start"  data-btn={3}>{labels[1]}</button>}
             </div>
           );
         })()}
@@ -2690,12 +2747,12 @@ function MobileEmulatorView({ system, game, onClose }) {
                  onMouseDown={editMode ? startDrag("shoulders") : undefined}>
               <div className="lmx-emu-shoulders-l">
                 {sh.filter(l => /^L|^Z/.test(l)).map(l => (
-                  <button key={l} className="lmx-emu-btn lmx-emu-btn-l" {...(editMode ? {} : btnProps(map[l]))}>{l}</button>
+                  <button key={l} className="lmx-emu-btn lmx-emu-btn-l" data-btn={map[l]}>{l}</button>
                 ))}
               </div>
               <div className="lmx-emu-shoulders-r">
                 {sh.filter(l => /^R/.test(l)).map(l => (
-                  <button key={l} className="lmx-emu-btn lmx-emu-btn-r" {...(editMode ? {} : btnProps(map[l]))}>{l}</button>
+                  <button key={l} className="lmx-emu-btn lmx-emu-btn-r" data-btn={map[l]}>{l}</button>
                 ))}
               </div>
             </div>
