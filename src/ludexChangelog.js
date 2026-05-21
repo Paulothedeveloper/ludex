@@ -4,6 +4,13 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.14": [
+    "Tela de carregamento some assim que o jogo fica pronto (mais rapida).",
+    "Destaque virou 'Mais jogados' (nao repete mais os recentes).",
+    "Tema do controle muda tambem o visual em repouso.",
+    "Backup agora inclui tema, controle e layout.",
+    "Respeita 'reduzir movimento' do sistema; ajustes no tema claro.",
+  ],
   "0.9.13": [
     "Destaque no tamanho padrao com contorno colorido; Continua jogando com a capa do jogo.",
     "Tela de carregamento do emulador refeita.",
