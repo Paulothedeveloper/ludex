@@ -994,19 +994,22 @@ function GameCard({ system, game, coverSrc, onClick }) {
 }
 
 // ============================================================
-// === SYSTEMS TAB ============================================
-// Lista vertical agrupada por categoria
+// === SYSTEMS TAB — RODA (v0.9.15) ===========================
+// Em vez de lista, uma "roda" vertical com snap: o sistema no centro fica grande
+// (escala via scroll-timeline CSS) e os de cima/baixo encolhem — cara de seletor
+// de console. Fallback sem scroll-timeline = cards normais (sem quebrar).
 // ============================================================
 function SystemsTab({ systems, onPickSystem }) {
-  // Agrupa systems por categoria
-  const grouped = useMemo(() => {
-    const byCategoryId = {};
+  // ordena agrupando por categoria, mas renderiza como roda unica
+  const ordered = useMemo(() => {
+    const byCat = {};
     for (const sys of systems) {
-      const cat = categoryOfSystem(sys.id);
-      if (!byCategoryId[cat.id]) byCategoryId[cat.id] = { cat, systems: [] };
-      byCategoryId[cat.id].systems.push(sys);
+      const c = categoryOfSystem(sys.id);
+      (byCat[c.id] ||= []).push(sys);
     }
-    return CATEGORIES.map((c) => byCategoryId[c.id]).filter(Boolean);
+    const out = [];
+    for (const c of CATEGORIES) if (byCat[c.id]) out.push(...byCat[c.id]);
+    return out;
   }, [systems]);
 
   return (
@@ -1014,32 +1017,27 @@ function SystemsTab({ systems, onPickSystem }) {
       <header className="lmx-page-header">
         <h1>Sistemas</h1>
       </header>
-      {grouped.map(({ cat, systems: sysList }) => (
-        <section className="lmx-systems-group" key={cat.id}>
-          <h3 className="lmx-systems-cat">{cat.name}</h3>
-          <div className="lmx-systems-list">
-            {sysList.map((sys) => (
-              <button
-                key={sys.id}
-                className="lmx-systems-row"
-                style={{ "--sys-color": sys.color }}
-                onClick={() => onPickSystem(sys)}
-              >
-                <div className="lmx-systems-row-icon" style={{ background: sys.color }}>
-                  <SysGlyph id={sys.id} />
-                </div>
-                <div className="lmx-systems-row-text">
-                  <div className="lmx-systems-row-name">{sys.name}</div>
-                  <div className="lmx-systems-row-count">
-                    {sys.games.length === 0 ? "Sem jogos" : `${sys.games.length} jogo${sys.games.length === 1 ? "" : "s"}`}
-                  </div>
-                </div>
-                <div className="lmx-systems-row-arrow">›</div>
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
+      <div className="lmx-systems-wheel">
+        {ordered.map((sys) => (
+          <button
+            key={sys.id}
+            className="lmx-wheel-item"
+            style={{ "--sys-color": sys.color }}
+            onClick={() => { sfx.click(); onPickSystem(sys); }}
+          >
+            <div className="lmx-wheel-icon" style={{ background: sys.color }}>
+              <SysGlyph id={sys.id} />
+            </div>
+            <div className="lmx-wheel-text">
+              <div className="lmx-wheel-name">{sys.name}</div>
+              <div className="lmx-wheel-count">
+                {sys.games.length === 0 ? "Sem jogos" : `${sys.games.length} jogo${sys.games.length === 1 ? "" : "s"}`}
+              </div>
+            </div>
+            <div className="lmx-wheel-arrow">›</div>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

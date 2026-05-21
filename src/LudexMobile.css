@@ -508,6 +508,55 @@
 }
 
 /* ============ SYSTEMS TAB ============ */
+/* ============ RODA DE SISTEMAS (v0.9.15) ============ */
+.lmx-systems-wheel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 18px 0;
+}
+.lmx-wheel-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--sys-color) 24%, var(--lmx-surface)), var(--lmx-surface));
+  border: 1px solid var(--lmx-border);
+  color: var(--lmx-text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  scroll-snap-align: center;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+}
+.lmx-wheel-icon {
+  width: 60px; height: 60px; border-radius: 16px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+.lmx-wheel-icon svg { width: 38px; height: 38px; color: #fff; }
+.lmx-wheel-text { flex: 1; min-width: 0; }
+.lmx-wheel-name { font-size: 19px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lmx-wheel-count { font-size: 12.5px; color: var(--lmx-text-dim); margin-top: 2px; }
+.lmx-wheel-arrow { font-size: 26px; color: var(--lmx-text-dim); flex-shrink: 0; line-height: 1; }
+/* efeito roda: item no centro grande, vizinhos encolhem. So com scroll-timeline;
+   sem suporte = cards normais (sem quebrar). */
+@supports (animation-timeline: view()) {
+  .lmx-systems-wheel { scroll-snap-type: y proximity; }
+  .lmx-wheel-item {
+    animation: lmx-wheel-focus linear both;
+    animation-timeline: view();
+    animation-range: entry 0% exit 100%;
+  }
+  @keyframes lmx-wheel-focus {
+    0%       { opacity: 0.38; transform: scale(0.84); }
+    45%, 55% { opacity: 1;    transform: scale(1.03); }
+    100%     { opacity: 0.38; transform: scale(0.84); }
+  }
+}
+
 .lmx-systems-group {
   margin: 18px 0 0;
 }
@@ -2464,5 +2513,5 @@
   to   { opacity: 1; transform: scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lmx-home > *, .lmx-card, .lmx-systems-row { animation: none !important; }
+  .lmx-home > *, .lmx-card, .lmx-systems-row, .lmx-wheel-item { animation: none !important; }
 }
