@@ -4,6 +4,12 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.11": [
+    "Controle: deslizar o dedo entre botoes funciona (nao trava mais a direcao).",
+    "Barra de navegacao flutuante estilo console, com icones novos e sem texto.",
+    "Conquistas aparecem embaixo, acima da barra de navegacao.",
+    "Animacao ao trocar de aba e ao abrir o jogo (boot do emulador).",
+  ],
   "0.9.10": [
     "Salvar e carregar estado (save state) voltou a funcionar no app.",
     "Botoes L e R nao ficam mais em cima do Voltar e da engrenagem.",
