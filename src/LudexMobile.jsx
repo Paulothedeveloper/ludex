@@ -2077,16 +2077,31 @@ function MobileEmulatorView({ system, game, onClose }) {
     setOffsets({});
     saveCustomLayout(system.id, {});
   }, [system.id]);
-  // v0.9.10: layout de telas DS/3DS aplicado AO VIVO (sem reabrir o jogo).
+  // v0.9.12: layout de telas DS/3DS aplicado via RELOAD LIMPO do core (preservando
+  // progresso com save state temporario). O hot-reload de layout no melonDS/citra
+  // as vezes so meia-aplica e DUPLICA a tela (bug que o Paulo viu no "Destaque cima").
+  // Recarregar o core com a opcao ja setada aplica o layout do zero, sem glitch.
   const [screenLayoutVals, setScreenLayoutVals] = useState(() => loadSystemOptions(system.id));
-  const setCoreOptionLive = useCallback((key, value) => {
+  const setCoreOptionLive = useCallback(async (key, value) => {
     const cur = { ...loadSystemOptions(system.id), [key]: value };
     saveSystemOptions(system.id, cur);
     setScreenLayoutVals(cur);
-    invoke("libretro_set_option", { key, value }).catch(() => {});
-    setStateMsg("Layout aplicado");
-    setTimeout(() => setStateMsg(null), 1400);
-  }, [system.id]);
+    setStateMsg("Aplicando layout...");
+    try {
+      try { await invoke("libretro_save_state", { romPath: game.path, slot: 98 }); } catch {}
+      await invoke("libretro_set_option", { key, value });
+      try { await invoke("libretro_unload"); } catch {}
+      try { await applySystemOptions(system.id); } catch {}
+      const result = await invoke("libretro_load_game", { coreFilename: system.libretro_core, romPath: game.path });
+      setInfo(result);
+      audioRateRef.current = result.sample_rate || 32040;
+      try { await invoke("libretro_load_state", { romPath: game.path, slot: 98 }); } catch {}
+      setStateMsg("Layout aplicado");
+    } catch (e) {
+      setStateMsg("Falha no layout: " + e);
+    }
+    setTimeout(() => setStateMsg(null), 1600);
+  }, [system.id, game.path, system.libretro_core]);
   const canvasRef = useRef(null);
   const [info, setInfo] = useState(null);
   const [error, setError] = useState(null);

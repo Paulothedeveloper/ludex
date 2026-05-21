@@ -344,6 +344,31 @@
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
+/* ============ LANDSCAPE: telas iniciais adaptadas (v0.9.12) ============ */
+/* Em paisagem a tela e baixa e larga; reduz fontes/icones/banners que ficavam
+   gigantes e usa cards menores. NAO afeta o emulador (bloco landscape proprio). */
+@media (orientation: landscape) {
+  .lmx-home-hero { padding: calc(12px + var(--lmx-safe-top)) 26px 8px; }
+  .lmx-home-avatar { width: 38px; height: 38px; border-radius: 11px; }
+  .lmx-home-hello { font-size: 10px; }
+  .lmx-home-name { font-size: 18px; }
+  .lmx-home-demo { font-size: 10px; padding: 5px 10px; }
+  .lmx-page-header { padding: calc(12px + var(--lmx-safe-top)) 26px 6px; }
+  .lmx-page-header h1 { font-size: 20px; }
+  .lmx-section { margin-top: 14px; }
+  .lmx-section-title { font-size: 13px; padding: 0 26px 6px; }
+  .lmx-section-sys-icon, .lmx-systemview-icon { transform: scale(0.82); }
+  .lmx-carousel { gap: 10px; padding: 0 26px 4px; }
+  .lmx-carousel > .lmx-card { width: 88px; }
+  .lmx-featured { margin-bottom: 12px; }
+  .lmx-featured-card { width: 26%; max-width: 150px; }
+  .lmx-featured-name { font-size: 12px; }
+  .lmx-featured-overlay { padding: 20px 10px 8px; }
+  .lmx-card-name { font-size: 11px; }
+  /* conquista mais compacta em paisagem */
+  .lmx-ach-toast { max-width: 320px; padding: 10px 12px; }
+}
+
 /* ============ GAME CARD (carrossel + grid) ============ */
 .lmx-card {
   --sys-color: #555;
