@@ -2056,67 +2056,103 @@ function MobileEmulatorView({ system, game, onClose }) {
     };
   }, [system.id, game.path, system.libretro_core]);
 
-  // Loop de frames + audio
+  // Loop de frames — v0.9.9: PACING PELO RELOGIO DE AUDIO (igual ao desktop em
+  // LudexEmulatorView.jsx), nao por throttle de performance.now()/rAF. O loop antigo
+  // gatava "1 frame por refresh" e, com o jank de IPC/render do WebView Android, a
+  // producao de audio atrasava -> o buffer agendado esvaziava -> engasgo. Agora o
+  // AudioContext.currentTime e o mestre: a cada tick medimos quanto audio ainda esta
+  // no buffer (produzido - consumido) e rodamos quantos frames forem necessarios pra
+  // repor ate TARGET_LATENCY, com catch-up via libretro_skip_frames. producedPerCh
+  // conta o audio produzido MESMO MUTADO, entao o pacing nao dispara sozinho.
+  // Buffer-alvo um pouco maior que o desktop (0.10/0.22 vs 0.07/0.16) pra absorver a
+  // latencia extra do WebView. NAO voltar a pautar por rAF (regra anti-stutter).
   useEffect(() => {
     if (!info) return;
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
-    // v0.8.45/46: throttle preciso + FF integrado (vide LudexLauncher)
-    let nextFrame = performance.now();
     const baseFps = info.fps || 60;
-    const baseTargetMs = 1000 / baseFps;
+    const sampleRate = audioRateRef.current || info.sample_rate || 48000;
+    const samplesPerFrame = sampleRate / baseFps;
+    const TARGET_LATENCY = 0.10; // alvo de buffer agendado (s)
+    const MAX_LATENCY    = 0.22; // teto: acima disso pausa a producao neste tick
+    const MAX_FRAMES_PER_TICK = 12;
+
+    let producedPerCh = 0; // samples/canal produzidos desde audioStart (conta mutado)
+    let audioStart = null; // ctx.currentTime quando comecamos a produzir
+    let lastFf = 1;
     let raf = null;
+
+    function renderVideo(buf) {
+      if (!buf || buf.byteLength < 8) return;
+      const ab = buf.buffer ? buf.buffer : buf;
+      const off = buf.byteOffset || 0;
+      const view = new DataView(ab, off, buf.byteLength);
+      const w = view.getUint32(0, true);
+      const h = view.getUint32(4, true);
+      const rgba = new Uint8ClampedArray(ab, off + 8, w * h * 4);
+      if (w !== ctx.canvas.width || h !== ctx.canvas.height) {
+        ctx.canvas.width = w; ctx.canvas.height = h;
+      }
+      ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
+    }
+
+    // Conta o audio pra pacing SEMPRE; so agenda playback se nao estiver mutado.
+    function postAudio(audioBuf) {
+      if (!audioBuf || audioBuf.byteLength === 0) return;
+      const ab = audioBuf.buffer ? audioBuf.buffer : audioBuf;
+      const i16 = new Int16Array(ab, audioBuf.byteOffset || 0, audioBuf.byteLength / 2);
+      const frames = i16.length / 2;
+      if (frames <= 0) return;
+      producedPerCh += frames;
+      const actx = audioCtxRef.current;
+      if (!actx || mutedRef.current) return;
+      const node = actx.createBuffer(2, frames, sampleRate);
+      const L = node.getChannelData(0); const R = node.getChannelData(1);
+      for (let i = 0; i < frames; i++) { L[i] = i16[i*2]/32768; R[i] = i16[i*2+1]/32768; }
+      const src = actx.createBufferSource(); src.buffer = node; src.connect(actx.destination);
+      const ct = actx.currentTime;
+      if (audioNextTimeRef.current < ct) audioNextTimeRef.current = ct + 0.04; // reseed pos-underrun/unmute
+      src.start(audioNextTimeRef.current);
+      audioNextTimeRef.current += frames / sampleRate;
+    }
 
     async function tick() {
       if (stoppedRef.current) return;
-      const now = performance.now();
+      const actx = audioCtxRef.current;
       const ff = Math.max(1, ffEffectiveRef.current || 1);
-      const emuRate = baseFps * ff;
-      const renderRate = Math.min(emuRate, 144);
-      const targetFrameMs = 1000 / renderRate;
-      const framesPerRender = Math.max(1, Math.round(emuRate / renderRate));
-      if (now < nextFrame) {
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-      nextFrame += targetFrameMs;
-      if (now - nextFrame > targetFrameMs * 4) nextFrame = now + targetFrameMs;
-      {
-        try {
-          if (framesPerRender > 1) {
-            try { await invoke("libretro_skip_frames", { n: framesPerRender - 1 }); } catch {}
-          }
-          const buf = await invoke("libretro_run_frame");
-          if (buf && buf.byteLength >= 8) {
-            const view = new DataView(buf.buffer ? buf.buffer : buf, buf.byteOffset || 0, buf.byteLength);
-            const w = view.getUint32(0, true);
-            const h = view.getUint32(4, true);
-            const rgba = new Uint8ClampedArray(buf.buffer ? buf.buffer : buf, (buf.byteOffset || 0) + 8, w * h * 4);
-            if (w !== ctx.canvas.width || h !== ctx.canvas.height) {
-              ctx.canvas.width = w; ctx.canvas.height = h;
-            }
-            ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
-          }
-          const audioBuf = await invoke("libretro_take_audio");
-          const actx = audioCtxRef.current;
-          if (audioBuf && audioBuf.byteLength > 0 && actx && !mutedRef.current) {
-            const i16 = new Int16Array(audioBuf.buffer ? audioBuf.buffer : audioBuf, audioBuf.byteOffset || 0, audioBuf.byteLength / 2);
-            const frames = i16.length / 2;
-            if (frames > 0) {
-              const sampleRate = audioRateRef.current;
-              const node = actx.createBuffer(2, frames, sampleRate);
-              const L = node.getChannelData(0); const R = node.getChannelData(1);
-              for (let i = 0; i < frames; i++) { L[i] = i16[i*2]/32768; R[i] = i16[i*2+1]/32768; }
-              const src = actx.createBufferSource(); src.buffer = node; src.connect(actx.destination);
-              // v0.8.38: resync so em underrun real (era 20ms a frente -> gap constante)
-              const ct = actx.currentTime;
-              if (audioNextTimeRef.current < ct) audioNextTimeRef.current = ct + 0.15;
-              src.start(audioNextTimeRef.current);
-              audioNextTimeRef.current += frames / sampleRate;
+      try {
+        if (ff > 1) {
+          // Fast-forward roda mudo (descarta audio) pra nao acumular/pitch-bend.
+          const n = Math.min(ff, MAX_FRAMES_PER_TICK);
+          if (n > 1) { try { await invoke("libretro_skip_frames", { n: n - 1 }); } catch {} }
+          renderVideo(await invoke("libretro_run_frame"));
+          try { await invoke("libretro_take_audio"); } catch {}
+          audioStart = null; producedPerCh = 0; lastFf = ff;
+          if (actx) audioNextTimeRef.current = actx.currentTime;
+        } else {
+          if (lastFf !== 1) { audioStart = null; producedPerCh = 0; lastFf = 1; if (actx) audioNextTimeRef.current = actx.currentTime; }
+          let framesToRun = 1;
+          if (actx) {
+            if (audioStart == null) { audioStart = actx.currentTime; producedPerCh = 0; }
+            const consumedPerCh = Math.max(0, (actx.currentTime - audioStart) * sampleRate);
+            const bufferedSec = (producedPerCh - consumedPerCh) / sampleRate;
+            if (bufferedSec >= MAX_LATENCY) {
+              framesToRun = 0;
+            } else {
+              const deficitSec = TARGET_LATENCY - bufferedSec;
+              framesToRun = Math.min(
+                MAX_FRAMES_PER_TICK,
+                Math.max(1, Math.ceil((deficitSec * sampleRate) / samplesPerFrame)),
+              );
             }
           }
-        } catch (e) { console.error("frame tick", e); }
-      }
+          if (framesToRun > 0) {
+            if (framesToRun > 1) { try { await invoke("libretro_skip_frames", { n: framesToRun - 1 }); } catch {} }
+            renderVideo(await invoke("libretro_run_frame"));
+            postAudio(await invoke("libretro_take_audio"));
+          }
+        }
+      } catch (e) { console.error("frame tick", e); }
       raf = requestAnimationFrame(tick);
     }
     raf = requestAnimationFrame(tick);
