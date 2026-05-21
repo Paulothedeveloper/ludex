@@ -37,9 +37,10 @@ import {
   loadCheats, setCheats as setCheatsStore,
   addScreenshot, loadScreenshots,
   isFirstRunDone, markFirstRunDone,
-  isAmbientOn, setAmbientOn,
+  isAmbientOn, setAmbientPref, startAmbient, stopAmbient,
   formatPlayTime, formatRelative,
 } from "./ludexMobileFeatures";
+import { ambientMusic } from "./ludexAmbientMusic"; // v0.9.9: musica ambiente igual ao PC
 import { SystemSettingsModal, SuggestionsModal } from "./LudexExtras"; // v0.9.1: + SuggestionsModal pra paridade com desktop
 import { DEFAULT_AVATARS, avatarUrl } from "./LudexOnboarding"; // v0.9.1: reusa avatares SVG do desktop (regra: NUNCA emoji em UI prod)
 import { hasOptionsForSystem, applySystemOptions, effectivePadMap } from "./ludexSystemOptions";
@@ -450,6 +451,42 @@ export default function LudexMobile() {
     sfx.shutdown(); haptic(30);
     setPlayingGame(null);
   }, [playingGame, onUnlockAch]);
+
+  // ============ MUSICA AMBIENTE APP-WIDE (paridade PC) ============
+  // v0.9.9: toca a MESMA musica ambiente do launcher do Windows (MP3 da pasta
+  // Ludex/music com shuffle + crossfade, via ludexAmbientMusic). Antes so tocava
+  // dentro da aba Ajustes (o AmbientMusicToggle era dono do playback). Agora o
+  // playback e global: toca em qualquer tela, PAUSA dentro do emulador, e volta
+  // ao sair. Sem MP3s, cai no chiptune sintetico. O toggle so liga/desliga a pref.
+  useEffect(() => {
+    let cancelled = false;
+    const apply = async () => {
+      const wantOn = isAmbientOn();
+      const canPlay = wantOn && splashDone && !playingGame;
+      if (!canPlay) {
+        ambientMusic.stop({ immediate: !!playingGame });
+        stopAmbient();
+        return;
+      }
+      if (ambientMusic.playlist.length === 0) {
+        try { await ambientMusic.load(); } catch {}
+        if (cancelled) return;
+      }
+      if (ambientMusic.playlist.length > 0) {
+        stopAmbient(); // garante chiptune off quando ha MP3
+        if (!ambientMusic.isPlaying) ambientMusic.start(0.3);
+      } else {
+        startAmbient(); // fallback chiptune
+      }
+    };
+    apply();
+    const onChange = () => apply();
+    window.addEventListener("ludex:ambient-changed", onChange);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("ludex:ambient-changed", onChange);
+    };
+  }, [splashDone, playingGame]);
 
   // ============ PICKER DE PASTA ROMS ============
   // tauri-plugin-dialog NAO suporta directory picker em Android.
@@ -2823,69 +2860,45 @@ function BackupRestoreCard() {
 // v0.9.1: ambient music agora suporta MP3s (paridade Windows) + fallback chiptune.
 // MP3s vão na pasta /storage/emulated/0/Ludex/music/ no Android. Vazio = chiptune.
 function AmbientMusicToggle() {
+  // v0.9.9: o playback agora e app-wide (efeito no componente principal). Aqui o
+  // toggle so liga/desliga a preferencia e avisa via evento. Toca a MESMA musica
+  // do launcher do Windows (MP3 shuffle + crossfade), ou chiptune se nao ha MP3.
   const [on, setOnState] = useState(isAmbientOn());
-  const [tracks, setTracks] = useState([]);
-  const [trackIdx, setTrackIdx] = useState(0);
-  const audioRef = useRef(null);
+  const [count, setCount] = useState(ambientMusic.playlist.length);
+  const [trackName, setTrackName] = useState(null);
 
   useEffect(() => {
-    invoke("list_music_tracks").then(setTracks).catch(() => setTracks([]));
+    if (ambientMusic.playlist.length) { setCount(ambientMusic.playlist.length); return; }
+    ambientMusic.load().then(setCount).catch(() => setCount(0));
   }, []);
 
   useEffect(() => {
-    if (!on) {
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
-      setAmbientOn(false);
-      return;
-    }
-    // Se há MP3s, toca eles. Senão, chiptune sintético.
-    if (tracks.length > 0) {
-      const playTrack = (idx) => {
-        if (audioRef.current) { audioRef.current.pause(); }
-        const audio = new Audio(convertFileSrc(tracks[idx]));
-        audio.volume = 0.35;
-        audio.onended = () => {
-          const next = (idx + 1) % tracks.length;
-          setTrackIdx(next);
-          playTrack(next);
-        };
-        audio.play().catch(() => {});
-        audioRef.current = audio;
-      };
-      playTrack(trackIdx);
-    } else {
-      setAmbientOn(true); // chiptune fallback
-    }
-    return () => {
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    if (!on || count === 0) { setTrackName(null); return; }
+    const tick = () => {
+      const q = ambientMusic.queue;
+      const p = q.length ? q[ambientMusic.current % q.length] : null;
+      setTrackName(p ? p.split(/[\\/]/).pop().replace(/\.mp3$/i, "").replace(/^ES_/, "").slice(0, 35) : null);
     };
-  }, [on, tracks.length]);
+    tick();
+    const id = setInterval(tick, 1500);
+    return () => clearInterval(id);
+  }, [on, count]);
 
-  const skip = () => {
-    if (tracks.length === 0) return;
-    const next = (trackIdx + 1) % tracks.length;
-    setTrackIdx(next);
-    if (audioRef.current && on) {
-      audioRef.current.pause();
-      const audio = new Audio(convertFileSrc(tracks[next]));
-      audio.volume = 0.35;
-      audio.onended = () => skip();
-      audio.play().catch(() => {});
-      audioRef.current = audio;
-    }
+  const toggle = () => {
+    const next = !on;
+    setOnState(next);
+    setAmbientPref(next);
+    window.dispatchEvent(new CustomEvent("ludex:ambient-changed"));
   };
-
-  const trackName = tracks[trackIdx]
-    ? tracks[trackIdx].split(/[\\/]/).pop().replace(/\.mp3$/, "").replace(/^ES_/, "").slice(0, 35)
-    : null;
+  const skip = () => { if (ambientMusic.playlist.length) ambientMusic.skip(); };
 
   return (
     <section className="lmx-settings-card">
       <div className="lmx-settings-label">Música ambiente</div>
       <p className="lmx-settings-hint">
-        {tracks.length > 0
-          ? `${tracks.length} MP3${tracks.length > 1 ? "s" : ""} em Ludex/music/`
-          : "Chiptune sintético (Web Audio). Pra ter MP3s curados igual o Windows, copia arquivos pra /storage/emulated/0/Ludex/music/"}
+        {count > 0
+          ? `${count} MP3${count > 1 ? "s" : ""} em Ludex/music/ — toca no app todo (shuffle + crossfade, igual o Windows). Pausa dentro do jogo.`
+          : "Chiptune sintético (Web Audio). Pra ter as mesmas faixas do Windows, copia MP3s pra /storage/emulated/0/Ludex/music/"}
       </p>
       {on && trackName && (
         <div style={{ marginBottom: 8, padding: "8px 10px", borderRadius: 8, background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.25)", fontSize: 12, color: "#c4b5fd", display: "flex", alignItems: "center", gap: 8 }}>
@@ -2896,10 +2909,10 @@ function AmbientMusicToggle() {
         </div>
       )}
       <div style={{ display: "flex", gap: 6 }}>
-        <button className="lmx-settings-btn primary" onClick={() => setOnState(!on)} style={{ flex: 1 }}>
+        <button className="lmx-settings-btn primary" onClick={toggle} style={{ flex: 1 }}>
           {on ? "Desligar música" : "Ligar música"}
         </button>
-        {on && tracks.length > 1 && (
+        {on && count > 1 && (
           <button className="lmx-settings-btn ghost" onClick={skip} title="Próxima faixa" style={{ minWidth: 56 }}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <polygon points="5 4 15 12 5 20 5 4" /><line x1="19" y1="5" x2="19" y2="19" />

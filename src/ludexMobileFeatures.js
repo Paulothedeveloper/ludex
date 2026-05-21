@@ -345,6 +345,12 @@ export function setAmbientOn(on) {
   try { localStorage.setItem(KEYS.ambientMusic, on ? "1" : "0"); } catch {}
   if (on) startAmbient(); else stopAmbient();
 }
+// v0.9.9: persiste SO a preferencia liga/desliga (sem mexer no chiptune). O
+// playback app-wide (MP3 ambiente compartilhado com o PC, ou chiptune fallback)
+// e decidido no componente principal do LudexMobile, nao aqui.
+export function setAmbientPref(on) {
+  try { localStorage.setItem(KEYS.ambientMusic, on ? "1" : "0"); } catch {}
+}
 export function startAmbient() {
   if (_ambientCtx) return;
   try {
