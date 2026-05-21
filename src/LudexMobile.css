@@ -694,9 +694,10 @@
 .lmx-settings-card {
   margin: 12px 16px;
   padding: 16px;
-  background: var(--lmx-surface);
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
   border: 1px solid var(--lmx-border);
-  border-radius: var(--lmx-radius);
+  border-radius: var(--lmx-radius-lg);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.05);
 }
 .lmx-settings-row {
   display: flex;
@@ -1875,25 +1876,38 @@
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   z-index: 10000;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  padding: 20px;
+  padding: 0;
 }
 .lmx-emu-menu {
-  background: var(--lmx-bg);
-  border: 1px solid var(--lmx-border);
-  border-radius: var(--lmx-radius-lg);
-  padding: 20px;
+  background: linear-gradient(180deg, #17122b 0%, #0c0720 100%);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-top: 1px solid rgba(124,92,255,0.4);
+  border-radius: 24px 24px 0 0;
+  padding: 14px 18px calc(20px + env(safe-area-inset-bottom, 0px));
   width: 100%;
-  max-width: 380px;
-  max-height: 80vh;
+  max-width: 600px;
+  max-height: 88vh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: 0 -16px 50px rgba(0,0,0,0.55);
+  animation: lmx-sheet-up 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes lmx-sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+.lmx-emu-menu::before {
+  content: ""; display: block; width: 42px; height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.22); margin: 2px auto 14px;
 }
 .lmx-emu-menu h3 {
   margin: 0 0 16px;
-  font-size: 18px;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 .lmx-emu-menu-section { margin-bottom: 18px; }
 .lmx-emu-menu-label {
@@ -2082,10 +2096,7 @@
   animation: lmx-slide-up 220ms ease-out;
 }
 
-/* Menu in-game scale + fade */
-.lmx-emu-menu {
-  animation: lmx-scale-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
-}
+/* Menu in-game: bottom sheet (anim definida em .lmx-emu-menu acima = lmx-sheet-up) */
 .lmx-emu-menu-overlay {
   animation: lmx-fade-in 180ms ease-out;
 }
