@@ -1417,6 +1417,79 @@
 }
 .lmx-emu-error pre { font-size: 12px; max-width: 90%; white-space: pre-wrap; opacity: 0.7; }
 
+/* v0.9.11: tela de boot do emulador (animacao premium ao abrir o jogo) */
+.lmx-emu-boot {
+  --sys-color: #7c5cff;
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: radial-gradient(120% 80% at 50% 38%, color-mix(in srgb, var(--sys-color) 22%, #07030f) 0%, #07030f 70%);
+  animation: lmx-boot-fade 0.4s ease both;
+}
+@keyframes lmx-boot-fade { from { opacity: 0; } to { opacity: 1; } }
+.lmx-emu-boot-glow {
+  position: absolute;
+  width: 240px; height: 240px;
+  border-radius: 50%;
+  background: var(--sys-color);
+  filter: blur(90px);
+  opacity: 0.35;
+  animation: lmx-boot-pulse 2.2s ease-in-out infinite;
+}
+@keyframes lmx-boot-pulse { 0%,100% { transform: scale(0.9); opacity: 0.25; } 50% { transform: scale(1.1); opacity: 0.45; } }
+.lmx-emu-boot-sys {
+  position: relative;
+  width: 76px; height: 76px;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  animation: lmx-boot-rise 0.6s cubic-bezier(0.22,1,0.36,1) both;
+}
+.lmx-emu-boot-sys svg { width: 100%; height: 100%; filter: drop-shadow(0 4px 16px rgba(0,0,0,0.5)); }
+.lmx-emu-boot-ring {
+  position: absolute;
+  width: 116px; height: 116px;
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.12);
+  border-top-color: var(--sys-color);
+  animation: lmx-boot-spin 0.9s linear infinite;
+}
+@keyframes lmx-boot-spin { to { transform: rotate(360deg); } }
+@keyframes lmx-boot-rise { from { opacity: 0; transform: translateY(10px) scale(0.92); } to { opacity: 1; transform: none; } }
+.lmx-emu-boot-title {
+  position: relative;
+  font-size: 18px; font-weight: 800; color: #fff; text-align: center;
+  max-width: 80%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  animation: lmx-boot-rise 0.6s cubic-bezier(0.22,1,0.36,1) 0.08s both;
+}
+.lmx-emu-boot-sub {
+  position: relative;
+  font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: rgba(255,255,255,0.55); font-weight: 700;
+  animation: lmx-boot-rise 0.6s cubic-bezier(0.22,1,0.36,1) 0.14s both;
+}
+.lmx-emu-boot-bar {
+  position: relative;
+  margin-top: 10px;
+  width: 180px; height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.12);
+  overflow: hidden;
+}
+.lmx-emu-boot-bar span {
+  display: block; height: 100%;
+  width: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--sys-color), #ec4899);
+  transform-origin: left;
+  animation: lmx-boot-fill linear forwards;
+}
+@keyframes lmx-boot-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
 /* Controles touch */
 .lmx-emu-controls {
   flex-shrink: 0;

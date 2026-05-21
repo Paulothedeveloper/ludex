@@ -2132,6 +2132,15 @@ function MobileEmulatorView({ system, game, onClose }) {
   const canvasRef = useRef(null);
   const [info, setInfo] = useState(null);
   const [error, setError] = useState(null);
+  // v0.9.11: animacao de boot do emulador. Fica visivel por no minimo BOOT_MS E
+  // ate o core+ROM carregarem (o que demorar mais) — cobre o "ecossistema" do
+  // emulador carregando em celular fraco, sem flash de tela preta (pedido do Paulo).
+  const BOOT_MS = 4200;
+  const [bootMinDone, setBootMinDone] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setBootMinDone(true), BOOT_MS);
+    return () => clearTimeout(t);
+  }, []);
   const audioCtxRef = useRef(null);
   const audioNextTimeRef = useRef(0);
   const audioResumeCleanupRef = useRef(null); // v0.9.5: remove o listener de resume no unmount
@@ -2692,10 +2701,14 @@ function MobileEmulatorView({ system, game, onClose }) {
         systemName={system.name}
         onClose={() => setEmuSettingsOpen(false)}
       />
-      {!info && (
-        <div className="lmx-emu-loading">
-          <div className="lmx-spinner" />
-          <div>Carregando emulador...</div>
+      {(!info || !bootMinDone) && (
+        <div className="lmx-emu-boot" style={{ "--sys-color": system.color }}>
+          <div className="lmx-emu-boot-glow" />
+          <div className="lmx-emu-boot-sys"><SysGlyph id={system.id} /></div>
+          <div className="lmx-emu-boot-ring" />
+          <div className="lmx-emu-boot-title">{game.name}</div>
+          <div className="lmx-emu-boot-sub">{system.name}</div>
+          <div className="lmx-emu-boot-bar"><span style={{ animationDuration: `${BOOT_MS}ms` }} /></div>
         </div>
       )}
       {/* Indicador gamepad fisico conectado */}
