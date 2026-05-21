@@ -1706,6 +1706,21 @@ fn sanitize_filename(name: &str) -> String {
         .collect()
 }
 
+/// v0.9.9: builder de cliente HTTP compartilhado. No Android forca IPv4 ligando o
+/// socket local a 0.0.0.0 — o hyper-util so tenta enderecos remotos IPv4 quando o
+/// local_address e IPv4. Sem isso, em redes com IPv6 quebrado (VPN, DNS64 sem rota
+/// v6, alguns carriers) o reqwest pega o endereco AAAA primeiro, recebe ENETUNREACH
+/// na hora e devolve "error sending request" — e TODA feature online (capas, detalhe,
+/// nota, update check) falha mesmo com a rede funcionando. Em carrier IPv6-only o
+/// Android roda 464XLAT/CLAT, entao ainda existe um IPv4 local e o bind funciona.
+/// Causa raiz de "banners dos jogos pararam de aparecer no Android" (Paulo, v0.9.x).
+fn http_client_builder() -> reqwest::ClientBuilder {
+    let b = reqwest::ClientBuilder::new();
+    #[cfg(target_os = "android")]
+    let b = b.local_address(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+    b
+}
+
 async fn get_access_token(client: &reqwest::Client) -> Result<String, String> {
     {
         let cache = token_cache().lock().await;
@@ -2539,7 +2554,7 @@ async fn fetch_cover(system_id: String, game_name: String) -> Option<String> {
         return Some(cache_file.to_string_lossy().to_string());
     }
 
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .ok()?;
@@ -3078,7 +3093,7 @@ fn normalize_name(s: &str) -> String {
 /// requests anonimos, entao paramos cedo ao achar bom match.
 #[tauri::command]
 async fn fetch_cheats(db_folder: String, game_name: String) -> Result<Vec<CheatEntry>, String> {
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .user_agent("Ludex/0.9.2")
         .build().map_err(|e| e.to_string())?;
     let target = normalize_name(&game_name);
@@ -3642,7 +3657,7 @@ struct UpdateInfo {
 #[tauri::command]
 async fn check_update_info() -> Result<UpdateInfo, String> {
     const ENDPOINT: &str = "https://github.com/EllaeMyApp/ludex/releases/latest/download/latest.json";
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| e.to_string())?;
@@ -3672,7 +3687,7 @@ async fn android_download_apk(apk_url: String) -> Result<String, String> {
     let dest_path = format!("{}/ludex-update.apk", cache_dir);
     // Apaga arquivo anterior (pode ser HTML 404 de release sem APK)
     let _ = std::fs::remove_file(&dest_path);
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .timeout(std::time::Duration::from_secs(900))
         .build()
         .map_err(|e| e.to_string())?;
@@ -4033,7 +4048,7 @@ async fn fetch_screenshot(system_id: String, game_name: String) -> Option<String
         return None;
     }
 
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .timeout(std::time::Duration::from_secs(20))
         .build()
         .ok()?;
@@ -4102,7 +4117,7 @@ async fn fetch_game_details(system_id: String, game_name: String) -> Option<Game
         }
     }
 
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .timeout(std::time::Duration::from_secs(20))
         .build()
         .ok()?;
@@ -4640,7 +4655,7 @@ async fn gumroad_verify(key: &str, increment_uses: bool) -> Result<LicenseInfo, 
     if GUMROAD_ACCESS_TOKEN == "PLACEHOLDER_ACCESS_TOKEN" {
         return Err("Sistema de licenca nao configurado (build de desenvolvimento)".into());
     }
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .timeout(std::time::Duration::from_secs(15))
         .user_agent("Ludex/0.5 (license-validator)")
         .build()
@@ -4768,7 +4783,7 @@ async fn license_deactivate() -> Result<(), String> {
         ));
     }
 
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .timeout(std::time::Duration::from_secs(15))
         .build().map_err(|e| format!("http: {}", e))?;
     let mut form = std::collections::HashMap::new();
@@ -4854,7 +4869,7 @@ async fn ensure_admin() -> Result<(), String> {
 #[tauri::command]
 async fn admin_list_sales(page: Option<u32>) -> Result<serde_json::Value, String> {
     ensure_admin().await?;
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .timeout(std::time::Duration::from_secs(20))
         .user_agent("Ludex/0.6 (admin-panel)")
         .build().map_err(|e| format!("http: {}", e))?;
@@ -4878,7 +4893,7 @@ async fn admin_list_sales(page: Option<u32>) -> Result<serde_json::Value, String
 #[tauri::command]
 async fn admin_force_deactivate(license_key: String) -> Result<(), String> {
     ensure_admin().await?;
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .timeout(std::time::Duration::from_secs(15))
         .build().map_err(|e| format!("http: {}", e))?;
     let mut form = std::collections::HashMap::new();
@@ -5061,7 +5076,7 @@ async fn android_demo_admin_unlock(license_key: String) -> Result<bool, String> 
     if GUMROAD_ACCESS_TOKEN == "PLACEHOLDER_ACCESS_TOKEN" {
         return Err("Sistema de licenca nao configurado".into());
     }
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .timeout(std::time::Duration::from_secs(15))
         .user_agent("Ludex/0.9 (android-unlock)")
         .build()
@@ -5161,7 +5176,7 @@ struct GhAsset {
 #[tauri::command]
 async fn android_check_update() -> Result<AndroidUpdateInfo, String> {
     let current = env!("CARGO_PKG_VERSION").to_string();
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .timeout(std::time::Duration::from_secs(10))
         .user_agent("Ludex-Android-Updater")
         .build()
@@ -5249,7 +5264,7 @@ fn ra_creds_from_cfg(cfg: &AppConfig) -> Option<(String, String)> {
 }
 
 async fn ra_fetch_summary_internal(username: &str, api_key: &str) -> Result<RaSummary, String> {
-    let client = reqwest::Client::builder()
+    let client = http_client_builder()
         .timeout(std::time::Duration::from_secs(15))
         .user_agent("Ludex/0.4 (RA-companion)")
         .build()
