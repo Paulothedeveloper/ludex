@@ -24,19 +24,31 @@ android {
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }
-    // v0.9.1: signing config pro release. Sem isso o APK saia *-unsigned.apk
-    // e Android recusava instalar ("App not installed - Package appears to be invalid").
-    // Usa debug keystore (auto-gerado pelo Android Studio em ~/.android/debug.keystore)
-    // que basta pra side-load via GitHub releases. Pra Play Store seria necessario
-    // criar release keystore proprio, mas distribuicao manual aceita debug-signed.
+    // v0.9.9: signing config pro release. Le um release keystore proprio via
+    // keystore.properties (gitignored, fica ao lado deste build.gradle.kts). O APK
+    // debug-assinado (androiddebugkey) usa um cert publico conhecido por TODA
+    // instalacao do Android Studio — o Play Protect marca como malware no sideload.
+    // Um release keystore proprio (cert unico) resolve isso. Se keystore.properties
+    // nao existir (ex: build de outra maquina), cai no debug keystore pra nao quebrar
+    // o build local. ATENCAO: trocar a chave de assinatura quebra update-over-install
+    // pra quem ja tem o APK debug-assinado — precisa desinstalar e reinstalar UMA vez.
     signingConfigs {
         create("releaseSigning") {
-            val debugKeystore = file(System.getProperty("user.home") + "/.android/debug.keystore")
-            if (debugKeystore.exists()) {
-                storeFile = debugKeystore
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
+            val ksPropsFile = rootProject.file("keystore.properties")
+            if (ksPropsFile.exists()) {
+                val ksProps = Properties().apply { ksPropsFile.inputStream().use { load(it) } }
+                storeFile = file(ksProps.getProperty("storeFile"))
+                storePassword = ksProps.getProperty("storePassword")
+                keyAlias = ksProps.getProperty("keyAlias")
+                keyPassword = ksProps.getProperty("keyPassword")
+            } else {
+                val debugKeystore = file(System.getProperty("user.home") + "/.android/debug.keystore")
+                if (debugKeystore.exists()) {
+                    storeFile = debugKeystore
+                    storePassword = "android"
+                    keyAlias = "androiddebugkey"
+                    keyPassword = "android"
+                }
             }
         }
     }
