@@ -243,7 +243,20 @@ export function filterChildSafe(games) {
 }
 
 // ============ BACKUP / RESTORE ============
+// v0.9.14: prefs guardadas com chave crua (fora de KEYS) que tambem entram no
+// backup — antes se limpasse os dados, perdia tema/controle/layout.
+const RAW_PREF_KEYS = [
+  "ludex.appTheme.v1",
+  "ludex.controlPrefs.v1",
+  "ludex.controlLayout.v1",
+  "ludex.systemFolders",
+  "ludex.ambient.v1",
+];
 export function exportConfig() {
+  const prefs = {};
+  for (const k of RAW_PREF_KEYS) {
+    try { const v = localStorage.getItem(k); if (v != null) prefs[k] = v; } catch {}
+  }
   const data = {
     version: "v1",
     exported: new Date().toISOString(),
@@ -253,6 +266,7 @@ export function exportConfig() {
     cheats: loadCheats(),
     customCovers: loadCustomCovers(),
     childMode: isChildModeOn(),
+    prefs,
   };
   return JSON.stringify(data, null, 2);
 }
@@ -265,6 +279,11 @@ export function importConfig(json) {
     if (data.stats) localStorage.setItem(KEYS.stats, JSON.stringify(data.stats));
     if (data.cheats) localStorage.setItem(KEYS.cheats, JSON.stringify(data.cheats));
     if (data.customCovers) localStorage.setItem(KEYS.customCovers, JSON.stringify(data.customCovers));
+    if (data.prefs && typeof data.prefs === "object") {
+      for (const [k, v] of Object.entries(data.prefs)) {
+        if (RAW_PREF_KEYS.includes(k) && typeof v === "string") localStorage.setItem(k, v);
+      }
+    }
     return true;
   } catch { return false; }
 }

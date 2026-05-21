@@ -44,6 +44,17 @@
 .lmx[data-theme="forest"] { --lmx-bg:#0a1612; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.09); --lmx-border:rgba(134,239,172,0.22); --lmx-text:#e8fff2; --lmx-text-dim:#9bc4a8; --lmx-accent:#86efac; }
 .lmx[data-theme="light"] { --lmx-bg:#ededed; --lmx-surface:rgba(0,0,0,0.04); --lmx-surface-2:rgba(0,0,0,0.07); --lmx-border:rgba(0,0,0,0.12); --lmx-text:#1a1a1a; --lmx-text-muted:rgba(0,0,0,0.6); --lmx-text-dim:rgba(0,0,0,0.5); --lmx-accent:#6d28d9; }
 .lmx[data-theme="light"] { background-image: none; }
+/* v0.9.14: tema Light — texto legivel nas superficies de conteudo (texto que
+   antes era branco fixo sobre fundo claro). Escopo so no light = zero impacto nos
+   temas escuros. Elementos sobre capa/cor (recents, cards coloridos) ficam intactos. */
+.lmx[data-theme="light"] .lmx-page-header h1,
+.lmx[data-theme="light"] .lmx-section-title,
+.lmx[data-theme="light"] .lmx-systems-cat,
+.lmx[data-theme="light"] .lmx-systems-row-name,
+.lmx[data-theme="light"] .lmx-settings-value,
+.lmx[data-theme="light"] .lmx-folder-item-label,
+.lmx[data-theme="light"] .lmx-detail-title { color: var(--lmx-text); }
+/* nav flutuante e cards-glass continuam escuros (vidro) — legivel em qualquer tema */
 
 .lmx {
   position: fixed;
@@ -1619,6 +1630,19 @@
 .lmx-ctrl-theme-nintendo { --ctrl-accent: #e60012; }
 .lmx-ctrl-theme-sony     { --ctrl-accent: #2e6bff; }
 .lmx-ctrl-theme-xbox     { --ctrl-accent: #107c10; }
+/* v0.9.14: tema do controle muda tambem o REPOUSO (borda/realce sutil), nao so o toque */
+.lmx-emu-controls .lmx-emu-btn,
+.lmx-emu-controls .lmx-emu-dpad button {
+  border-color: color-mix(in srgb, var(--ctrl-accent) 40%, rgba(255,255,255,0.16));
+}
+/* tint de repouso so nos botoes SEM cor semantica (L/R, select/start) — nao mexe
+   nos A/B/X/Y coloridos */
+.lmx-emu-controls .lmx-emu-btn-l,
+.lmx-emu-controls .lmx-emu-btn-r,
+.lmx-emu-controls .lmx-emu-btn-select,
+.lmx-emu-controls .lmx-emu-btn-start {
+  background: color-mix(in srgb, var(--ctrl-accent) 14%, rgba(255,255,255,0.10));
+}
 .lmx-emu-controls .lmx-emu-btn:active,
 .lmx-emu-controls .lmx-emu-btn.pressing,
 .lmx-emu-controls .lmx-emu-dpad button:active,
@@ -2003,7 +2027,7 @@
   transform: translateX(-50%);
   z-index: 10001;
   background: rgba(18, 10, 38, 0.97);
-  border: 1px solid rgba(124, 92, 255, 0.5);
+  border: 1px solid color-mix(in srgb, var(--lmx-accent) 55%, transparent);
   color: #fff;
   padding: 12px 14px;
   border-radius: 16px;
@@ -2128,7 +2152,12 @@
   .lmx-emu-canvas-wrap .lmx-emu-canvas, .lmx-emu-loading,
   .lmx-carousel > .lmx-card, .lmx-emu-toast, .lmx-emu-menu,
   .lmx-emu-menu-overlay, .lmx-folder-picker, .lmx-tab.active .lmx-tab-icon,
-  .lmx-emu-edit-banner {
+  .lmx-emu-edit-banner,
+  /* v0.9.14: animacoes novas tambem respeitam reduced-motion */
+  .lmx-tab-page, .lmx-systemview-icon, .lmx-ach-toast,
+  .lmx-emu-boot, .lmx-emu-boot-aurora, .lmx-emu-boot-tile,
+  .lmx-emu-boot-title, .lmx-emu-boot-sub, .lmx-emu-boot-foot,
+  .lmx-emu-boot-track span {
     animation: none !important;
   }
 }

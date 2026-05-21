@@ -792,6 +792,20 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
     return all.slice(0, 8);
   }, [systems]);
 
+  // v0.9.14: "Mais jogados" (distinto de "Adicionados recentemente") — usa o tempo
+  // de jogo. Some sozinho se ainda nao ha tempo registrado.
+  const mostPlayed = useMemo(() => {
+    const all = [];
+    for (const sys of systems) {
+      for (const g of sys.games) {
+        const s = statsFor(g.path);
+        if (s.totalSec > 0) all.push({ system: sys, game: g, sec: s.totalSec });
+      }
+    }
+    all.sort((a, b) => b.sec - a.sec);
+    return all.slice(0, 8);
+  }, [systems, recents]);
+
   return (
     <div className="lmx-home">
       {/* Hero header */}
@@ -819,9 +833,9 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
         </div>
       )}
 
-      {/* v0.9.9: Destaques — carrossel horizontal de capas grandes no topo
-          (paridade com o launcher do PC). Some sozinho se ainda nao ha capas. */}
-      <FeaturedCarousel items={recentByMtime} covers={covers} onPick={onPickGame} />
+      {/* v0.9.14: "Mais jogados" — distinto de "Adicionados recentemente" abaixo
+          (antes duplicava). Some sozinho se nao ha tempo de jogo nem capa. */}
+      <FeaturedCarousel title="Mais jogados" items={mostPlayed} covers={covers} onPick={onPickGame} />
 
       {/* v0.8.22: Continue onde parou (recents) */}
       {recents && recents.length > 0 && (
@@ -908,7 +922,7 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
 // recentes que JA tem capa baixada (some inteiro enquanto nao ha capa, pra nao
 // mostrar placeholders feios). Scroll-snap horizontal premium.
 // ============================================================
-function FeaturedCarousel({ items, covers, onPick }) {
+function FeaturedCarousel({ items, covers, onPick, title = "Destaques" }) {
   const withCover = (items || []).filter(
     ({ game }) => typeof covers[game.path] === "string" && covers[game.path].length > 0
   );
@@ -916,7 +930,7 @@ function FeaturedCarousel({ items, covers, onPick }) {
   const feat = withCover.slice(0, 6);
   return (
     <section className="lmx-featured">
-      <h3 className="lmx-section-title">Destaques</h3>
+      <h3 className="lmx-section-title">{title}</h3>
       <div className="lmx-featured-row">
         {feat.map(({ system, game }) => (
           <button
@@ -2233,7 +2247,7 @@ function MobileEmulatorView({ system, game, onClose }) {
   // v0.9.11: animacao de boot do emulador. Fica visivel por no minimo BOOT_MS E
   // ate o core+ROM carregarem (o que demorar mais) — cobre o "ecossistema" do
   // emulador carregando em celular fraco, sem flash de tela preta (pedido do Paulo).
-  const BOOT_MS = 4200;
+  const BOOT_MS = 1500; // piso: some assim que o core carrega, mas nunca antes de 1.5s
   const [bootMinDone, setBootMinDone] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setBootMinDone(true), BOOT_MS);
