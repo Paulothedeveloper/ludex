@@ -2754,12 +2754,16 @@ function MobileEmulatorView({ system, game, onClose }) {
       />
       {(!info || !bootMinDone) && (
         <div className="lmx-emu-boot" style={{ "--sys-color": system.color }}>
-          <div className="lmx-emu-boot-glow" />
-          <div className="lmx-emu-boot-sys"><SysGlyph id={system.id} /></div>
-          <div className="lmx-emu-boot-ring" />
-          <div className="lmx-emu-boot-title">{game.name}</div>
-          <div className="lmx-emu-boot-sub">{system.name}</div>
-          <div className="lmx-emu-boot-bar"><span style={{ animationDuration: `${BOOT_MS}ms` }} /></div>
+          <div className="lmx-emu-boot-aurora" />
+          <div className="lmx-emu-boot-center">
+            <div className="lmx-emu-boot-tile"><SysGlyph id={system.id} /></div>
+            <div className="lmx-emu-boot-title">{game.name}</div>
+            <div className="lmx-emu-boot-sub">{system.name}</div>
+          </div>
+          <div className="lmx-emu-boot-foot">
+            <div className="lmx-emu-boot-track"><span /></div>
+            <div className="lmx-emu-boot-hint">Carregando…</div>
+          </div>
         </div>
       )}
       {/* Indicador gamepad fisico conectado */}
