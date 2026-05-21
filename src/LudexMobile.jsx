@@ -41,6 +41,7 @@ import {
   formatPlayTime, formatRelative,
 } from "./ludexMobileFeatures";
 import { ambientMusic } from "./ludexAmbientMusic"; // v0.9.9: musica ambiente igual ao PC
+import { SystemIcon } from "./ludexIcons"; // v0.9.12: mesmos icones de sistema do PC
 import { SystemSettingsModal, SuggestionsModal } from "./LudexExtras"; // v0.9.1: + SuggestionsModal pra paridade com desktop
 import { DEFAULT_AVATARS, avatarUrl } from "./LudexOnboarding"; // v0.9.1: reusa avatares SVG do desktop (regra: NUNCA emoji em UI prod)
 import { hasOptionsForSystem, applySystemOptions, effectivePadMap, loadSystemOptions, saveSystemOptions } from "./ludexSystemOptions";
@@ -69,51 +70,8 @@ const IconNavSettings = () => (<svg viewBox="0 0 24 24" fill="currentColor" aria
 // ============================================================
 // === ICONES DE SISTEMAS (compactos pra mobile) ==============
 // ============================================================
-function SysGlyph({ id }) {
-  const f = "currentColor";
-  switch (id) {
-    case "switch":    return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="3" y="3" width="7" height="18" rx="3" /><rect x="14" y="3" width="7" height="18" rx="3" /></svg>);
-    case "wiiu":      return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="2" y="6" width="20" height="12" rx="2" /></svg>);
-    case "3ds":       return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="5" y="3" width="14" height="8" rx="1" /><rect x="5" y="13" width="14" height="8" rx="1" /></svg>);
-    case "wii":       return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="9" y="3" width="6" height="18" rx="1" /></svg>);
-    case "gc":        return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><polygon points="12 2 22 8 22 16 12 22 2 16 2 8" /></svg>);
-    case "n64":       return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><path d="M12 3l5 5h-3v8h3l-5 5-5-5h3V8H7l5-5z" /></svg>);
-    case "ds":        return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="4" y="3" width="16" height="8" rx="1" /><rect x="4" y="13" width="16" height="8" rx="1" /></svg>);
-    case "gba":       return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="2" y="7" width="20" height="10" rx="2" /></svg>);
-    case "gb":
-    case "gbc":       return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="6" y="2" width="12" height="20" rx="2" /></svg>);
-    case "snes":
-    case "nes":       return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="2" y="8" width="20" height="8" rx="1.5" /></svg>);
-    case "vb":        return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><circle cx="8" cy="12" r="4" /><circle cx="16" cy="12" r="4" /></svg>);
-    case "ps1":
-    case "ps2":
-    case "ps3":
-    case "ps4":       return (<svg viewBox="0 0 24 24" aria-hidden><text x="12" y="17" textAnchor="middle" fill={f} fontSize="11" fontWeight="900" fontStyle="italic" fontFamily="Impact, sans-serif">PS</text></svg>);
-    case "psp":
-    case "vita":      return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="2" y="6" width="20" height="12" rx="2" /></svg>);
-    case "dreamcast": return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><circle cx="12" cy="12" r="9" /></svg>);
-    case "saturn":    return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><circle cx="12" cy="12" r="6" /><ellipse cx="12" cy="12" rx="11" ry="3" fill="none" stroke={f} strokeWidth="1.5" /></svg>);
-    case "md":
-    case "sms":
-    case "gg":
-    case "segacd":    return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="2" y="8" width="20" height="8" rx="1" /></svg>);
-    case "xbox":
-    case "xbox360":   return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><circle cx="12" cy="12" r="10" /></svg>);
-    case "arcade":    return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="7" y="14" width="10" height="3" rx="1" /><circle cx="12" cy="7" r="3" /><line x1="12" y1="10" x2="12" y2="14" stroke={f} strokeWidth="2" /></svg>);
-    case "tg16":      return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="3" y="9" width="18" height="6" rx="1" /></svg>);
-    case "a2600":     return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="3" y="6" width="18" height="12" rx="1" /></svg>);
-    case "lynx":
-    case "ws":
-    case "ngpc":      return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="3" y="6" width="18" height="12" rx="3" /></svg>);
-    case "msx":
-    case "c64":
-    case "zx":
-    case "amiga":     return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><rect x="2" y="9" width="20" height="6" rx="1" /><rect x="6" y="15" width="12" height="2" /></svg>);
-    case "threedo":   return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><circle cx="12" cy="12" r="10" /></svg>);
-    case "jaguar":    return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><polygon points="12 3 21 9 21 15 12 21 3 15 3 9" /></svg>);
-    default:          return (<svg viewBox="0 0 24 24" fill={f} aria-hidden><circle cx="12" cy="12" r="9" /></svg>);
-  }
-}
+// v0.9.12: mesmo icone de sistema do launcher do PC (arte de console detalhada).
+function SysGlyph({ id }) { return <SystemIcon id={id} />; }
 
 // ============================================================
 // === SISTEMAS SUPORTADOS NO ANDROID =========================
@@ -2058,8 +2016,8 @@ function MobileEmulatorView({ system, game, onClose }) {
   // Sleep timer: pausa core se sem input por X min (v0.8.22)
   const lastInputRef = useRef(Date.now());
   const [autoPaused, setAutoPaused] = useState(false);
-  // v0.8.23: fast-forward (acelera GBA/Pokemon e outros lentos)
-  // ffSpeed = 1 (normal), 2, 3, 4. ffActive = override temporario (hold)
+  // v0.9.12: fast-forward FRACIONARIO. ffSpeed travado = 1 / 1.25 / 1.5 / 2.
+  // ffActive = turbo momentaneo (segurar o botao FF) -> sempre 2x.
   const [ffSpeed, setFfSpeed] = useState(1);
   const [ffActive, setFfActive] = useState(false);
   const ffEffectiveRef = useRef(1);
@@ -2229,6 +2187,8 @@ function MobileEmulatorView({ system, game, onClose }) {
     // emulacao/audio em 60fps (descarta o RGBA grande nos ticks impares = menos IPC).
     const perfMode = loadSystemOptions(system.id).ludex_performance_mode === "enabled";
     let videoTick = 0;
+    let ffLastTime = null; // relogio de parede pro FF fracionario
+    let ffAccum = 0;       // frames fracionarios acumulados no FF
 
     function renderVideo(buf) {
       if (!buf || buf.byteLength < 8) return;
@@ -2286,12 +2246,21 @@ function MobileEmulatorView({ system, game, onClose }) {
       const ff = Math.max(1, ffEffectiveRef.current || 1);
       try {
         if (ff > 1) {
-          // Fast-forward roda mudo (descarta audio) pra nao acumular/pitch-bend.
-          const n = Math.min(ff, MAX_FRAMES_PER_TICK);
-          if (n > 1) { try { await invoke("libretro_skip_frames", { n: n - 1 }); } catch {} }
-          renderVideo(await invoke("libretro_run_frame"));
-          try { await invoke("libretro_take_audio"); } catch {}
-          audioStart = null; producedPerCh = 0; lastFf = ff;
+          // FF mudo, ritmo por RELOGIO DE PAREDE (independente do Hz da tela):
+          // produz ff*baseFps frames reais/seg via acumulador -> suporta 1.25x/1.5x.
+          const now = performance.now();
+          if (lastFf === 1 || ffLastTime == null) { ffLastTime = now; ffAccum = 0; }
+          ffAccum += ((now - ffLastTime) / 1000) * baseFps * ff;
+          ffLastTime = now;
+          let n = Math.min(MAX_FRAMES_PER_TICK, Math.floor(ffAccum));
+          ffAccum -= n;
+          if (n >= 1) {
+            if (n > 1) { try { await invoke("libretro_skip_frames", { n: n - 1 }); } catch {} }
+            renderVideo(await invoke("libretro_run_frame"));
+            try { await invoke("libretro_take_audio"); } catch {}
+          }
+          lastFf = ff;
+          audioStart = null; producedPerCh = 0;
           if (actx) audioNextTimeRef.current = actx.currentTime;
         } else {
           if (lastFf !== 1) { audioStart = null; producedPerCh = 0; lastFf = 1; if (actx) audioNextTimeRef.current = actx.currentTime; }
@@ -2653,10 +2622,10 @@ function MobileEmulatorView({ system, game, onClose }) {
               <div className="lmx-emu-menu-label">Velocidade (fast-forward)</div>
               <div className="lmx-emu-menu-row">
                 {[
-                  [1, "1x (normal)"],
+                  [1, "1x"],
+                  [1.25, "1.25x"],
+                  [1.5, "1.5x"],
                   [2, "2x"],
-                  [3, "3x"],
-                  [4, "4x"],
                 ].map(([sp, lbl]) => (
                   <button
                     key={sp}
