@@ -300,17 +300,19 @@
   --sys-color: #555;
   position: relative;
   flex-shrink: 0;
-  width: 58%;
-  max-width: 260px;
+  /* v0.9.13: tamanho PADRAO (igual aos cards normais), so o CONTORNO colorido por
+     sistema diferencia (pedido do Paulo — antes ocupava 58% da tela). */
+  width: 132px;
+  max-width: 132px;
   aspect-ratio: 3 / 4;
-  scroll-snap-align: center;
-  border: none;
-  border-radius: 16px;
+  scroll-snap-align: start;
+  border: 2px solid var(--sys-color);
+  border-radius: 14px;
   overflow: hidden;
   padding: 0;
   cursor: pointer;
   background: var(--sys-color);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
   transition: transform 0.14s ease;
   -webkit-tap-highlight-color: transparent;
 }
@@ -361,8 +363,11 @@
   .lmx-carousel { gap: 10px; padding: 0 26px 4px; }
   .lmx-carousel > .lmx-card { width: 88px; }
   .lmx-featured { margin-bottom: 12px; }
-  .lmx-featured-card { width: 26%; max-width: 150px; }
+  .lmx-featured-card { width: 108px; max-width: 108px; }
   .lmx-featured-name { font-size: 12px; }
+  /* "Continua jogando" nao gigante no landscape: banner mais baixo */
+  .lmx-recents-card { aspect-ratio: auto; height: 120px; }
+  .lmx-recents-name { font-size: 15px; }
   .lmx-featured-overlay { padding: 20px 10px 8px; }
   .lmx-card-name { font-size: 11px; }
   /* conquista mais compacta em paisagem */

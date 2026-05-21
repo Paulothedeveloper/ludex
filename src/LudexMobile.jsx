@@ -360,6 +360,10 @@ export default function LudexMobile() {
     const topSystems = systems.filter((s) => s.games.length > 0).slice(0, 5);
     let cancelled = false;
     const queue = [];
+    // v0.9.13: capa dos RECENTES primeiro (banner "Continua jogando" usa de fundo).
+    for (const r of recents.slice(0, 6)) {
+      if (covers[r.gamePath] === undefined) queue.push({ sysId: r.systemId, game: { path: r.gamePath, name: r.gameName } });
+    }
     for (const sys of topSystems) {
       for (const g of sys.games.slice(0, 6)) {
         if (covers[g.path] === undefined) queue.push({ sysId: sys.id, game: g });
@@ -381,7 +385,7 @@ export default function LudexMobile() {
     }
     Promise.all(Array.from({ length: 2 }, worker)).catch(() => {});
     return () => { cancelled = true; };
-  }, [systems]);
+  }, [systems, recents]);
 
   // ============ LANCAR JOGO ============
   // Android: so libretro embedded. Sistemas sem core ARM nao aparecem na lista
