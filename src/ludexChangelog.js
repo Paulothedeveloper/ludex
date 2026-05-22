@@ -4,6 +4,10 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.16": [
+    "Corrigido o crash do app ao abrir certos emuladores (Wii, GameCube, etc).",
+    "Emulador que falha agora mostra erro na tela em vez de derrubar o app.",
+  ],
   "0.9.15": [
     "Botao de acelerar (FF) agora liga/desliga com um toque.",
     "Aba Sistemas em estilo roda (o do centro fica grande).",
