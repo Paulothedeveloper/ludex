@@ -2633,18 +2633,6 @@ function MobileEmulatorView({ system, game, onClose }) {
     return () => { if (raf) cancelAnimationFrame(raf); };
   }, [info, onClose, autoPaused, gamepadConnected]);
 
-  if (error) {
-    return (
-      <div className="lmx-emu-root">
-        <div className="lmx-emu-error">
-          <h2>Erro ao carregar jogo</h2>
-          <pre>{error}</pre>
-          <button className="lmx-settings-btn primary" onClick={onClose}>Voltar</button>
-        </div>
-      </div>
-    );
-  }
-
   // Save / Load state (com thumbnail v0.8.22)
   const saveState = useCallback(async (slot) => {
     try {
@@ -2706,6 +2694,22 @@ function MobileEmulatorView({ system, game, onClose }) {
       setTimeout(() => setStateMsg(null), 2500);
     } catch {}
   }, [system.id, game.name]);
+
+  // v0.9.16: early-return DEPOIS de TODOS os hooks (regra do React). Antes ficava
+  // antes de saveState/loadState/sleep/cornerTap -> quando o emulador setava erro
+  // (ex: Wii/GameCube sem core ARM no Android) pulava hooks = React #300 (crash
+  // "Ludex falhou ao iniciar"). Agora todos os hooks rodam sempre.
+  if (error) {
+    return (
+      <div className="lmx-emu-root">
+        <div className="lmx-emu-error">
+          <h2>Erro ao carregar jogo</h2>
+          <pre>{error}</pre>
+          <button className="lmx-settings-btn primary" onClick={onClose}>Voltar</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="lmx-emu-root">
