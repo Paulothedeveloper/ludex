@@ -36,25 +36,15 @@
 
 * { box-sizing: border-box; }
 
-/* v0.9.13: temas do app (paridade com os temas do launcher do PC). Aplicados via
-   data-theme no root .lmx — sobrescrevem os tokens --lmx-*. "roxo" = padrao (:root). */
-.lmx[data-theme="switch-dark"] { --lmx-bg:#161616; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.08); --lmx-border:rgba(255,255,255,0.1); --lmx-text:#fff; --lmx-text-dim:rgba(255,255,255,0.5); --lmx-accent:#cbd5e1; }
-.lmx[data-theme="ps3-wave"] { --lmx-bg:#021232; --lmx-surface:rgba(255,255,255,0.06); --lmx-surface-2:rgba(255,255,255,0.1); --lmx-border:rgba(125,155,196,0.28); --lmx-text:#e8f1ff; --lmx-text-dim:#7d9bc4; --lmx-accent:#7db0ff; }
-.lmx[data-theme="sunset"] { --lmx-bg:#1a0a14; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.09); --lmx-border:rgba(252,211,77,0.22); --lmx-text:#fff8f0; --lmx-text-dim:#c9a8b8; --lmx-accent:#ffb066; }
-.lmx[data-theme="forest"] { --lmx-bg:#0a1612; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.09); --lmx-border:rgba(134,239,172,0.22); --lmx-text:#e8fff2; --lmx-text-dim:#9bc4a8; --lmx-accent:#86efac; }
-.lmx[data-theme="light"] { --lmx-bg:#ededed; --lmx-surface:rgba(0,0,0,0.04); --lmx-surface-2:rgba(0,0,0,0.07); --lmx-border:rgba(0,0,0,0.12); --lmx-text:#1a1a1a; --lmx-text-muted:rgba(0,0,0,0.6); --lmx-text-dim:rgba(0,0,0,0.5); --lmx-accent:#6d28d9; }
-.lmx[data-theme="light"] { background-image: none; }
-/* v0.9.14: tema Light — texto legivel nas superficies de conteudo (texto que
-   antes era branco fixo sobre fundo claro). Escopo so no light = zero impacto nos
-   temas escuros. Elementos sobre capa/cor (recents, cards coloridos) ficam intactos. */
-.lmx[data-theme="light"] .lmx-page-header h1,
-.lmx[data-theme="light"] .lmx-section-title,
-.lmx[data-theme="light"] .lmx-systems-cat,
-.lmx[data-theme="light"] .lmx-systems-row-name,
-.lmx[data-theme="light"] .lmx-settings-value,
-.lmx[data-theme="light"] .lmx-folder-item-label,
-.lmx[data-theme="light"] .lmx-detail-title { color: var(--lmx-text); }
-/* nav flutuante e cards-glass continuam escuros (vidro) — legivel em qualquer tema */
+/* v0.9.18: temas do app mudam SOMENTE a cor do texto/realce. Fundo, superficies,
+   bordas e toda a estrutura continuam padrao (:root). Pedido do Paulo: "mudancas
+   apenas nas fontes de texto (cores), de resto continua padrao". Por isso NAO
+   sobrescrevem --lmx-bg/surface/border — so os tokens de texto e o accent. */
+.lmx[data-theme="switch-dark"] { --lmx-text:#ffffff; --lmx-text-dim:rgba(255,255,255,0.5); --lmx-accent:#cbd5e1; }
+.lmx[data-theme="ps3-wave"]    { --lmx-text:#e8f1ff; --lmx-text-dim:#7d9bc4; --lmx-accent:#7db0ff; }
+.lmx[data-theme="sunset"]      { --lmx-text:#fff8f0; --lmx-text-dim:#e0a878; --lmx-accent:#ffb066; }
+.lmx[data-theme="forest"]      { --lmx-text:#e8fff2; --lmx-text-dim:#9bc4a8; --lmx-accent:#86efac; }
+.lmx[data-theme="light"]       { --lmx-text:#f4f4fa; --lmx-text-dim:rgba(255,255,255,0.55); --lmx-accent:#c4b5fd; }
 
 .lmx {
   position: fixed;

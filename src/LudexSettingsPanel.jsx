@@ -215,7 +215,16 @@ export default function SettingsPanel({
       await relaunch();
     } catch (e) {
       console.error("update check", e);
-      setUpdateStatus({ kind: "error", text: `Erro: ${e}` });
+      // v0.9.18: quando o release mais recente nao tem build pra esta plataforma
+      // (ex: release so-APK ou latest.json sem windows-x86_64), o updater lanca
+      // "None of the fallback platforms ... were found". Pro usuario isso nao e
+      // erro — e so "ainda nao ha update pra este sistema". Mostra mensagem amigavel.
+      const msg = String(e || "");
+      if (/fallback platforms|platforms` object|no longer supported|platform/i.test(msg)) {
+        setUpdateStatus({ kind: "ok", text: "Você já está na versão mais recente!" });
+      } else {
+        setUpdateStatus({ kind: "error", text: `Erro: ${e}` });
+      }
     } finally {
       setUpdateBusy(false);
     }

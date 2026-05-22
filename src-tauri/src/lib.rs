@@ -1141,6 +1141,32 @@ fn is_generic_extension(ext: &str) -> bool {
         | "pbp" | "m3u" | "mds" | "ccd" | "rom")
 }
 
+/// v0.9.18: GameCube e Wii compartilham as extensoes iso/rvz/wia, entao no scan
+/// plano (Android) o mesmo .rvz caia nas DUAS listas. Aqui lemos o magic word do
+/// cabecalho do disco pra dizer com certeza qual e qual:
+///   Wii      = 0x5D1C9EA3 no offset 0x18 do disc-header
+///   GameCube = 0xC2339F3D no offset 0x1C do disc-header
+/// Em imagem crua (.iso/.gcm/.nkit.iso) o disc-header esta no offset 0; em
+/// RVZ/WIA os 0x80 bytes iniciais do disco ficam guardados no offset 0x58.
+/// .wbfs/.wad sao sempre Wii; .gcm/.gcz sempre GameCube (resolve sem ler).
+fn detect_gc_wii(path: &Path, ext: &str) -> Option<&'static str> {
+    use std::io::Read;
+    match ext {
+        "wbfs" | "wad" => return Some("wii"),
+        "gcm" | "gcz"  => return Some("gc"),
+        _ => {}
+    }
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut buf = [0u8; 0x80];
+    f.read_exact(&mut buf).ok()?;
+    let base = if &buf[0..4] == b"RVZ\x01" || &buf[0..4] == b"WIA\x01" { 0x58usize } else { 0 };
+    if base + 0x20 > buf.len() { return None; }
+    let rd = |off: usize| u32::from_be_bytes([buf[off], buf[off + 1], buf[off + 2], buf[off + 3]]);
+    if rd(base + 0x18) == 0x5D1C_9EA3 { Some("wii") }
+    else if rd(base + 0x1C) == 0xC233_9F3D { Some("gc") }
+    else { None }
+}
+
 /// Palavras-chave (lowercase, substring) que identificam um sistema no
 /// nome de arquivo/pasta. Ex: "ps2" no path -> sistema PS2. Vazias = nao aceitar
 /// extensao generica sozinha (forca user organizar em subpasta).
@@ -1227,11 +1253,25 @@ fn scan_system(roms_root: &Path, emulators_root: &Path, cfg: &EmulatorConfig) ->
             if !cfg.extensions.iter().any(|e| *e == ext) {
                 continue;
             }
+            // v0.9.18: GameCube x Wii — desambigua pelo magic do disco pra o mesmo
+            // jogo nao aparecer nas duas listas (.rvz/.iso batem nos dois sistemas).
+            // Disco de verdade SEMPRE tem o magic; se nao bate este sistema, pula.
+            // disc_confirmed pula a checagem de keyword generica abaixo (um .iso de
+            // Wii como "Sonic Colors" nao tem "wii" no nome mas o magic ja confirmou).
+            let mut disc_confirmed = false;
+            if matches!(cfg.id, "gc" | "wii")
+                && matches!(ext.as_str(), "iso" | "rvz" | "wia" | "gcm" | "gcz" | "wbfs" | "wad")
+            {
+                match detect_gc_wii(path, &ext) {
+                    Some(sys) if sys == cfg.id => disc_confirmed = true,
+                    _ => continue,
+                }
+            }
             // Flat scan: extensoes genericas (.iso, .bin, .zip, .chd, .cue, .pbp, .img,
             // .m3u, .mds, .ccd) batem em multiplos sistemas (PS1/PS2/Wii/GC/Saturn/etc).
             // Aceita SO se nome ou pasta-pai contem o id/folder_name do sistema —
             // senao um .iso aparece replicado em todos sistemas que aceitam iso.
-            if is_flat && is_generic_extension(&ext) {
+            if is_flat && is_generic_extension(&ext) && !disc_confirmed {
                 let parent_name = path.parent()
                     .and_then(|p| p.file_name())
                     .and_then(|n| n.to_str())
@@ -5592,15 +5632,21 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     builder
         .setup(|app| {
-            // Plugin de log sempre ativo (release tambem) — antes so debug, sem arquivo de log em prod
+            // Plugin de log sempre ativo (release tambem) — antes so debug, sem arquivo de log em prod.
+            // v0.9.18: enquanto app + launcher ainda tem bugs, log COMPLETO sempre ligado pra
+            // leitura total dos processos que o usuario fez (pedido do Paulo). Nivel Debug captura
+            // muito mais que Info (fluxo de scan, libretro, IPC, navegacao); arquivo maior (8MB x3
+            // rotacoes) preserva o historico da sessao em vez de cortar em 2MB. Webview tb manda o
+            // console do front pro mesmo log. Quando estabilizar, voltar pra Info.
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
-                    .level(log::LevelFilter::Info)
+                    .level(log::LevelFilter::Debug)
                     .targets([
                         tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir { file_name: None }),
                         tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
                     ])
-                    .max_file_size(2_000_000) // 2MB rotation
+                    .max_file_size(8_000_000) // 8MB por arquivo
                     .build(),
             )?;
             // v0.9.9: panics do Rust (inclusive de threads spawnadas) vao pro log/

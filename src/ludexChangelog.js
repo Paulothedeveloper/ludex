@@ -4,6 +4,13 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.18": [
+    "GameCube e Wii agora aparecem cada um na sua lista (identificacao pelo proprio disco, nao mais pelo nome do arquivo).",
+  ],
+  "0.9.17": [
+    "Emuladores 3D (Wii, GameCube, 3DS, Dreamcast, PSP, Nintendo 64) agora tem aceleracao grafica real no Android.",
+    "Corrigida a causa de fundo dos crashes/tela preta nesses sistemas.",
+  ],
   "0.9.16": [
     "Corrigido o crash do app ao abrir certos emuladores (Wii, GameCube, etc).",
     "Emulador que falha agora mostra erro na tela em vez de derrubar o app.",

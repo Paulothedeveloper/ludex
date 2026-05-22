@@ -43,8 +43,9 @@ pub fn ensure_init() -> bool {
         Ok(ctx) => {
             log::info!("[gles] contexto EGL/GLES3 offscreen criado: {}x{} fbo={}", ctx.width, ctx.height, ctx.fbo);
             unsafe {
-                let ver = gl::GetString(gl::VERSION) as *const i8;
-                let ren = gl::GetString(gl::RENDERER) as *const i8;
+                // c_char em aarch64-linux-android e u8 (nao i8) — usar c_char p/ casar com CStr::from_ptr.
+                let ver = gl::GetString(gl::VERSION) as *const c_char;
+                let ren = gl::GetString(gl::RENDERER) as *const c_char;
                 let vs = if ver.is_null() { "?".into() } else { std::ffi::CStr::from_ptr(ver).to_string_lossy().into_owned() };
                 let rs = if ren.is_null() { "?".into() } else { std::ffi::CStr::from_ptr(ren).to_string_lossy().into_owned() };
                 log::info!("[gles] reportado: \"{}\" / \"{}\"", vs, rs);
