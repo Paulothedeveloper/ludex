@@ -1,6 +1,6 @@
 [package]
 name = "ludex"
-version = "0.9.16"
+version = "0.9.17"
 description = "Ludex - Sua biblioteca retro em um lugar so"
 authors = ["Paulo Batista"]
 license = ""
@@ -52,3 +52,6 @@ gl = "0.14"
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
 ndk-context = "0.1"
+# v0.9.17: contexto EGL + GLES3 offscreen pra hw_render (Dolphin/Citra/Flycast/PPSSPP/N64).
+khronos-egl = { version = "6", features = ["dynamic"] }
+gl = "0.14"

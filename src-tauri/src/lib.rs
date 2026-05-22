@@ -1,6 +1,10 @@
 mod libretro;
 #[cfg(windows)]
 mod gl_context;
+// v0.9.17: backend EGL/GLES3 do hw_render no Android (mesma interface do gl_context).
+#[cfg(target_os = "android")]
+#[path = "gl_context_android.rs"]
+mod gl_context;
 use libretro::LibretroCore;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

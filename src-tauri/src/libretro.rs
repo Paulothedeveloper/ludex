@@ -393,10 +393,37 @@ extern "C" fn cb_environment(cmd: c_uint, data: *mut c_void) -> bool {
                 log::info!("[libretro] SET_HW_RENDER: aceito (OpenGL offscreen pronto)");
                 true
             }
-            #[cfg(not(windows))]
+            // v0.9.17: Android aceita OpenGL ES (contexto EGL/GLES3 offscreen).
+            // ctx_type: 2=ES2, 4=ES3, 5=ES_VERSION (escolhe via version_major).
+            #[cfg(target_os = "android")]
+            {
+                let cb = data as *mut RetroHwRenderCallback;
+                let ctx_type = (*cb).context_type;
+                log::info!("[libretro] SET_HW_RENDER(android) context_type={} version={}.{} depth={} stencil={} bottom_left={}",
+                    ctx_type, (*cb).version_major, (*cb).version_minor,
+                    (*cb).depth, (*cb).stencil, (*cb).bottom_left_origin);
+                let is_gl_es = matches!(ctx_type, 2 | 4 | 5);
+                if !is_gl_es {
+                    log::warn!("[libretro] SET_HW_RENDER(android): ctx_type={} nao e GLES, recusando", ctx_type);
+                    return false;
+                }
+                if !crate::gl_context::ensure_init() {
+                    log::error!("[libretro] SET_HW_RENDER(android): falha init EGL/GLES");
+                    return false;
+                }
+                g.hw_context_reset   = (*cb).context_reset;
+                g.hw_context_destroy = (*cb).context_destroy;
+                g.hw_bottom_left     = (*cb).bottom_left_origin;
+                g.hw_active          = true;
+                (*cb).get_current_framebuffer = Some(cb_get_current_framebuffer);
+                (*cb).get_proc_address        = Some(cb_get_proc_address);
+                log::info!("[libretro] SET_HW_RENDER(android): aceito (EGL/GLES3 pronto)");
+                true
+            }
+            #[cfg(not(any(windows, target_os = "android")))]
             {
                 let _ = data;
-                log::warn!("[libretro] SET_HW_RENDER: hw_render so disponivel em Windows ainda");
+                log::warn!("[libretro] SET_HW_RENDER: hw_render so disponivel em Windows/Android");
                 false
             }
         },
@@ -951,11 +978,11 @@ extern "C" fn cb_log(level: c_uint, fmt: *const c_char) {
 }
 
 // v0.8.32: callbacks que damos pro core no SET_HW_RENDER.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "android"))]
 extern "C" fn cb_get_current_framebuffer() -> usize {
     crate::gl_context::current_fbo() as usize
 }
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "android"))]
 extern "C" fn cb_get_proc_address(name: *const c_char) -> *const c_void {
     crate::gl_context::get_proc_addr(name)
 }
@@ -963,7 +990,7 @@ extern "C" fn cb_get_proc_address(name: *const c_char) -> *const c_void {
 extern "C" fn cb_video_refresh(data: *const c_void, width: c_uint, height: c_uint, pitch: usize) {
     // v0.8.32: cores HW passam (void*)-1 como marker — frame esta no FBO,
     // a gente faz glReadPixels pra trazer pra RAM.
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "android"))]
     if data as isize == RETRO_HW_FRAME_BUFFER_VALID {
         if let Some(rgba) = crate::gl_context::read_pixels(width, height) {
             let s = state();
@@ -1280,7 +1307,7 @@ impl LibretroCore {
 
         // v0.8.32: se hw_render foi negociado, contexto GL precisa estar current
         // nesta thread antes do retro_load_game (PCSX2 inicia GL state durante load)
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "android"))]
         {
             let s = state();
             let g = s.lock().unwrap();
@@ -1296,7 +1323,7 @@ impl LibretroCore {
 
         // v0.8.32: notifica core que contexto GL esta pronto pra ele inicializar
         // recursos GPU (programas/buffers/texturas). DEVE rodar com ctx current.
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "android"))]
         {
             let s = state();
             let g = s.lock().unwrap();
@@ -1331,7 +1358,7 @@ impl LibretroCore {
         type Fn0 = extern "C" fn();
         // v0.8.46: notifica core que vamos descartar contexto GL — core libera
         // recursos GPU (programas/buffers/texturas). Sem isso vaza por sessao.
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "android"))]
         {
             let s = state();
             let g = s.lock().unwrap();
@@ -1369,7 +1396,7 @@ impl LibretroCore {
     pub unsafe fn run(&self) -> Result<(), String> {
         type Fn0 = extern "C" fn();
         // v0.8.32: ctx GL precisa current na thread que chama retro_run
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "android"))]
         {
             let s = state();
             let g = s.lock().unwrap();
