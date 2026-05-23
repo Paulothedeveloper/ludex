@@ -44,7 +44,7 @@ import { ambientMusic } from "./ludexAmbientMusic"; // v0.9.9: musica ambiente i
 import { SystemIcon } from "./ludexIcons"; // v0.9.12: mesmos icones de sistema do PC
 import { SystemSettingsModal, SuggestionsModal } from "./LudexExtras"; // v0.9.1: + SuggestionsModal pra paridade com desktop
 import { DEFAULT_AVATARS, avatarUrl } from "./LudexOnboarding"; // v0.9.1: reusa avatares SVG do desktop (regra: NUNCA emoji em UI prod)
-import { hasOptionsForSystem, applySystemOptions, effectivePadMap, loadSystemOptions, saveSystemOptions } from "./ludexSystemOptions";
+import { hasOptionsForSystem, applySystemOptions, effectivePadMap, loadSystemOptions, saveSystemOptions, SCREEN_LAYOUTS } from "./ludexSystemOptions";
 import { CheatsModal } from "./LudexCheatsModal";
 import { loadCheats as loadGameCheats, applyCheats as applyGameCheats } from "./ludexCheats";
 
@@ -389,15 +389,27 @@ export default function LudexMobile() {
     return () => { cancelled = true; };
   }, [systems, recents]);
 
-  // v0.9.15: recarregar capas — limpa o cache no disco e o estado, forcando re-fetch.
+  // v0.9.20: refresh do home REAL — antes so esvaziava o cache e o state, mas
+  // o effect de fetch nao re-disparava (deps inalteradas) -> capas sumiam e nao
+  // voltavam, e jogos novos na pasta nao apareciam. Agora:
+  //   1) limpa o cache em disco,
+  //   2) zera o state (todos os paths viram undefined -> aptos a re-fetch),
+  //   3) re-scaneia a pasta (descobre jogos novos / remove os apagados),
+  //   4) o effect de cover-fetch dispara automaticamente porque systems mudou.
   const [reloadingCovers, setReloadingCovers] = useState(false);
   const reloadCovers = useCallback(async () => {
     if (reloadingCovers) return;
     setReloadingCovers(true);
-    try { await invoke("clear_covers_cache", {}); } catch {}
-    setCovers({});
-    setTimeout(() => setReloadingCovers(false), 1200);
-  }, [reloadingCovers]);
+    try {
+      try { await invoke("clear_covers_cache", {}); } catch {}
+      setCovers({});
+      await rescanSystems();
+    } catch (e) {
+      console.error("[refresh] falhou:", e);
+    } finally {
+      setTimeout(() => setReloadingCovers(false), 800);
+    }
+  }, [reloadingCovers, rescanSystems]);
 
   // ============ LANCAR JOGO ============
   // Android: so libretro embedded. Sistemas sem core ARM nao aparecem na lista
@@ -2026,21 +2038,22 @@ const SYSTEM_LAYOUTS = {
   // ---- SNES classico: A B X Y + L R ----
   snes: { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"}], shoulders: ["L","R"], selectStart: true },
   // ---- N64: A B + C-buttons (mapeados em Y/X/L2/R2 do RetroPad) + Z(L) Start ----
-  n64:  { face: [{id:9,label:"C↑",color:"y"},{id:1,label:"C←",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:13,label:"C↓",color:"y"},{id:14,label:"C→",color:"y"}], shoulders: ["Z","R"], selectStart: ["", "START"] },
+  n64:  { face: [{id:9,label:"C↑",color:"y"},{id:1,label:"C←",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:13,label:"C↓",color:"y"},{id:14,label:"C→",color:"y"}], shoulders: ["Z","R"], selectStart: ["", "START"], analog: true },
   // ---- Sega Genesis / Master System / GG ----
   md:     { face: [{id:1,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:8,label:"C",color:"y"},{id:9,label:"X",color:"x"},{id:10,label:"Y",color:"y"},{id:11,label:"Z",color:"y"}], shoulders: false, selectStart: ["MODE","START"] },
   sms:    { face: [{id:0,label:"1",color:"b"},{id:8,label:"2",color:"a"}], shoulders: false, selectStart: ["","START"] },
   gg:     { face: [{id:0,label:"1",color:"b"},{id:8,label:"2",color:"a"}], shoulders: false, selectStart: ["","START"] },
   segacd: { face: [{id:1,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:8,label:"C",color:"y"}], shoulders: false, selectStart: ["MODE","START"] },
   // ---- Sega Dreamcast / Saturn ----
-  dreamcast: { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"}], shoulders: ["L","R"], selectStart: ["","START"] },
+  dreamcast: { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"}], shoulders: ["L","R"], selectStart: ["","START"], analog: true },
   saturn:    { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:11,label:"Z",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:10,label:"C",color:"y"}], shoulders: false, selectStart: ["","START"] },
   // ---- Sony PS1/PS2: triangle/square/circle/cross ----
-  ps1: { face: [{id:9,label:"△",color:"y"},{id:1,label:"□",color:"x"},{id:8,label:"◯",color:"a"},{id:0,label:"✕",color:"b"}], shoulders: ["L1","R1","L2","R2"], selectStart: true },
-  ps2: { face: [{id:9,label:"△",color:"y"},{id:1,label:"□",color:"x"},{id:8,label:"◯",color:"a"},{id:0,label:"✕",color:"b"}], shoulders: ["L1","R1","L2","R2"], selectStart: true },
+  ps1: { face: [{id:9,label:"△",color:"y"},{id:1,label:"□",color:"x"},{id:8,label:"◯",color:"a"},{id:0,label:"✕",color:"b"}], shoulders: ["L1","R1","L2","R2"], selectStart: true, analog: true },
+  ps2: { face: [{id:9,label:"△",color:"y"},{id:1,label:"□",color:"x"},{id:8,label:"◯",color:"a"},{id:0,label:"✕",color:"b"}], shoulders: ["L1","R1","L2","R2"], selectStart: true, analog: true },
+  psp: { face: [{id:9,label:"△",color:"y"},{id:1,label:"□",color:"x"},{id:8,label:"◯",color:"a"},{id:0,label:"✕",color:"b"}], shoulders: ["L","R"], selectStart: true, analog: true },
   // ---- Nintendo GameCube / Wii ----
-  gc:  { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:13,label:"Z",color:"y"}], shoulders: ["L","R"], selectStart: ["","START"] },
-  wii: { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:13,label:"Z",color:"y"}], shoulders: ["L","R"], selectStart: true },
+  gc:  { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:13,label:"Z",color:"y"}], shoulders: ["L","R"], selectStart: ["","START"], analog: true },
+  wii: { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:13,label:"Z",color:"y"}], shoulders: ["L","R"], selectStart: true, analog: true },
   // ---- 3DS / DS ----
   ds:  { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"}], shoulders: ["L","R"], selectStart: true },
   // ---- TG-16/PCE: 2 botoes ----
@@ -2099,7 +2112,7 @@ const DEFAULT_CONTROL_PREFS = {
   hideWhenGamepad: true,
   theme: "default",
   scale: 1,
-  groupScale: { dpad: 1, face: 1, shoulders: 1, system: 1 },
+  groupScale: { dpad: 1, face: 1, shoulders: 1, system: 1, analog: 1 },
 };
 // v0.9.13: temas do app (paridade com o launcher do PC). Aplicado via data-theme.
 const APP_THEMES = [
@@ -2132,36 +2145,8 @@ function saveControlPrefs(prefs) {
 // aplicado AO VIVO (libretro_set_option seta OPTIONS_DIRTY -> core re-le na hora).
 // Os mesmos keys/values do SystemSettingsModal, mas com label PT e 1 toque. Cobre o
 // pedido do Paulo: tela de cima/baixo como principal, lado a lado, ou uma menor no canto.
-const SCREEN_LAYOUTS = {
-  ds: {
-    key: "melonds_screen_layout",
-    def: "Top/Bottom",
-    options: [
-      ["Top/Bottom", "Cima / Baixo"],
-      ["Bottom/Top", "Baixo / Cima"],
-      ["Left/Right", "Lado a lado"],
-      ["Hybrid Top", "Destaque cima"],
-      ["Hybrid Bottom", "Destaque baixo"],
-      ["Top Only", "Só de cima"],
-      ["Bottom Only", "Só de baixo"],
-    ],
-  },
-  "3ds": {
-    key: "citra_layout_option",
-    def: "Default Top-Bottom Screen",
-    options: [
-      ["Default Top-Bottom Screen", "Cima / Baixo"],
-      ["Side by Side", "Lado a lado"],
-      ["Large Screen, Small Screen", "Grande + pequena"],
-      ["Single Screen Only", "Tela única"],
-    ],
-    swap: {
-      key: "citra_swap_screen",
-      def: "Top",
-      options: [["Top", "Principal: Cima"], ["Bottom", "Principal: Baixo"]],
-    },
-  },
-};
+// v0.9.20: SCREEN_LAYOUTS movido pra ludexSystemOptions.js (compartilhado com
+// LudexLauncher PC) — importado acima junto com applySystemOptions.
 
 function MobileEmulatorView({ system, game, onClose }) {
   const layout = SYSTEM_LAYOUTS[system.id] || DEFAULT_LAYOUT;
@@ -2530,19 +2515,61 @@ function MobileEmulatorView({ system, game, onClose }) {
     const v = target.getAttribute("data-btn");
     return v == null ? null : parseInt(v, 10);
   }, []);
+  // v0.9.19: analogico na tela (faltava — GameCube/N64/PSP/PS/Dreamcast/Wii).
+  // Um dedo dentro do anel arrasta o knob; mandamos x/y normalizado (±32767, igual
+  // ao gamepad fisico) via libretro_set_analog stick 0. Tracker por touch.identifier.
+  const analogRef = useRef({ id: null, cx: 0, cy: 0, r: 1, knob: null });
+  const moveAnalog = useCallback((clientX, clientY) => {
+    const a = analogRef.current;
+    if (a.id == null) return;
+    let dx = clientX - a.cx, dy = clientY - a.cy;
+    const dist = Math.hypot(dx, dy);
+    if (dist > a.r) { dx = (dx / dist) * a.r; dy = (dy / dist) * a.r; }
+    if (a.knob) a.knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    lastInputRef.current = Date.now();
+    if (autoPaused) setAutoPaused(false);
+    const x = Math.max(-32767, Math.min(32767, Math.round((dx / a.r) * 32767)));
+    const y = Math.max(-32767, Math.min(32767, Math.round((dy / a.r) * 32767)));
+    invoke("libretro_set_analog", { stick: 0, x, y }).catch(() => {});
+  }, [autoPaused]);
+  const startAnalog = useCallback((t, baseEl) => {
+    const r = baseEl.getBoundingClientRect();
+    analogRef.current = {
+      id: t.identifier,
+      cx: r.left + r.width / 2,
+      cy: r.top + r.height / 2,
+      r: Math.max(1, r.width / 2),
+      knob: baseEl.querySelector(".lmx-emu-analog-knob"),
+    };
+    if (ctrlPrefsRef.current.vibration) haptic(8);
+    moveAnalog(t.clientX, t.clientY);
+  }, [moveAnalog]);
+  const endAnalog = useCallback(() => {
+    const a = analogRef.current;
+    if (a.knob) a.knob.style.transform = "";
+    analogRef.current = { ...a, id: null };
+    invoke("libretro_set_analog", { stick: 0, x: 0, y: 0 }).catch(() => {});
+  }, []);
+  const analogBaseAtPoint = useCallback((x, y) => {
+    const el = document.elementFromPoint(x, y);
+    return el && el.closest ? el.closest("[data-analog]") : null;
+  }, []);
   const onControlsTouchStart = useCallback((e) => {
     if (editMode) return;
     e.preventDefault();
     for (const t of e.changedTouches) {
+      const base = analogBaseAtPoint(t.clientX, t.clientY);
+      if (base) { startAnalog(t, base); continue; }
       const id = btnIdAtPoint(t.clientX, t.clientY);
       touchMap.current.set(t.identifier, id);
       if (id != null) pressBtn(id, true);
     }
-  }, [editMode, btnIdAtPoint, pressBtn]);
+  }, [editMode, btnIdAtPoint, pressBtn, analogBaseAtPoint, startAnalog]);
   const onControlsTouchMove = useCallback((e) => {
     if (editMode) return;
     e.preventDefault();
     for (const t of e.changedTouches) {
+      if (t.identifier === analogRef.current.id) { moveAnalog(t.clientX, t.clientY); continue; }
       const oldId = touchMap.current.get(t.identifier);
       const newId = btnIdAtPoint(t.clientX, t.clientY);
       if (newId !== oldId) {
@@ -2551,16 +2578,17 @@ function MobileEmulatorView({ system, game, onClose }) {
         touchMap.current.set(t.identifier, newId);
       }
     }
-  }, [editMode, btnIdAtPoint, pressBtn]);
+  }, [editMode, btnIdAtPoint, pressBtn, moveAnalog]);
   const onControlsTouchEnd = useCallback((e) => {
     if (editMode) return;
     e.preventDefault();
     for (const t of e.changedTouches) {
+      if (t.identifier === analogRef.current.id) { endAnalog(); continue; }
       const oldId = touchMap.current.get(t.identifier);
       if (oldId != null) pressBtn(oldId, false);
       touchMap.current.delete(t.identifier);
     }
-  }, [editMode, pressBtn]);
+  }, [editMode, pressBtn, endAnalog]);
 
   // v0.8.26: gamepad fisico (Bluetooth/USB) — Android WebView suporta nativo.
   // Standard mapping -> libretro RetroPad (mesma logica do desktop).
@@ -2940,6 +2968,7 @@ function MobileEmulatorView({ system, game, onClose }) {
       <div ref={controlsRef}
            className={`lmx-emu-controls lmx-ctrl-theme-${ctrlPrefs.theme} ${editMode ? "lmx-emu-edit" : ""} ${gamepadConnected && !editMode ? (ctrlPrefs.hideWhenGamepad ? "lmx-emu-controls-hidden" : "lmx-emu-controls-dim") : ""}`}
            data-face-count={layout.face.length}
+           data-has-analog={layout.analog ? "1" : undefined}
            onTouchStart={onControlsTouchStart}
            onTouchMove={onControlsTouchMove}
            onTouchEnd={onControlsTouchEnd}
@@ -2953,6 +2982,14 @@ function MobileEmulatorView({ system, game, onClose }) {
           <button className="lmx-emu-dpad-right" data-btn={7}>▶</button>
           <button className="lmx-emu-dpad-down"  data-btn={5}>▼</button>
         </div>
+        {/* Analogico esquerdo (so sistemas com stick: GC/N64/PSP/PS/Dreamcast/Wii) */}
+        {layout.analog && (
+          <div className="lmx-emu-analog" data-analog="0" style={groupStyle("analog")}
+               onTouchStart={editMode ? startDrag("analog") : undefined}
+               onMouseDown={editMode ? startDrag("analog") : undefined}>
+            <div className="lmx-emu-analog-knob" />
+          </div>
+        )}
         {/* Face buttons (A/B/X/Y/C/etc — varia por sistema) */}
         <div className={`lmx-emu-face lmx-emu-face-${layout.face.length}`}
              style={groupStyle("face")}
@@ -3007,6 +3044,7 @@ function MobileEmulatorView({ system, game, onClose }) {
           <div className="lmx-emu-edit-sizes">
             {[
               ["dpad", "Direcional"],
+              ...(layout.analog ? [["analog", "Analógico"]] : []),
               ["face", "Acoes"],
               ...(layout.shoulders ? [["shoulders", "L/R"]] : []),
               ...(layout.selectStart ? [["system", "Select/Start"]] : []),

@@ -8,7 +8,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { SystemSettingsModal } from "./LudexExtras";
 import { CloseIcon, SystemIcon } from "./ludexIcons";
 import { ToolsIcon as LxToolsIcon } from "./LudexExtras";
-import { hasOptionsForSystem, applySystemOptions, effectivePadMap, getFrontendConfig } from "./ludexSystemOptions";
+import { hasOptionsForSystem, applySystemOptions, effectivePadMap, getFrontendConfig, SCREEN_LAYOUTS, loadSystemOptions, saveSystemOptions } from "./ludexSystemOptions";
 import { validRomExtension, invokeTimeout } from "./ludexUtils";
 import { CheatsModal } from "./LudexCheatsModal";
 import { loadCheats, applyCheats } from "./ludexCheats";
@@ -26,6 +26,30 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
   const [cheatsOpen, setCheatsOpen] = useState(false);
   const [discInfo, setDiscInfo] = useState(null);
   const [discMenuOpen, setDiscMenuOpen] = useState(false);
+  // v0.9.20: layout de telas pra DS/3DS (paridade com o app mobile). Aplica AO VIVO
+  // via libretro_set_option + reload do core, igual o MobileEmulatorView faz.
+  const [screenLayoutOpen, setScreenLayoutOpen] = useState(false);
+  const [screenLayoutVals, setScreenLayoutVals] = useState(() => loadSystemOptions(system.id));
+  const setCoreOptionLive = useCallback(async (key, value) => {
+    const cur = { ...loadSystemOptions(system.id), [key]: value };
+    saveSystemOptions(system.id, cur);
+    setScreenLayoutVals(cur);
+    setStateMsg("Aplicando layout...");
+    try {
+      try { await invoke("libretro_save_state", { romPath: game.path, slot: 98 }); } catch {}
+      await invoke("libretro_set_option", { key, value });
+      try { await invoke("libretro_unload"); } catch {}
+      try { await applySystemOptions(system.id); } catch {}
+      const result = await invokeTimeout("libretro_load_game", { coreFilename: system.libretro_core, romPath: game.path }, 60000);
+      setInfo(result);
+      try { await invoke("libretro_load_state", { romPath: game.path, slot: 98 }); } catch {}
+      setStateMsg("Layout aplicado");
+      setTimeout(() => setStateMsg(null), 1200);
+    } catch (e) {
+      console.error("[layout] aplicar falhou", e);
+      setStateMsg(`Falha: ${e}`);
+    }
+  }, [system.id, system.libretro_core, game.path]);
   const audioCtxRef = useRef(null);
   const audioRateRef = useRef(32040);
   const audioGainNodeRef = useRef(null);
@@ -499,6 +523,60 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
       </button>
       {cheatsOpen && (
         <CheatsModal systemId={system.id} gamePath={game.path} onClose={() => setCheatsOpen(false)} />
+      )}
+      {/* v0.9.20: TELAS — config ao vivo de layout das 2 telas (DS/3DS), igual ao app mobile */}
+      {SCREEN_LAYOUTS[system.id] && (
+        <button
+          className="pb-emulator-cheats"
+          style={{ right: 200 }}
+          onClick={() => setScreenLayoutOpen(true)}
+          title="Layout das duas telas (cima/baixo, lado a lado, etc) — aplica na hora"
+        >
+          TELAS
+        </button>
+      )}
+      {screenLayoutOpen && SCREEN_LAYOUTS[system.id] && (
+        <div className="lx-modal-overlay" onClick={() => setScreenLayoutOpen(false)}>
+          <div className="lx-modal" onClick={(e) => e.stopPropagation()} role="dialog" style={{ maxWidth: 460 }}>
+            <div className="lx-modal-header">
+              <h2>Layout das telas</h2>
+              <button className="lx-modal-close" onClick={() => setScreenLayoutOpen(false)} aria-label="Fechar">×</button>
+            </div>
+            <div className="lx-settings-body">
+              <p className="lx-settings-hint">
+                Aplica na hora. Cima/baixo principal, lado a lado, ou uma menor no canto.
+              </p>
+              <div className="lx-settings-rows" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {SCREEN_LAYOUTS[system.id].options.map(([val, lbl]) => {
+                  const cfg = SCREEN_LAYOUTS[system.id];
+                  const active = (screenLayoutVals[cfg.key] ?? cfg.def) === val;
+                  return (
+                    <button
+                      key={val}
+                      className={`lx-settings-btn ${active ? "lx-settings-btn-primary" : "lx-settings-btn-ghost"}`}
+                      onClick={() => setCoreOptionLive(cfg.key, val)}
+                    >{lbl}</button>
+                  );
+                })}
+              </div>
+              {SCREEN_LAYOUTS[system.id].swap && (
+                <div className="lx-settings-rows" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                  {SCREEN_LAYOUTS[system.id].swap.options.map(([val, lbl]) => {
+                    const sw = SCREEN_LAYOUTS[system.id].swap;
+                    const active = (screenLayoutVals[sw.key] ?? sw.def) === val;
+                    return (
+                      <button
+                        key={val}
+                        className={`lx-settings-btn ${active ? "lx-settings-btn-primary" : "lx-settings-btn-ghost"}`}
+                        onClick={() => setCoreOptionLive(sw.key, val)}
+                      >{lbl}</button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
       {discInfo && discInfo.supported && discInfo.num_images > 1 && (
         <button

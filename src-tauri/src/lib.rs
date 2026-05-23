@@ -1141,30 +1141,79 @@ fn is_generic_extension(ext: &str) -> bool {
         | "pbp" | "m3u" | "mds" | "ccd" | "rom")
 }
 
-/// v0.9.18: GameCube e Wii compartilham as extensoes iso/rvz/wia, entao no scan
-/// plano (Android) o mesmo .rvz caia nas DUAS listas. Aqui lemos o magic word do
-/// cabecalho do disco pra dizer com certeza qual e qual:
-///   Wii      = 0x5D1C9EA3 no offset 0x18 do disc-header
-///   GameCube = 0xC2339F3D no offset 0x1C do disc-header
-/// Em imagem crua (.iso/.gcm/.nkit.iso) o disc-header esta no offset 0; em
-/// RVZ/WIA os 0x80 bytes iniciais do disco ficam guardados no offset 0x58.
-/// .wbfs/.wad sao sempre Wii; .gcm/.gcz sempre GameCube (resolve sem ler).
-fn detect_gc_wii(path: &Path, ext: &str) -> Option<&'static str> {
+/// v0.9.20: identifica o sistema-dono de um arquivo de disco lendo o conteudo
+/// (nao o nome). Antes o scanner em modo flat (Android) precisava de keyword
+/// "ps1"/"psx" no nome -> jogos de PS1/PSP sem keyword nao apareciam ("PSP nao
+/// identifica jogos"). Agora detectamos por header.
+///
+/// Magic words:
+///   Wii      0x5D1C9EA3 @ 0x18 (raw) ou 0x58+0x18 (RVZ/WIA)
+///   GameCube 0xC2339F3D @ 0x1C (raw) ou 0x58+0x1C (RVZ/WIA)
+/// Outros sao identificados por strings no SYSTEM.CNF / volume:
+///   PS2      "BOOT2"
+///   PS1      "cdrom:\" (mas NAO BOOT2)
+///   PSP      "UMD_DATA.BIN" / "PSP_GAME"
+///   Saturn   "SEGA SATURN"
+///   SegaCD   "SEGADISCSYSTEM"
+/// Extensoes que ja apontam pra UM sistema retornam direto (sem ler).
+///
+/// .cue e um text descriptor — abre o .bin referenciado e sniff nele.
+fn detect_disc_system(path: &Path, ext: &str) -> Option<&'static str> {
     use std::io::Read;
     match ext {
-        "wbfs" | "wad" => return Some("wii"),
-        "gcm" | "gcz"  => return Some("gc"),
+        "wbfs" | "wad"  => return Some("wii"),
+        "gcm" | "gcz"   => return Some("gc"),
+        "gdi" | "cdi"   => return Some("dreamcast"),
+        "pbp" | "cso"   => return Some("psp"),
         _ => {}
     }
-    let mut f = std::fs::File::open(path).ok()?;
-    let mut buf = [0u8; 0x80];
-    f.read_exact(&mut buf).ok()?;
-    let base = if &buf[0..4] == b"RVZ\x01" || &buf[0..4] == b"WIA\x01" { 0x58usize } else { 0 };
-    if base + 0x20 > buf.len() { return None; }
-    let rd = |off: usize| u32::from_be_bytes([buf[off], buf[off + 1], buf[off + 2], buf[off + 3]]);
-    if rd(base + 0x18) == 0x5D1C_9EA3 { Some("wii") }
-    else if rd(base + 0x1C) == 0xC233_9F3D { Some("gc") }
-    else { None }
+    // .cue: redireciona pro .bin da Track 01
+    let sniff_path: PathBuf = if ext == "cue" {
+        match read_cue_first_track(path) { Some(p) => p, None => return None }
+    } else { path.to_path_buf() };
+    let mut f = std::fs::File::open(&sniff_path).ok()?;
+    let mut head = [0u8; 0x80];
+    if f.read_exact(&mut head).is_err() { return None; }
+    let base = if &head[0..4] == b"RVZ\x01" || &head[0..4] == b"WIA\x01" { 0x58usize } else { 0 };
+    if base + 0x20 <= head.len() {
+        let rd = |o: usize| u32::from_be_bytes([head[o], head[o+1], head[o+2], head[o+3]]);
+        if rd(base + 0x18) == 0x5D1C_9EA3 { return Some("wii"); }
+        if rd(base + 0x1C) == 0xC233_9F3D { return Some("gc"); }
+    }
+    // PS1/PS2/PSP/Saturn/SegaCD: scan dos primeiros 8MB por marcadores
+    let mut buf = vec![0u8; 8 * 1024 * 1024];
+    let n = f.read(&mut buf).unwrap_or(0);
+    if n == 0 { return None; }
+    let s = &buf[..n];
+    let contains = |needle: &[u8]| s.windows(needle.len()).any(|w| w == needle);
+    if contains(b"UMD_DATA.BIN") || contains(b"PSP_GAME") { return Some("psp"); }
+    if contains(b"BOOT2") { return Some("ps2"); }
+    if contains(b"cdrom:\\") { return Some("ps1"); }
+    if contains(b"SEGA SATURN") { return Some("saturn"); }
+    if contains(b"SEGADISCSYSTEM") { return Some("segacd"); }
+    None
+}
+
+/// Le um .cue (texto pequeno) e retorna o path do .bin da primeira track.
+/// Suporta FILE "name.bin" BINARY e FILE name.bin BINARY.
+fn read_cue_first_track(cue: &Path) -> Option<PathBuf> {
+    let content = std::fs::read_to_string(cue).ok()?;
+    let parent = cue.parent()?;
+    for line in content.lines() {
+        let t = line.trim();
+        let rest = match t.strip_prefix("FILE ").or_else(|| t.strip_prefix("file ")) {
+            Some(r) => r, None => continue,
+        };
+        if let Some(start) = rest.find('"') {
+            if let Some(end_rel) = rest[start + 1..].find('"') {
+                return Some(parent.join(&rest[start + 1..start + 1 + end_rel]));
+            }
+        }
+        // sem aspas
+        let name = rest.splitn(2, ' ').next()?;
+        return Some(parent.join(name));
+    }
+    None
 }
 
 /// Palavras-chave (lowercase, substring) que identificam um sistema no
@@ -1253,18 +1302,25 @@ fn scan_system(roms_root: &Path, emulators_root: &Path, cfg: &EmulatorConfig) ->
             if !cfg.extensions.iter().any(|e| *e == ext) {
                 continue;
             }
-            // v0.9.18: GameCube x Wii — desambigua pelo magic do disco pra o mesmo
-            // jogo nao aparecer nas duas listas (.rvz/.iso batem nos dois sistemas).
-            // Disco de verdade SEMPRE tem o magic; se nao bate este sistema, pula.
+            // v0.9.20: identifica disco pelo CONTEUDO pra todos os sistemas opticos
+            // que compartilham extensoes (.iso/.bin/.cue/.chd/.rvz/.pbp/etc). Antes
+            // (a) GC/Wii caiam nos dois (.rvz/.iso comuns), (b) PSP/PS1 nao apareciam
+            // no scan plano (keyword obrigatoria que o nome nao tinha) — agora a
+            // confirmacao vem do magic word ou do SYSTEM.CNF do proprio disco.
             // disc_confirmed pula a checagem de keyword generica abaixo (um .iso de
             // Wii como "Sonic Colors" nao tem "wii" no nome mas o magic ja confirmou).
             let mut disc_confirmed = false;
-            if matches!(cfg.id, "gc" | "wii")
-                && matches!(ext.as_str(), "iso" | "rvz" | "wia" | "gcm" | "gcz" | "wbfs" | "wad")
+            if matches!(cfg.id, "gc" | "wii" | "ps1" | "ps2" | "psp" | "dreamcast" | "saturn" | "segacd")
+                && matches!(ext.as_str(),
+                    "iso" | "rvz" | "wia" | "gcm" | "gcz" | "wbfs" | "wad"
+                    | "bin" | "cue" | "img" | "pbp" | "cso" | "gdi" | "cdi")
             {
-                match detect_gc_wii(path, &ext) {
+                match detect_disc_system(path, &ext) {
                     Some(sys) if sys == cfg.id => disc_confirmed = true,
-                    _ => continue,
+                    Some(_) => continue,
+                    // Conteudo nao reconhecido (.chd, .bin truncado, etc) -> cai pro
+                    // bloco generico abaixo (keyword) — nao bloqueia se for ambiguo.
+                    None => {}
                 }
             }
             // Flat scan: extensoes genericas (.iso, .bin, .zip, .chd, .cue, .pbp, .img,
@@ -1483,6 +1539,59 @@ fn rewrite_xemu_paths(toml_path: &std::path::Path, emu_dir: &std::path::Path) {
     }
 }
 
+/// v0.9.20: instala .pkg do PS3 via `rpcs3 --installpkg` e retorna o path do
+/// EBOOT.BIN do jogo instalado. RPCS3 nao boota .pkg direto — joga "Invalid file
+/// or folder" (foi o erro do print do Paulo em Metal Slug Anthology).
+///
+/// Detecta o jogo instalado comparando o mtime de dev_hdd0/game/* antes e depois
+/// (pega o dir mais recente). Funciona pra instalacao 1-a-1 (caso comum).
+fn install_rpcs3_pkg(rpcs3_exe: &Path, pkg: &Path) -> Result<PathBuf, String> {
+    let rpcs3_root = rpcs3_exe.parent().ok_or("rpcs3 sem parent dir")?;
+    let game_root = rpcs3_root.join("dev_hdd0").join("game");
+    let _ = std::fs::create_dir_all(&game_root);
+    // snapshot mtimes antes pra distinguir o que e novo/atualizado
+    let mut before: std::collections::HashMap<PathBuf, std::time::SystemTime> = std::collections::HashMap::new();
+    if let Ok(rd) = std::fs::read_dir(&game_root) {
+        for e in rd.filter_map(|x| x.ok()) {
+            if e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                let mt = e.metadata().and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH);
+                before.insert(e.path(), mt);
+            }
+        }
+    }
+    log::info!("[ps3] rpcs3 --installpkg \"{}\"", pkg.display());
+    let status = Command::new(rpcs3_exe)
+        .args(["--no-gui", "--installpkg"])
+        .arg(pkg)
+        .current_dir(rpcs3_root)
+        .status()
+        .map_err(|e| format!("nao consegui executar --installpkg: {}", e))?;
+    if !status.success() {
+        return Err(format!("rpcs3 --installpkg saiu com codigo {:?}", status.code()));
+    }
+    let mut newest: Option<(PathBuf, std::time::SystemTime)> = None;
+    for e in std::fs::read_dir(&game_root)
+        .map_err(|e| format!("dev_hdd0/game inacessivel: {}", e))?
+        .filter_map(|x| x.ok())
+    {
+        if !e.file_type().map(|t| t.is_dir()).unwrap_or(false) { continue; }
+        let path = e.path();
+        let mtime = e.metadata().and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH);
+        let is_new_or_updated = before.get(&path).map(|t| *t < mtime).unwrap_or(true);
+        if !is_new_or_updated { continue; }
+        match &newest {
+            Some((_, prev_t)) if *prev_t >= mtime => {}
+            _ => newest = Some((path, mtime)),
+        }
+    }
+    let (game_dir, _) = newest.ok_or("nao localizei pasta criada pelo --installpkg em dev_hdd0/game")?;
+    let eboot = game_dir.join("USRDIR").join("EBOOT.BIN");
+    if !eboot.is_file() {
+        return Err(format!("EBOOT.BIN nao encontrado em {}", eboot.display()));
+    }
+    Ok(eboot)
+}
+
 #[tauri::command]
 fn launch_game(system_id: String, rom_path: String) -> Result<(), String> {
     let cfg = EMULATORS
@@ -1509,6 +1618,16 @@ fn launch_game(system_id: String, rom_path: String) -> Result<(), String> {
         }
     }
 
+    // v0.9.20: PS3 .pkg precisa SER INSTALADO antes (rpcs3 --installpkg) e depois
+    // bootado pelo EBOOT.BIN do jogo instalado — bootar o .pkg direto da "Invalid
+    // file or folder". Aqui rodamos a instalacao sincrona; o boot continua no fluxo
+    // normal abaixo, so trocando o que vai como argumento (eboot em vez do pkg).
+    let rom_arg_path: PathBuf = if system_id == "ps3" && rom_path.to_ascii_lowercase().ends_with(".pkg") {
+        install_rpcs3_pkg(&exe, &rom).map_err(|e| format!("PS3 install: {}", e))?
+    } else {
+        rom.clone()
+    };
+
     let rom_name = rom.file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| rom_path.clone());
@@ -1520,7 +1639,7 @@ fn launch_game(system_id: String, rom_path: String) -> Result<(), String> {
     for arg in cfg.launch_args {
         command.arg(arg);
     }
-    command.arg(&rom_path);
+    command.arg(&rom_arg_path);
     if let Some(parent) = exe.parent() {
         command.current_dir(parent);
     }
@@ -2639,8 +2758,106 @@ async fn fetch_cover(system_id: String, game_name: String) -> Option<String> {
         }
     }
 
-    log::warn!("[cover] sem match no IGDB pra '{}' (plataforma {})", game_name, cfg.igdb_platform);
+    // v0.9.20: fallback FREE — libretro thumbnails (community DB, sem API key).
+    // Cobre muito jogo que o IGDB nao tem ou nao matchou. URL:
+    //   https://thumbnails.libretro.com/<Platform>/Named_Boxarts/<nome>.png
+    // Tentamos variantes de regiao porque a libretro DB usa "<jogo> (USA).png" etc.
+    if let Some(platform) = libretro_thumb_platform(&system_id) {
+        let variants = libretro_name_variants(&game_name);
+        for name in &variants {
+            let url = format!(
+                "https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png",
+                url_encode_path(platform),
+                url_encode_path(name),
+            );
+            let resp = match client.get(&url).send().await { Ok(r) => r, Err(_) => continue };
+            if !resp.status().is_success() { continue; }
+            let bytes = match resp.bytes().await { Ok(b) => b, Err(_) => continue };
+            if tokio::fs::write(&cache_file, &bytes).await.is_ok() {
+                log::info!("[cover] libretro-thumb match: {} <- {}", game_name, name);
+                return Some(cache_file.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    log::warn!("[cover] sem match (IGDB + libretro-thumb) pra '{}' (plataforma {})", game_name, cfg.igdb_platform);
     None
+}
+
+/// Map dos system_ids do Ludex pros nomes de plataforma usados pela
+/// libretro-thumbnails (formato oficial RetroArch). None = plataforma sem thumbs.
+fn libretro_thumb_platform(system_id: &str) -> Option<&'static str> {
+    Some(match system_id {
+        "snes"      => "Nintendo - Super Nintendo Entertainment System",
+        "nes"       => "Nintendo - Nintendo Entertainment System",
+        "gb"        => "Nintendo - Game Boy",
+        "gbc"       => "Nintendo - Game Boy Color",
+        "gba"       => "Nintendo - Game Boy Advance",
+        "n64"       => "Nintendo - Nintendo 64",
+        "gc"        => "Nintendo - GameCube",
+        "wii"       => "Nintendo - Wii",
+        "wiiu"      => "Nintendo - Wii U",
+        "ds"        => "Nintendo - Nintendo DS",
+        "3ds"       => "Nintendo - Nintendo 3DS",
+        "switch"    => "Nintendo - Switch",
+        "vb"        => "Nintendo - Virtual Boy",
+        "ps1"       => "Sony - PlayStation",
+        "ps2"       => "Sony - PlayStation 2",
+        "psp"       => "Sony - PlayStation Portable",
+        "vita"      => "Sony - PlayStation Vita",
+        "ps3"       => "Sony - PlayStation 3",
+        "md"        => "Sega - Mega Drive - Genesis",
+        "sms"       => "Sega - Master System - Mark III",
+        "gg"        => "Sega - Game Gear",
+        "saturn"    => "Sega - Saturn",
+        "dreamcast" => "Sega - Dreamcast",
+        "segacd"    => "Sega - Mega-CD - Sega CD",
+        "a2600"     => "Atari - 2600",
+        "lynx"      => "Atari - Lynx",
+        "jaguar"    => "Atari - Jaguar",
+        "tg16"      => "NEC - PC Engine - TurboGrafx 16",
+        "ws"        => "Bandai - WonderSwan",
+        "ngpc"      => "SNK - Neo Geo Pocket Color",
+        "msx"       => "Microsoft - MSX",
+        "c64"       => "Commodore - 64",
+        "zx"        => "Sinclair - ZX Spectrum",
+        "amiga"     => "Commodore - Amiga",
+        "threedo"   => "The 3DO Company - 3DO",
+        "arcade"    => "FB Neo - Arcade Games",
+        _ => return None,
+    })
+}
+
+/// Gera variantes de nome pra tentar no libretro thumbs (a DB usa "<nome> (USA).png").
+/// Inclui o nome cru e variantes com region tag comuns.
+fn libretro_name_variants(name: &str) -> Vec<String> {
+    let base = name.trim();
+    let mut out = Vec::with_capacity(8);
+    out.push(format!("{} (USA)", base));
+    out.push(format!("{} (Europe)", base));
+    out.push(format!("{} (USA, Europe)", base));
+    out.push(format!("{} (World)", base));
+    out.push(format!("{} (Japan)", base));
+    out.push(base.to_string());
+    out.push(format!("{} (USA) (En,Fr,De,Es,It)", base));
+    out
+}
+
+/// Percent-encode para path-segment de URL. Mantem alfa-num + `-_.~`,
+/// encoda tudo o resto (espaco, parens, vírgula, etc).
+fn url_encode_path(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 2);
+    for c in s.chars() {
+        if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '~') {
+            out.push(c);
+        } else {
+            let mut buf = [0u8; 4];
+            for &b in c.encode_utf8(&mut buf).as_bytes() {
+                out.push_str(&format!("%{:02X}", b));
+            }
+        }
+    }
+    out
 }
 
 /// Resolve a pasta de musica seguindo a mesma logica dos emuladores:

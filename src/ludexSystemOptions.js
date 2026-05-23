@@ -185,9 +185,12 @@ export const SYSTEM_OPTIONS = {
 
   // ===== PSP (PPSSPP) =====
   psp: [
+    // v0.9.20: defaults reduzidos pra equilibrio FPS/audio (Paulo: PSP lento +
+    // baixo FPS + audio ruim). 2x nativo (960x544) ja parece otimo e roda solto;
+    // auto frame skip on evita audio crackling em momentos pesados.
     sel('ppsspp_internal_resolution', 'Resolução Interna', 'video',
       ['480x272', '960x544', '1440x816', '1920x1088', '2400x1360', '2880x1632', '3360x1904', '3840x2176'],
-      '1440x816'),
+      '960x544'),
     sel('ppsspp_texture_anisotropic_filtering', 'Anisotrópico', 'video',
       ['off', '2x', '4x', '8x', '16x'],
       'off'),
@@ -208,7 +211,10 @@ export const SYSTEM_OPTIONS = {
       'Off'),
     sel('ppsspp_auto_frame_skip', 'Auto Frame Skip', 'performance',
       ['disabled', 'enabled'],
-      'disabled'),
+      'enabled'),
+    sel('ppsspp_locked_cpu_speed', 'CPU Speed Lock', 'performance',
+      ['off', '222MHz', '266MHz', '333MHz', '444MHz', '666MHz'],
+      'off'),
     sel('ppsspp_force_max_fps', 'FPS Máximo', 'performance',
       ['off', '15', '30', '60'],
       '60'),
@@ -594,6 +600,40 @@ export function saveSystemOptions(systemId, values) {
 export function clearSystemOptions(systemId) {
   try { localStorage.removeItem(STORAGE_PREFIX + systemId); } catch {}
 }
+
+// v0.9.20: layouts de tela pra consoles de 2 telas (DS, 3DS). Antes vivia so no
+// LudexMobile; agora exportado pra o launcher do PC tb mostrar o mesmo controle
+// (regra: mudanca aplicada em TODOS os locais onde o componente aparece).
+export const SCREEN_LAYOUTS = {
+  ds: {
+    key: "melonds_screen_layout",
+    def: "Top/Bottom",
+    options: [
+      ["Top/Bottom", "Cima / Baixo"],
+      ["Bottom/Top", "Baixo / Cima"],
+      ["Left/Right", "Lado a lado"],
+      ["Hybrid Top", "Destaque cima"],
+      ["Hybrid Bottom", "Destaque baixo"],
+      ["Top Only", "So de cima"],
+      ["Bottom Only", "So de baixo"],
+    ],
+  },
+  "3ds": {
+    key: "citra_layout_option",
+    def: "Default Top-Bottom Screen",
+    options: [
+      ["Default Top-Bottom Screen", "Cima / Baixo"],
+      ["Side by Side", "Lado a lado"],
+      ["Large Screen, Small Screen", "Grande + pequena"],
+      ["Single Screen Only", "Tela unica"],
+    ],
+    swap: {
+      key: "citra_swap_screen",
+      def: "Top",
+      options: [["Top", "Principal: Cima"], ["Bottom", "Principal: Baixo"]],
+    },
+  },
+};
 
 // Aplica todas opcoes salvas de um sistema (chamado antes de load_game).
 // v0.9.1: skip opcoes frontend-only (ludex_*) — essas sao lidas pelo EmulatorView

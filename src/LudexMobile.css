@@ -36,15 +36,23 @@
 
 * { box-sizing: border-box; }
 
-/* v0.9.18: temas do app mudam SOMENTE a cor do texto/realce. Fundo, superficies,
-   bordas e toda a estrutura continuam padrao (:root). Pedido do Paulo: "mudancas
-   apenas nas fontes de texto (cores), de resto continua padrao". Por isso NAO
-   sobrescrevem --lmx-bg/surface/border — so os tokens de texto e o accent. */
-.lmx[data-theme="switch-dark"] { --lmx-text:#ffffff; --lmx-text-dim:rgba(255,255,255,0.5); --lmx-accent:#cbd5e1; }
-.lmx[data-theme="ps3-wave"]    { --lmx-text:#e8f1ff; --lmx-text-dim:#7d9bc4; --lmx-accent:#7db0ff; }
-.lmx[data-theme="sunset"]      { --lmx-text:#fff8f0; --lmx-text-dim:#e0a878; --lmx-accent:#ffb066; }
-.lmx[data-theme="forest"]      { --lmx-text:#e8fff2; --lmx-text-dim:#9bc4a8; --lmx-accent:#86efac; }
-.lmx[data-theme="light"]       { --lmx-text:#f4f4fa; --lmx-text-dim:rgba(255,255,255,0.55); --lmx-accent:#c4b5fd; }
+/* v0.9.20: REVERTIDO pro tema FULL (igual o launcher do PC). Paulo esclareceu que
+   o tema deve mudar fundo, superficies, bordas, texto e accent — nao so texto.
+   (A v0.9.18 era so-texto baseado em pedido anterior; agora alinhado com o PC.) */
+.lmx[data-theme="switch-dark"] { --lmx-bg:#161616; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.08); --lmx-border:rgba(255,255,255,0.1); --lmx-text:#fff; --lmx-text-dim:rgba(255,255,255,0.5); --lmx-accent:#cbd5e1; }
+.lmx[data-theme="ps3-wave"]    { --lmx-bg:#021232; --lmx-surface:rgba(255,255,255,0.06); --lmx-surface-2:rgba(255,255,255,0.1);  --lmx-border:rgba(125,155,196,0.28); --lmx-text:#e8f1ff; --lmx-text-dim:#7d9bc4; --lmx-accent:#7db0ff; }
+.lmx[data-theme="sunset"]      { --lmx-bg:#1a0a14; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.09); --lmx-border:rgba(252,211,77,0.22); --lmx-text:#fff8f0; --lmx-text-dim:#c9a8b8; --lmx-accent:#ffb066; }
+.lmx[data-theme="forest"]      { --lmx-bg:#0a1612; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.09); --lmx-border:rgba(134,239,172,0.22); --lmx-text:#e8fff2; --lmx-text-dim:#9bc4a8; --lmx-accent:#86efac; }
+.lmx[data-theme="light"]       { --lmx-bg:#ededed; --lmx-surface:rgba(0,0,0,0.04);       --lmx-surface-2:rgba(0,0,0,0.07);       --lmx-border:rgba(0,0,0,0.12);      --lmx-text:#1a1a1a; --lmx-text-muted:rgba(0,0,0,0.6); --lmx-text-dim:rgba(0,0,0,0.5); --lmx-accent:#6d28d9; }
+.lmx[data-theme="light"] { background-image: none; }
+/* Tema Light precisa de cor de texto explicita em superficies escuras de conteudo. */
+.lmx[data-theme="light"] .lmx-page-header h1,
+.lmx[data-theme="light"] .lmx-section-title,
+.lmx[data-theme="light"] .lmx-systems-cat,
+.lmx[data-theme="light"] .lmx-systems-row-name,
+.lmx[data-theme="light"] .lmx-settings-value,
+.lmx[data-theme="light"] .lmx-folder-item-label,
+.lmx[data-theme="light"] .lmx-detail-title { color: var(--lmx-text); }
 
 .lmx {
   position: fixed;
@@ -1834,7 +1842,10 @@
 .lmx-emu-face-5 .lmx-emu-face-pos-1 { top: 50px; left: 0;    }
 .lmx-emu-face-5 .lmx-emu-face-pos-2 { top: 50px; right: 0;   }
 .lmx-emu-face-5 .lmx-emu-face-pos-3 { top: 100px; left: 50px; }
-.lmx-emu-face-5 .lmx-emu-face-pos-4 { top: -20px; right: -10px; width: 40px; height: 40px; font-size: 11px; } /* Z */
+/* v0.9.19: Z ia em top:-20/right:-10 (FORA do container) e colidia com o ombro R.
+   Agora fica no buraco central do diamante — sem colisao com shoulders nem com os
+   4 botoes das pontas. */
+.lmx-emu-face-5 .lmx-emu-face-pos-4 { top: 58px; left: 58px; width: 40px; height: 40px; font-size: 11px; } /* Z */
 /* 6 botoes: hexagonal/Genesis 6-button + N64 C-buttons */
 .lmx-emu-face-6 { width: 180px; height: 156px; }
 .lmx-emu-face-6 .lmx-emu-face-pos-0 { top: 0;    left: 65px; }   /* topo central */
@@ -1843,6 +1854,45 @@
 .lmx-emu-face-6 .lmx-emu-face-pos-3 { top: 70px; left: 65px; }   /* meio centro */
 .lmx-emu-face-6 .lmx-emu-face-pos-4 { top: 70px; right: 0;   }   /* meio dir */
 .lmx-emu-face-6 .lmx-emu-face-pos-5 { top: 0;    right: 0;   }   /* topo dir */
+
+/* v0.9.19: analogico esquerdo na tela. Anel fixo + knob que segue o dedo.
+   So aparece em sistemas com layout.analog (GC/N64/PSP/PS/Dreamcast/Wii). */
+.lmx-emu-analog {
+  position: absolute;
+  bottom: 24px;
+  left: 26px;
+  width: 124px;
+  height: 124px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: inset 0 0 22px rgba(0,0,0,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+.lmx-emu-analog-knob {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(124,92,255,0.4);
+  border: 1px solid rgba(255,255,255,0.3);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4), inset 0 0 12px rgba(255,255,255,0.18);
+  transition: transform 0.04s linear;
+  pointer-events: none;
+}
+/* Quando ha analogico, o container e mais alto e o D-pad sobe + encolhe pra o
+   stick ocupar a zona confortavel do polegar esquerdo SEM colidir com o dpad. */
+.lmx-emu-controls[data-has-analog] { height: 280px; }
+.lmx-emu-controls[data-has-analog] .lmx-emu-dpad {
+  bottom: 156px;
+  left: 30px;
+  width: 114px;
+  height: 114px;
+  grid-template-columns: 38px 38px 38px;
+  grid-template-rows: 38px 38px 38px;
+}
 
 .lmx-emu-system {
   position: absolute;
@@ -1908,9 +1958,24 @@
     bottom: max(env(safe-area-inset-bottom, 20px), 30px);
     left: 24px;
   }
-  .lmx-emu-abxy {
+  /* v0.9.19: era ".lmx-emu-abxy" (classe que NAO existe) — por isso os botoes de
+     acao nao reposicionavam no landscape e o layout "bugava". A classe real e
+     .lmx-emu-face. Agora vai pro canto inferior-direito como deve. */
+  .lmx-emu-face {
     bottom: max(env(safe-area-inset-bottom, 20px), 30px);
     right: 24px;
+    left: auto;
+    top: auto;
+  }
+  /* Analogico no canto inferior-esquerdo; com analogico o dpad e os L/R sobem
+     pra empilhar sem colidir (stick embaixo, dpad no meio, L/R em cima). */
+  .lmx-emu-analog {
+    bottom: max(env(safe-area-inset-bottom, 20px), 30px);
+    left: 24px;
+  }
+  .lmx-emu-controls[data-has-analog] .lmx-emu-dpad {
+    bottom: calc(max(env(safe-area-inset-bottom, 20px), 30px) + 140px);
+    left: 30px;
   }
   .lmx-emu-system {
     top: auto;
@@ -1926,6 +1991,9 @@
     bottom: calc(max(env(safe-area-inset-bottom, 20px), 30px) + 156px);
     left: 24px;
     right: 24px;
+  }
+  .lmx-emu-controls[data-has-analog] .lmx-emu-shoulders {
+    bottom: calc(max(env(safe-area-inset-bottom, 20px), 30px) + 268px);
   }
   .lmx-emu-back {
     /* Em landscape o back fica menor */

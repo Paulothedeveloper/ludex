@@ -4,6 +4,21 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.20": [
+    "Botao de refresh do app agora re-escaneia a pasta e recarrega capas (antes so apagava as capas).",
+    "PSP, PS1 e Dreamcast agora aparecem na lista certa no Android (identificacao pelo proprio disco).",
+    "Tema do app volta a mudar fundo + cards + texto (como no PC).",
+    "PS3 .pkg agora INSTALA primeiro e depois inicia (corrige 'Invalid file or folder' do RPCS3).",
+    "Capas: novo fallback gratis em libretro-thumbnails quando o IGDB nao encontra (muito menos jogo sem capa).",
+    "Launcher PC: botao TELAS no jogo de DS/3DS pra trocar layout das duas telas ao vivo (igual ja tinha no celular).",
+    "PSP melhor de fabrica: resolucao 2x (era 3x), auto frame-skip ligado e CPU lock disponivel = mais FPS e audio melhor.",
+    "Mais de 15 cores e algumas BIOS estavam faltando no PC e causavam crash/tela preta. Veja Ludex/CORES-E-BIOS.md.",
+  ],
+  "0.9.19": [
+    "Analogico na tela para GameCube, Nintendo 64, PSP, PlayStation, Dreamcast e Wii.",
+    "Controles na horizontal reposicionados (nao bagunca mais o layout).",
+    "Botao Z do GameCube/Wii reposicionado pra nao colidir com o L/R.",
+  ],
   "0.9.18": [
     "GameCube e Wii agora aparecem cada um na sua lista (identificacao pelo proprio disco, nao mais pelo nome do arquivo).",
   ],
