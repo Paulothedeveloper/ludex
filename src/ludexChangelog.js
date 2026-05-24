@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.22": [
+    "Launcher PC: quando um core libretro estiver faltando, o erro agora aparece bem claro e abre a pasta cores/ ou copia a URL pro buildbot.",
+  ],
   "0.9.21": [
     "Performance dos emuladores 3D no Android: leitura GPU agora e assincrona (2 buffers em ping-pong). Wii/GameCube/N64/PSP/Dreamcast rodam mais fluido e o audio para de engasgar.",
   ],

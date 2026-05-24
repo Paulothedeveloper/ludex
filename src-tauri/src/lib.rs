@@ -3152,6 +3152,24 @@ fn open_system_folder() -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_cores_folder() -> Result<(), String> {
+    let dir = resolve_cores_dir().ok_or("pasta cores nao resolvida")?;
+    std::fs::create_dir_all(&dir).ok();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        Command::new("explorer.exe").arg(&dir).creation_flags(CREATE_NO_WINDOW)
+            .spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    { Command::new("open").arg(&dir).spawn().map_err(|e| e.to_string())?; }
+    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
+    { Command::new("xdg-open").arg(&dir).spawn().map_err(|e| e.to_string())?; }
+    Ok(())
+}
+
+#[tauri::command]
 fn libretro_load_game(core_filename: String, rom_path: String) -> Result<LibretroLoadResult, String> {
     let cores_dir = resolve_cores_dir().ok_or("pasta cores nao encontrada")?;
     let core_path = cores_dir.join(&core_filename);
@@ -5942,6 +5960,7 @@ pub fn run() {
             android_ludex_base_path,
             bios_try_auto_import,
             open_system_folder,
+            open_cores_folder,
             check_update_info,
             android_download_apk,
             android_install_apk,

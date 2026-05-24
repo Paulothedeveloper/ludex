@@ -683,6 +683,32 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
               }}>Auto-import BIOS</button>
             </div>
           )}
+          {/* v0.9.22: helper p/ core libretro faltando — antes a mensagem aparecia
+              vaga (ou ate sumia se o erro era so "core nao encontrado: <path>"),
+              dando sensacao de "tela preta" no GC/3DS/DS/etc quando o .dll faltava.
+              Agora aponta certinho pro arquivo + abre o guia local. */}
+          {(String(error).toLowerCase().includes("core nao encontrado") ||
+            String(error).toLowerCase().includes("sem core libretro") ||
+            String(error).toLowerCase().includes("nao encontrado")) && (
+            <div style={{ marginTop: 12, padding: 12, background: "rgba(255,255,255,0.04)", borderRadius: 8, maxWidth: 560 }}>
+              <p style={{ margin: "0 0 8px 0", fontSize: 13 }}>
+                <b>Como resolver:</b> o core libretro pra <b>{system.name}</b> nao esta na pasta <code>cores/</code>.
+                Baixe o arquivo <code>{system.libretro_core || "(verifique CORES-E-BIOS.md)"}</code> em
+                <code> buildbot.libretro.com/nightly/windows/x86_64/latest/</code> (descompacte o .zip e copie o .dll).
+              </p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                <button className="pb-btn" onClick={async () => {
+                  try { await invoke("open_cores_folder"); } catch (e) {
+                    alert("Falha ao abrir pasta cores: " + e);
+                  }
+                }}>Abrir pasta cores/</button>
+                <button className="pb-btn" onClick={() => {
+                  navigator.clipboard?.writeText(`https://buildbot.libretro.com/nightly/windows/x86_64/latest/${system.libretro_core || ""}.zip`).catch(() => {});
+                  alert("URL copiada pro clipboard.");
+                }}>Copiar URL do core</button>
+              </div>
+            </div>
+          )}
           <button className="pb-btn pb-btn-primary" onClick={onClose}>Voltar</button>
         </div>
       ) : (
