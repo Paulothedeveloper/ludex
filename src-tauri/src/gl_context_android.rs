@@ -27,7 +27,16 @@ struct GlesContext {
     depth_rb: u32,
     width: u32,
     height: u32,
-    readbuf: Vec<u8>, // buffer CPU reaproveitado no readback
+    readbuf: Vec<u8>, // buffer CPU reaproveitado no flip do readback
+    // v0.9.21: 2 PBOs em ping-pong pra readback ASSINCRONO (GLES3).
+    // Frame N: dispara glReadPixels no PBO[i] (a GPU enfileira, retorna na hora);
+    // mesmo frame: mapeia PBO[(i+1)%2] que ja tem o frame N-1 pronto. Resultado:
+    // CPU e GPU rodam em paralelo, sem stall por frame. Antes era glReadPixels
+    // SINCRONO que travava o pipeline -> Wii lento + audio engasgando.
+    pbos: [u32; 2],
+    pbo_size: usize,          // bytes alocados em cada PBO (alocado on-demand)
+    pbo_idx: usize,           // 0 ou 1 — proximo PBO pra ESCREVER
+    pbo_has_data: [bool; 2],  // se PBO ja teve readback feito (1o frame nao tem)
 }
 unsafe impl Send for GlesContext {}
 
@@ -83,7 +92,11 @@ pub fn get_proc_addr(name: *const c_char) -> *const c_void {
     }
 }
 
-/// glReadPixels SINCRONO do FBO -> RGBA flipado verticalmente + alpha forcado 255.
+/// v0.9.21: readback ASSINCRONO via PBO ping-pong (GLES3). Antes era glReadPixels
+/// sincrono que travava o pipeline GPU<->CPU todo frame — causa raiz do Wii lento
+/// + audio engasgando. Agora: a leitura do PBO retorna o frame ANTERIOR enquanto
+/// a GPU enfileira a do atual em paralelo. 1 frame de latencia (imperceptivel),
+/// 0 stall. Primeiro frame retorna None (PBO ainda vazio).
 pub fn read_pixels(width: u32, height: u32) -> Option<Vec<u8>> {
     let mut slot = ctx_slot().lock().unwrap();
     let ctx = slot.as_mut()?;
@@ -91,22 +104,63 @@ pub fn read_pixels(width: u32, height: u32) -> Option<Vec<u8>> {
         return None;
     }
     let bytes = (width as usize) * (height as usize) * 4;
-    if ctx.readbuf.len() < bytes { ctx.readbuf.resize(bytes, 0); }
+    if bytes == 0 { return None; }
+    let i_write = ctx.pbo_idx;
+    let i_read  = 1 - i_write;
+
     unsafe {
         gl::PixelStorei(gl::PACK_ALIGNMENT, 1);
         gl::BindFramebuffer(gl::READ_FRAMEBUFFER, ctx.fbo);
+
+        // (Re)aloca PBOs se a resolucao do jogo mudou (orfaniza o storage antigo).
+        if ctx.pbo_size != bytes {
+            for &pbo in &ctx.pbos {
+                gl::BindBuffer(gl::PIXEL_PACK_BUFFER, pbo);
+                gl::BufferData(gl::PIXEL_PACK_BUFFER, bytes as isize, std::ptr::null(), gl::STREAM_READ);
+            }
+            ctx.pbo_size = bytes;
+            ctx.pbo_has_data = [false; 2];
+        }
+
+        // Dispara glReadPixels pro PBO de escrita (assincrono — retorna na hora).
+        gl::BindBuffer(gl::PIXEL_PACK_BUFFER, ctx.pbos[i_write]);
         gl::ReadPixels(0, 0, width as i32, height as i32, gl::RGBA, gl::UNSIGNED_BYTE,
-            ctx.readbuf.as_mut_ptr() as *mut c_void);
+            std::ptr::null_mut());
+        ctx.pbo_has_data[i_write] = true;
+
+        // Le o PBO de leitura (frame N-1 ja pronto). Se primeiro frame, ainda nao
+        // ha dado no outro -> devolve None nesse tick.
+        let result = if !ctx.pbo_has_data[i_read] {
+            None
+        } else {
+            gl::BindBuffer(gl::PIXEL_PACK_BUFFER, ctx.pbos[i_read]);
+            let ptr = gl::MapBufferRange(
+                gl::PIXEL_PACK_BUFFER, 0, bytes as isize, gl::MAP_READ_BIT,
+            ) as *const u8;
+            if ptr.is_null() {
+                None
+            } else {
+                if ctx.readbuf.len() < bytes { ctx.readbuf.resize(bytes, 0); }
+                std::ptr::copy_nonoverlapping(ptr, ctx.readbuf.as_mut_ptr(), bytes);
+                gl::UnmapBuffer(gl::PIXEL_PACK_BUFFER);
+                // Flip vertical + alpha=255
+                let row = (width * 4) as usize;
+                let mut out = vec![0u8; bytes];
+                for y in 0..height as usize {
+                    let src = (height as usize - 1 - y) * row;
+                    let dst = y * row;
+                    out[dst..dst + row].copy_from_slice(&ctx.readbuf[src..src + row]);
+                    for px in 0..(width as usize) { out[dst + px * 4 + 3] = 0xFF; }
+                }
+                Some(out)
+            }
+        };
+
+        // Desbinda PBO pra nao afetar outras operacoes do core.
+        gl::BindBuffer(gl::PIXEL_PACK_BUFFER, 0);
+        ctx.pbo_idx = i_read; // ping-pong
+        result
     }
-    let row = (width * 4) as usize;
-    let mut out = vec![0u8; bytes];
-    for y in 0..height as usize {
-        let src = (height as usize - 1 - y) * row;
-        let dst = y * row;
-        out[dst..dst + row].copy_from_slice(&ctx.readbuf[src..src + row]);
-        for px in 0..(width as usize) { out[dst + px * 4 + 3] = 0xFF; }
-    }
-    Some(out)
 }
 
 // ----- interno -----
@@ -181,8 +235,17 @@ unsafe fn create_gles_context() -> Result<GlesContext, String> {
     }
     gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
 
+    // v0.9.21: 2 PBOs pra readback async. Storage e alocado on-demand em read_pixels
+    // (depende da res do jogo). Aqui so geramos os IDs.
+    let mut pbos = [0u32; 2];
+    gl::GenBuffers(2, pbos.as_mut_ptr());
+
     Ok(GlesContext {
         egl, display, context, surface, fbo, color_tex, depth_rb, width, height,
+        pbos,
+        pbo_size: 0,
+        pbo_idx: 0,
+        pbo_has_data: [false; 2],
         readbuf: vec![0u8; (1920 * 1080 * 4) as usize],
     })
 }

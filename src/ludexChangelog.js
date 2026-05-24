@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.21": [
+    "Performance dos emuladores 3D no Android: leitura GPU agora e assincrona (2 buffers em ping-pong). Wii/GameCube/N64/PSP/Dreamcast rodam mais fluido e o audio para de engasgar.",
+  ],
   "0.9.20": [
     "Botao de refresh do app agora re-escaneia a pasta e recarrega capas (antes so apagava as capas).",
     "PSP, PS1 e Dreamcast agora aparecem na lista certa no Android (identificacao pelo proprio disco).",
