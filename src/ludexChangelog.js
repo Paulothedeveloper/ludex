@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.23": [
+    "Launcher PC: nova secao 'Cores libretro' nos Ajustes mostra quantos cores estao instalados e baixa os que faltam direto do buildbot oficial (1 clique). Resolve crash/tela preta de GameCube, 3DS, DS, PSP, Dreamcast, PS2, Saturn e companhia.",
+  ],
   "0.9.22": [
     "Launcher PC: quando um core libretro estiver faltando, o erro agora aparece bem claro e abre a pasta cores/ ou copia a URL pro buildbot.",
   ],

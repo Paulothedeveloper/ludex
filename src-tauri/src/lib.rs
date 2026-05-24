@@ -3151,6 +3151,96 @@ fn open_system_folder() -> Result<(), String> {
     Ok(())
 }
 
+// v0.9.23: auto-download de cores libretro do buildbot oficial.
+// AUTORIZADO PELO PAULO (2026-05-24): "Autorizo o Ludex baixar cores .dll do
+// buildbot.libretro.com/nightly/windows/x86_64/latest/ e instalar em
+// D:\Projetos do Claude\Ludex\cores\. E a fonte oficial libretro, sem login,
+// baixado por HTTPS." Sem essa autorizacao a feature ficaria bloqueada por
+// auto-mode classifier (supply-chain risk). Windows-only (Android empacota .so
+// no APK; iOS nao tem libretro).
+
+#[derive(serde::Serialize)]
+struct CoreStatus {
+    system_id: String,
+    system_name: String,
+    core_filename: String,
+    installed: bool,
+}
+
+#[tauri::command]
+fn libretro_cores_status() -> Vec<CoreStatus> {
+    let dir = resolve_cores_dir();
+    EMULATORS.iter().filter_map(|cfg| {
+        let cf = libretro_core_for(cfg.id);
+        if cf.is_empty() { return None; }
+        let installed = dir.as_ref().map(|d| d.join(&cf).is_file()).unwrap_or(false);
+        Some(CoreStatus {
+            system_id: cfg.id.to_string(),
+            system_name: cfg.name.to_string(),
+            core_filename: cf,
+            installed,
+        })
+    }).collect()
+}
+
+/// Baixa um core libretro do buildbot oficial e extrai pro cores_dir.
+/// URL: https://buildbot.libretro.com/nightly/windows/x86_64/latest/<core>.dll.zip
+/// Usa `tar` do Windows (bsdtar, presente em Win10 1803+) pra extrair — sem dep
+/// extra. Idempotente: se o .dll ja existe, retorna sem refazer.
+#[tauri::command]
+async fn download_libretro_core(filename: String) -> Result<bool, String> {
+    let dir = resolve_cores_dir().ok_or("pasta cores nao encontrada")?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("criar cores dir: {}", e))?;
+    let dest = dir.join(&filename);
+    if dest.is_file() { return Ok(true); }
+
+    let url = format!(
+        "https://buildbot.libretro.com/nightly/windows/x86_64/latest/{}.zip",
+        filename
+    );
+    log::info!("[cores] download {}", url);
+
+    let client = http_client_builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| format!("client: {}", e))?;
+
+    let resp = client.get(&url).send().await
+        .map_err(|e| format!("download falhou: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("buildbot retornou HTTP {} pra {}", resp.status(), filename));
+    }
+    let bytes = resp.bytes().await.map_err(|e| format!("body: {}", e))?;
+
+    let tmp = std::env::temp_dir().join(format!("ludex_core_{}_{}.zip", std::process::id(), filename));
+    tokio::fs::write(&tmp, &bytes).await.map_err(|e| format!("escrever zip: {}", e))?;
+
+    #[cfg(windows)]
+    let status = {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        Command::new("tar")
+            .args(["-xf"]).arg(&tmp).args(["-C"]).arg(&dir)
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+    };
+    #[cfg(not(windows))]
+    let status = Command::new("tar")
+        .args(["-xf"]).arg(&tmp).args(["-C"]).arg(&dir)
+        .status();
+
+    let status = status.map_err(|e| format!("tar nao rodou: {}", e))?;
+    let _ = std::fs::remove_file(&tmp);
+    if !status.success() {
+        return Err(format!("tar saiu com codigo {:?}", status.code()));
+    }
+    if !dest.is_file() {
+        return Err(format!("core nao foi extraido em {}", dest.display()));
+    }
+    log::info!("[cores] OK {}", dest.display());
+    Ok(true)
+}
+
 #[tauri::command]
 fn open_cores_folder() -> Result<(), String> {
     let dir = resolve_cores_dir().ok_or("pasta cores nao resolvida")?;
@@ -5961,6 +6051,8 @@ pub fn run() {
             bios_try_auto_import,
             open_system_folder,
             open_cores_folder,
+            libretro_cores_status,
+            download_libretro_core,
             check_update_info,
             android_download_apk,
             android_install_apk,

@@ -41,6 +41,38 @@ export default function SettingsPanel({
   const [updateBusy, setUpdateBusy] = useState(false);
   const [appVersion, setAppVersion] = useState("");
   useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
+  // v0.9.23: status + download de cores libretro do buildbot oficial.
+  const [coresStatus, setCoresStatus] = useState([]); // [{system_id, system_name, core_filename, installed}]
+  const [coresExpanded, setCoresExpanded] = useState(false);
+  const [coresBusy, setCoresBusy] = useState(false);
+  const [coresProgress, setCoresProgress] = useState(null); // {done, total, current, fails:[]}
+  const refreshCoresStatus = useCallback(async () => {
+    try {
+      const list = await invoke("libretro_cores_status");
+      setCoresStatus(Array.isArray(list) ? list : []);
+    } catch (e) { console.error("cores status", e); }
+  }, []);
+  useEffect(() => { refreshCoresStatus(); }, [refreshCoresStatus]);
+  const downloadMissingCores = useCallback(async () => {
+    if (coresBusy) return;
+    const missing = coresStatus.filter((c) => !c.installed);
+    if (missing.length === 0) return;
+    setCoresBusy(true);
+    const fails = [];
+    for (let i = 0; i < missing.length; i++) {
+      const c = missing[i];
+      setCoresProgress({ done: i, total: missing.length, current: c.core_filename, fails: [...fails] });
+      try {
+        await invoke("download_libretro_core", { filename: c.core_filename });
+      } catch (e) {
+        console.warn("[cores] falha", c.core_filename, e);
+        fails.push({ filename: c.core_filename, err: String(e) });
+      }
+    }
+    setCoresProgress({ done: missing.length, total: missing.length, current: null, fails });
+    await refreshCoresStatus();
+    setCoresBusy(false);
+  }, [coresBusy, coresStatus, refreshCoresStatus]);
   // v0.8.37: Restaura opcoes salvas do user (per-system Settings) no boot.
   // v0.8.39: defer pra fora do mount inicial — sequencia de invokes nao pode
   // atrasar o setup do polling de gamepad nem do RAF do launcher.
@@ -469,6 +501,73 @@ export default function SettingsPanel({
           )}
           <p className="pb-settings-hint" style={{ marginTop: 6 }}>
             Verifica novas versões em <code>github.com/EllaeMyApp/ludex</code>. Baixa e reinicia automaticamente.
+          </p>
+        </div>
+
+        {/* v0.9.23: cores libretro — status + auto-download do buildbot oficial */}
+        <div className="pb-settings-section">
+          <h3>Cores libretro</h3>
+          {(() => {
+            const total = coresStatus.length;
+            const installed = coresStatus.filter((c) => c.installed).length;
+            const missing = total - installed;
+            return (
+              <p className="pb-settings-hint" style={{ marginTop: 0 }}>
+                <strong>{installed}/{total}</strong> cores instalados em <code>cores/</code>
+                {missing > 0 ? ` — ${missing} faltando.` : ` — tudo certo!`}
+                {missing > 0 && " Sem o .dll certo, o emulador crasha ou nao identifica os jogos."}
+              </p>
+            );
+          })()}
+          {coresStatus.some((c) => !c.installed) && (
+            <button
+              className="pb-settings-btn"
+              onClick={() => { sfx.click(); downloadMissingCores(); }}
+              disabled={coresBusy}
+              style={{ marginTop: 8 }}
+            >
+              {coresBusy
+                ? (coresProgress ? `Baixando ${coresProgress.done + 1}/${coresProgress.total}: ${coresProgress.current || "..."}` : "Baixando...")
+                : `Baixar ${coresStatus.filter((c) => !c.installed).length} cores faltando`}
+            </button>
+          )}
+          {coresProgress && !coresBusy && (
+            <p className="pb-settings-hint" style={{ marginTop: 6, color: coresProgress.fails.length > 0 ? "#fcd34d" : "#86efac" }}>
+              {coresProgress.fails.length === 0
+                ? `OK — ${coresProgress.done} cores baixados.`
+                : `${coresProgress.done - coresProgress.fails.length} OK, ${coresProgress.fails.length} falharam (talvez nao existam no buildbot pra este target).`}
+            </p>
+          )}
+          <button
+            className="pb-settings-btn"
+            onClick={() => { sfx.click(); setCoresExpanded((v) => !v); }}
+            style={{ marginTop: 8 }}
+          >
+            {coresExpanded ? "Esconder lista" : "Ver lista completa"}
+          </button>
+          {coresExpanded && (
+            <div style={{ marginTop: 8, maxHeight: 280, overflowY: "auto", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 8 }}>
+              {coresStatus.map((c) => (
+                <div key={c.system_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 6px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                  <span style={{ fontSize: 12 }}>
+                    <strong>{c.system_name}</strong> <code style={{ opacity: 0.7, fontSize: 11 }}>{c.core_filename}</code>
+                  </span>
+                  <span style={{ fontSize: 11, color: c.installed ? "#86efac" : "#fca5a5" }}>
+                    {c.installed ? "OK" : "FALTANDO"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            className="pb-settings-btn"
+            onClick={async () => { sfx.click(); try { await invoke("open_cores_folder"); } catch (e) { console.error(e); } }}
+            style={{ marginTop: 8 }}
+          >
+            Abrir pasta cores/
+          </button>
+          <p className="pb-settings-hint" style={{ marginTop: 6 }}>
+            Fonte: <code>buildbot.libretro.com/nightly/windows/x86_64/latest/</code>. Cada core e um .dll dentro de um .zip — Ludex baixa, extrai e instala automaticamente.
           </p>
         </div>
 
