@@ -2019,6 +2019,11 @@ export default function LudexLauncher() {
     last_system_id: null,
   });
   const [syncStatus, setSyncStatus] = useState({ busy: false, text: "" });
+  // v0.9.24: contador incrementado pelo syncCovers pra invalidar o cache do
+  // fetch-de-capas. Antes setSelectedSystemIdx(i=>i) era no-op (React bail-out
+  // em set-state com mesmo valor) -> capas nao re-baixavam apos "Sincronizar
+  // capas". Agora o effect tem [selected, coversRefreshKey] e re-roda.
+  const [coversRefreshKey, setCoversRefreshKey] = useState(0);
   const [switchKeysStatus, setSwitchKeysStatus] = useState({ busy: false, message: null, kind: null });
   const [savesStatus, setSavesStatus] = useState({ busy: false, enabled: false, message: null, kind: null });
   const time = useClock();
@@ -2473,7 +2478,7 @@ export default function LudexLauncher() {
     }
     Promise.all(Array.from({ length: 4 }, worker)).catch(() => {});
     return () => { cancelled = true; };
-  }, [selected]);
+  }, [selected, coversRefreshKey]);
 
   const updateActiveProfile = useCallback((updater) => {
     setConfig((prev) => {
@@ -2978,8 +2983,9 @@ export default function LudexLauncher() {
       // re-disparar pro sistema atual
       if (selected) fetchedSystems.current.delete(selected.id);
       setSyncStatus({ busy: false, text: "" });
-      // força reseleção pra triggerar fetch effect
-      setSelectedSystemIdx((i) => i);
+      // v0.9.24: incrementa coversRefreshKey -> effect re-roda mesmo com
+      // selected igual (antes era setSelectedSystemIdx(i=>i) que e no-op).
+      setCoversRefreshKey((k) => k + 1);
     } catch (e) {
       console.error(e);
       setSyncStatus({ busy: false, text: "" });

@@ -4,6 +4,10 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.24": [
+    "Launcher PC: nova secao BIOS dos emuladores nos Ajustes mostra quais sistemas estao com BIOS faltando e tem botao de auto-import.",
+    "Launcher PC: 'Sincronizar capas' agora realmente re-baixa as capas (antes o React engolia o re-disparo).",
+  ],
   "0.9.23": [
     "Launcher PC: nova secao 'Cores libretro' nos Ajustes mostra quantos cores estao instalados e baixa os que faltam direto do buildbot oficial (1 clique). Resolve crash/tela preta de GameCube, 3DS, DS, PSP, Dreamcast, PS2, Saturn e companhia.",
   ],

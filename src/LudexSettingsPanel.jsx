@@ -53,6 +53,16 @@ export default function SettingsPanel({
     } catch (e) { console.error("cores status", e); }
   }, []);
   useEffect(() => { refreshCoresStatus(); }, [refreshCoresStatus]);
+  // v0.9.24: status de BIOS (sem download — copyright). Mostra o user o que falta.
+  const [biosStatus, setBiosStatus] = useState([]); // [{system_id, system_name, files:[{name,present}], any_present}]
+  const [biosExpanded, setBiosExpanded] = useState(false);
+  const refreshBiosStatus = useCallback(async () => {
+    try {
+      const list = await invoke("bios_status");
+      setBiosStatus(Array.isArray(list) ? list : []);
+    } catch (e) { console.error("bios status", e); }
+  }, []);
+  useEffect(() => { refreshBiosStatus(); }, [refreshBiosStatus]);
   const downloadMissingCores = useCallback(async () => {
     if (coresBusy) return;
     const missing = coresStatus.filter((c) => !c.installed);
@@ -568,6 +578,74 @@ export default function SettingsPanel({
           </button>
           <p className="pb-settings-hint" style={{ marginTop: 6 }}>
             Fonte: <code>buildbot.libretro.com/nightly/windows/x86_64/latest/</code>. Cada core e um .dll dentro de um .zip — Ludex baixa, extrai e instala automaticamente.
+          </p>
+        </div>
+
+        {/* v0.9.24: BIOS — status + auto-import (sem download direto: copyright). */}
+        <div className="pb-settings-section">
+          <h3>BIOS dos emuladores</h3>
+          {(() => {
+            const sysWithBios = biosStatus.length;
+            const sysOK = biosStatus.filter((s) => s.any_present).length;
+            const sysMiss = sysWithBios - sysOK;
+            return (
+              <p className="pb-settings-hint" style={{ marginTop: 0 }}>
+                <strong>{sysOK}/{sysWithBios}</strong> sistemas com BIOS presente
+                {sysMiss > 0 ? ` — ${sysMiss} sem BIOS (PS1, PS2, Dreamcast, Saturn, 3DO, Jaguar etc dependem dela pra rodar).` : ` — tudo certo!`}
+              </p>
+            );
+          })()}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            <button
+              className="pb-settings-btn"
+              onClick={async () => {
+                sfx.click();
+                try {
+                  const n = await invoke("bios_try_auto_import");
+                  if (n > 0) alert(`Importei ${n} BIOS de PCSX2/bios, RetroArch/system, Documents, Downloads etc.`);
+                  else alert("Nada novo. Pra importar automatico, cola os .bin em D:\\BIOS, C:\\BIOS, Documents\\PCSX2\\bios, emulators\\PCSX2\\bios ou Downloads\\.");
+                  await refreshBiosStatus();
+                } catch (e) { alert("Falha: " + e); }
+              }}
+            >
+              Tentar auto-import
+            </button>
+            <button
+              className="pb-settings-btn"
+              onClick={async () => { sfx.click(); try { await invoke("open_system_folder"); } catch (e) { console.error(e); } }}
+            >
+              Abrir pasta system\
+            </button>
+            <button
+              className="pb-settings-btn"
+              onClick={() => { sfx.click(); setBiosExpanded((v) => !v); }}
+            >
+              {biosExpanded ? "Esconder lista" : "Ver lista detalhada"}
+            </button>
+          </div>
+          {biosExpanded && (
+            <div style={{ marginTop: 8, maxHeight: 320, overflowY: "auto", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 8 }}>
+              {biosStatus.map((s) => (
+                <div key={s.system_id} style={{ padding: "6px 6px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <strong style={{ fontSize: 13 }}>{s.system_name}</strong>
+                    <span style={{ fontSize: 11, color: s.any_present ? "#86efac" : "#fca5a5" }}>
+                      {s.any_present ? "OK" : "FALTANDO"}
+                    </span>
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 11, opacity: 0.75 }}>
+                    {s.files.map((f) => (
+                      <span key={f.name} style={{ marginRight: 10, color: f.present ? "#86efac" : "rgba(255,255,255,0.5)" }}>
+                        {f.present ? "✓" : "·"} {f.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="pb-settings-hint" style={{ marginTop: 6 }}>
+            BIOS sao arquivos protegidos por copyright — Ludex nao baixa por voce. Cola o .bin em qualquer uma das pastas conhecidas (D:\BIOS, Documents\PCSX2\bios, Downloads, etc) e clica em "Tentar auto-import", ou cola direto em <code>system\</code>.
           </p>
         </div>
 

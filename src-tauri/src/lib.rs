@@ -3167,6 +3167,44 @@ struct CoreStatus {
     installed: bool,
 }
 
+#[derive(serde::Serialize)]
+struct BiosFileStatus { name: String, present: bool }
+#[derive(serde::Serialize)]
+struct BiosSystemStatus {
+    system_id: String,
+    system_name: String,
+    files: Vec<BiosFileStatus>,
+    any_present: bool, // pelo menos 1 dos arquivos esta na pasta system
+}
+
+/// v0.9.24: status de BIOS por sistema. Espelha libretro_cores_status mas sem
+/// download (BIOS e copyright). Mostra quais sistemas dependem de BIOS e quais
+/// arquivos ja estao em system/. Usado pelo Settings pra ajudar o user a saber
+/// o que falta.
+#[tauri::command]
+fn bios_status() -> Vec<BiosSystemStatus> {
+    let sys_dir = libretro_system_dir();
+    let mut out = Vec::new();
+    for cfg in EMULATORS.iter() {
+        let cf = libretro_core_for(cfg.id);
+        if cf.is_empty() { continue; }
+        let needed = required_bios_files(&cf);
+        if needed.is_empty() { continue; }
+        let files: Vec<BiosFileStatus> = needed.iter().map(|n| BiosFileStatus {
+            name: (*n).to_string(),
+            present: sys_dir.join(n).is_file(),
+        }).collect();
+        let any_present = files.iter().any(|f| f.present);
+        out.push(BiosSystemStatus {
+            system_id: cfg.id.to_string(),
+            system_name: cfg.name.to_string(),
+            files,
+            any_present,
+        });
+    }
+    out
+}
+
 #[tauri::command]
 fn libretro_cores_status() -> Vec<CoreStatus> {
     let dir = resolve_cores_dir();
@@ -6053,6 +6091,7 @@ pub fn run() {
             open_cores_folder,
             libretro_cores_status,
             download_libretro_core,
+            bios_status,
             check_update_info,
             android_download_apk,
             android_install_apk,
