@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.25": [
+    "Launcher PC: secao Cores libretro ganhou 'Atualizar instalados' (re-baixa todos os cores pra versao nightly mais recente) e botao ↻/↓ por core na lista detalhada.",
+  ],
   "0.9.24": [
     "Launcher PC: nova secao BIOS dos emuladores nos Ajustes mostra quais sistemas estao com BIOS faltando e tem botao de auto-import.",
     "Launcher PC: 'Sincronizar capas' agora realmente re-baixa as capas (antes o React engolia o re-disparo).",

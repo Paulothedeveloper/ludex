@@ -3224,13 +3224,18 @@ fn libretro_cores_status() -> Vec<CoreStatus> {
 /// Baixa um core libretro do buildbot oficial e extrai pro cores_dir.
 /// URL: https://buildbot.libretro.com/nightly/windows/x86_64/latest/<core>.dll.zip
 /// Usa `tar` do Windows (bsdtar, presente em Win10 1803+) pra extrair — sem dep
-/// extra. Idempotente: se o .dll ja existe, retorna sem refazer.
+/// extra. Idempotente (skip se ja existe), EXCETO com `force=true` que apaga o
+/// .dll primeiro pra forcar update pra versao nightly mais recente.
 #[tauri::command]
-async fn download_libretro_core(filename: String) -> Result<bool, String> {
+async fn download_libretro_core(filename: String, force: Option<bool>) -> Result<bool, String> {
     let dir = resolve_cores_dir().ok_or("pasta cores nao encontrada")?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("criar cores dir: {}", e))?;
     let dest = dir.join(&filename);
-    if dest.is_file() { return Ok(true); }
+    let force = force.unwrap_or(false);
+    if dest.is_file() && !force { return Ok(true); }
+    if force && dest.is_file() {
+        let _ = std::fs::remove_file(&dest); // libera espaco e garante extracao fresca
+    }
 
     let url = format!(
         "https://buildbot.libretro.com/nightly/windows/x86_64/latest/{}.zip",

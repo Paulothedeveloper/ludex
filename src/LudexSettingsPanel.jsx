@@ -63,26 +63,36 @@ export default function SettingsPanel({
     } catch (e) { console.error("bios status", e); }
   }, []);
   useEffect(() => { refreshBiosStatus(); }, [refreshBiosStatus]);
-  const downloadMissingCores = useCallback(async () => {
-    if (coresBusy) return;
-    const missing = coresStatus.filter((c) => !c.installed);
-    if (missing.length === 0) return;
+  // v0.9.25: refactor — uma funcao generica que aceita lista de cores + force.
+  // Usado por downloadMissingCores (faltando + force=false) e updateInstalledCores
+  // (instalados + force=true pra atualizar pra nightly mais recente do buildbot).
+  const runCoreDownloads = useCallback(async (list, force) => {
+    if (coresBusy || list.length === 0) return;
     setCoresBusy(true);
     const fails = [];
-    for (let i = 0; i < missing.length; i++) {
-      const c = missing[i];
-      setCoresProgress({ done: i, total: missing.length, current: c.core_filename, fails: [...fails] });
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      setCoresProgress({ done: i, total: list.length, current: c.core_filename, fails: [...fails] });
       try {
-        await invoke("download_libretro_core", { filename: c.core_filename });
+        await invoke("download_libretro_core", { filename: c.core_filename, force });
       } catch (e) {
         console.warn("[cores] falha", c.core_filename, e);
         fails.push({ filename: c.core_filename, err: String(e) });
       }
     }
-    setCoresProgress({ done: missing.length, total: missing.length, current: null, fails });
+    setCoresProgress({ done: list.length, total: list.length, current: null, fails });
     await refreshCoresStatus();
     setCoresBusy(false);
-  }, [coresBusy, coresStatus, refreshCoresStatus]);
+  }, [coresBusy, refreshCoresStatus]);
+  const downloadMissingCores = useCallback(() => {
+    return runCoreDownloads(coresStatus.filter((c) => !c.installed), false);
+  }, [coresStatus, runCoreDownloads]);
+  const updateInstalledCores = useCallback(() => {
+    return runCoreDownloads(coresStatus.filter((c) => c.installed), true);
+  }, [coresStatus, runCoreDownloads]);
+  const updateSingleCore = useCallback((filename) => {
+    return runCoreDownloads([{ core_filename: filename }], true);
+  }, [runCoreDownloads]);
   // v0.8.37: Restaura opcoes salvas do user (per-system Settings) no boot.
   // v0.8.39: defer pra fora do mount inicial — sequencia de invokes nao pode
   // atrasar o setup do polling de gamepad nem do RAF do launcher.
@@ -529,18 +539,31 @@ export default function SettingsPanel({
               </p>
             );
           })()}
-          {coresStatus.some((c) => !c.installed) && (
-            <button
-              className="pb-settings-btn"
-              onClick={() => { sfx.click(); downloadMissingCores(); }}
-              disabled={coresBusy}
-              style={{ marginTop: 8 }}
-            >
-              {coresBusy
-                ? (coresProgress ? `Baixando ${coresProgress.done + 1}/${coresProgress.total}: ${coresProgress.current || "..."}` : "Baixando...")
-                : `Baixar ${coresStatus.filter((c) => !c.installed).length} cores faltando`}
-            </button>
-          )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            {coresStatus.some((c) => !c.installed) && (
+              <button
+                className="pb-settings-btn"
+                onClick={() => { sfx.click(); downloadMissingCores(); }}
+                disabled={coresBusy}
+              >
+                {coresBusy
+                  ? (coresProgress ? `Baixando ${coresProgress.done + 1}/${coresProgress.total}: ${coresProgress.current || "..."}` : "Baixando...")
+                  : `Baixar ${coresStatus.filter((c) => !c.installed).length} cores faltando`}
+              </button>
+            )}
+            {coresStatus.some((c) => c.installed) && (
+              <button
+                className="pb-settings-btn"
+                onClick={() => { sfx.click(); updateInstalledCores(); }}
+                disabled={coresBusy}
+                title="Re-baixa cada core instalado pra versao nightly mais recente do buildbot"
+              >
+                {coresBusy && coresProgress?.current
+                  ? `${coresProgress.done + 1}/${coresProgress.total}: ${coresProgress.current}`
+                  : `Atualizar ${coresStatus.filter((c) => c.installed).length} cores instalados`}
+              </button>
+            )}
+          </div>
           {coresProgress && !coresBusy && (
             <p className="pb-settings-hint" style={{ marginTop: 6, color: coresProgress.fails.length > 0 ? "#fcd34d" : "#86efac" }}>
               {coresProgress.fails.length === 0
@@ -558,13 +581,22 @@ export default function SettingsPanel({
           {coresExpanded && (
             <div style={{ marginTop: 8, maxHeight: 280, overflowY: "auto", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 8 }}>
               {coresStatus.map((c) => (
-                <div key={c.system_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 6px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                  <span style={{ fontSize: 12 }}>
+                <div key={c.system_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "4px 6px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                  <span style={{ fontSize: 12, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
                     <strong>{c.system_name}</strong> <code style={{ opacity: 0.7, fontSize: 11 }}>{c.core_filename}</code>
                   </span>
-                  <span style={{ fontSize: 11, color: c.installed ? "#86efac" : "#fca5a5" }}>
+                  <span style={{ fontSize: 11, color: c.installed ? "#86efac" : "#fca5a5", flexShrink: 0 }}>
                     {c.installed ? "OK" : "FALTANDO"}
                   </span>
+                  <button
+                    className="pb-settings-btn"
+                    style={{ padding: "2px 8px", fontSize: 11, flexShrink: 0 }}
+                    disabled={coresBusy}
+                    onClick={() => { sfx.click(); c.installed ? updateSingleCore(c.core_filename) : runCoreDownloads([c], false); }}
+                    title={c.installed ? "Re-baixar do buildbot (atualizar)" : "Baixar do buildbot"}
+                  >
+                    {c.installed ? "↻" : "↓"}
+                  </button>
                 </div>
               ))}
             </div>
