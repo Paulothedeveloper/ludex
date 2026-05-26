@@ -3372,8 +3372,31 @@ fn open_cores_folder() -> Result<(), String> {
     Ok(())
 }
 
+// v0.9.27: catch_unwind wrapper — Rust panic em load_game/run_frame deixava de
+// crashar o WebView Android inteiro (Paulo: GC/PS1/PSP travando o launcher).
+// Agora panic vira Err amigavel, app continua vivo, frontend mostra mensagem.
+fn panic_to_err(e: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = e.downcast_ref::<&str>()   { (*s).to_string() }
+    else if let Some(s) = e.downcast_ref::<String>() { s.clone() }
+    else { "panic desconhecido".to_string() }
+}
+
 #[tauri::command]
 fn libretro_load_game(core_filename: String, rom_path: String) -> Result<LibretroLoadResult, String> {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        libretro_load_game_inner(core_filename, rom_path)
+    }));
+    match result {
+        Ok(r) => r,
+        Err(e) => {
+            let msg = panic_to_err(e);
+            log::error!("[libretro_load_game] PANIC: {}", msg);
+            Err(format!("crash interno do core ao carregar: {}", msg))
+        }
+    }
+}
+
+fn libretro_load_game_inner(core_filename: String, rom_path: String) -> Result<LibretroLoadResult, String> {
     let cores_dir = resolve_cores_dir().ok_or("pasta cores nao encontrada")?;
     let core_path = cores_dir.join(&core_filename);
     if !core_path.is_file() {
@@ -3466,6 +3489,16 @@ fn libretro_skip_frames(n: u32) -> Result<(), String> {
 
 #[tauri::command]
 fn libretro_run_frame() -> tauri::ipc::Response {
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(libretro_run_frame_inner));
+    match r {
+        Ok(resp) => resp,
+        Err(e) => {
+            log::error!("[libretro_run_frame] PANIC: {}", panic_to_err(e));
+            tauri::ipc::Response::new(Vec::new())
+        }
+    }
+}
+fn libretro_run_frame_inner() -> tauri::ipc::Response {
     {
         let slot = libretro_slot();
         let g = slot.lock().unwrap();
@@ -3495,6 +3528,16 @@ fn libretro_run_frame() -> tauri::ipc::Response {
 /// pelo "modo desempenho" pra renderizar video em 30fps mantendo audio/emulacao 60fps.
 #[tauri::command]
 fn libretro_run_frame_av(want_video: bool) -> tauri::ipc::Response {
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| libretro_run_frame_av_inner(want_video)));
+    match r {
+        Ok(resp) => resp,
+        Err(e) => {
+            log::error!("[libretro_run_frame_av] PANIC: {}", panic_to_err(e));
+            tauri::ipc::Response::new(vec![0u8, 0, 0, 0])
+        }
+    }
+}
+fn libretro_run_frame_av_inner(want_video: bool) -> tauri::ipc::Response {
     {
         let slot = libretro_slot();
         let g = slot.lock().unwrap();

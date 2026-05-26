@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.27": [
+    "Estabilidade: GameCube/PS1/PSP nao crashavam mais o launcher do celular — panic do core/load_game agora vira mensagem de erro e o app continua vivo.",
+  ],
   "0.9.26": [
     "Launcher PC: novo botao 'Procurar BIOS no PC inteiro' varre D:\\, outras unidades e sua home atras de qualquer arquivo com nome de BIOS conhecida (scph5500.bin, dc_boot.bin etc) e importa pra system\\ automaticamente.",
   ],
