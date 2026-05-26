@@ -1894,6 +1894,19 @@
   grid-template-rows: 38px 38px 38px;
 }
 
+/* v0.9.28: anti-colisao pra layouts com MUITOS botoes (5 ou 6 face). Antes face
+   top ficava a so 2px do shoulder/system bar -> aparencia de "colado". Agora o
+   container tem 60px a mais de altura, empurrando os botoes pra baixo. Mantem
+   data-has-analog ja maior (280px) — soma so se nao tiver analog. */
+.lmx-emu-controls[data-face-count="5"]:not([data-has-analog]),
+.lmx-emu-controls[data-face-count="6"]:not([data-has-analog]) {
+  height: 260px;
+}
+/* System bar (Select/Start) sai do topo absoluto pra deixar respiro pros botoes
+   6 (face-6 pos-0 topo-centro e pos-5 topo-direito ficavam a 2px do system). */
+.lmx-emu-controls[data-face-count="6"] .lmx-emu-system { top: 20px; }
+.lmx-emu-controls[data-face-count="6"] .lmx-emu-shoulders { top: 20px; }
+
 .lmx-emu-system {
   position: absolute;
   top: 12px;

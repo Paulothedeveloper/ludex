@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.28": [
+    "Controles na tela: sistemas com 5 ou 6 botoes (GameCube/Wii, N64, Genesis 6-buttons, Saturn, Arcade) ganharam respiro maior — botoes nao roçam mais nos ombros L/R nem na barra Select/Start.",
+  ],
   "0.9.27": [
     "Estabilidade: GameCube/PS1/PSP nao crashavam mais o launcher do celular — panic do core/load_game agora vira mensagem de erro e o app continua vivo.",
   ],
