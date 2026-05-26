@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.29": [
+    "Celular: novo botao 'Procurar BIOS no celular inteiro' nos Ajustes — varre o storage inteiro atras de qualquer .bin com nome de BIOS conhecida (scph5501.bin, dc_boot.bin etc) e importa pra Ludex/system/. Resolve PS1/Dreamcast/Saturn travando ao abrir.",
+  ],
   "0.9.28": [
     "Controles na tela: sistemas com 5 ou 6 botoes (GameCube/Wii, N64, Genesis 6-buttons, Saturn, Arcade) ganharam respiro maior — botoes nao roçam mais nos ombros L/R nem na barra Select/Start.",
   ],

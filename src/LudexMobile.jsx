@@ -1275,6 +1275,42 @@ function ExternalControllerCard() {
   );
 }
 
+// v0.9.29: BIOS deep-scan no celular — varre /storage/emulated/0 inteiro atras
+// de qualquer .bin com nome de BIOS conhecida e copia pra Ludex/system. Causa
+// raiz provavel de "PS1 trava ao abrir" era BIOS scph5501/etc faltando.
+function BiosDeepScanCard() {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const run = useCallback(async () => {
+    if (busy) return;
+    setBusy(true); setMsg({ kind: "info", text: "Varrendo storage do celular... (30s-2min)" });
+    try {
+      const n = await invoke("bios_deep_scan");
+      if (n > 0) setMsg({ kind: "ok", text: `Importei ${n} BIOS pra Ludex/system/.` });
+      else setMsg({ kind: "warn", text: "Nao achei nenhum .bin com nome de BIOS conhecida. Coloque na pasta Download ou Ludex/system/ manualmente." });
+    } catch (e) {
+      setMsg({ kind: "error", text: `Falha: ${e}` });
+    } finally {
+      setBusy(false);
+    }
+  }, [busy]);
+  return (
+    <section className="lmx-settings-card">
+      <div className="lmx-settings-label">BIOS dos emuladores</div>
+      <p className="lmx-settings-hint">
+        PS1, PS2, Dreamcast, Saturn e 3DO precisam de BIOS pra rodar. Sem ela, o emulador trava ao abrir.
+        Coloque seus .bin em Download e clique abaixo — o app varre o celular inteiro e copia tudo certinho.
+      </p>
+      <button className="lmx-settings-btn primary" onClick={run} disabled={busy} style={{ marginTop: 8 }}>
+        {busy ? "Procurando..." : "Procurar BIOS no celular inteiro"}
+      </button>
+      {msg && (
+        <p className={`lmx-settings-msg ${msg.kind}`} style={{ marginTop: 8 }}>{msg.text}</p>
+      )}
+    </section>
+  );
+}
+
 function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, currentRomsRoot, config, onConfigChange, appTheme, onSetTheme }) {
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [keyInput, setKeyInput] = useState("");
@@ -1319,6 +1355,8 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
       </section>
 
       <ExternalControllerCard />
+
+      <BiosDeepScanCard />
 
       <section className="lmx-settings-card">
         <div className="lmx-settings-label">Tema do app</div>

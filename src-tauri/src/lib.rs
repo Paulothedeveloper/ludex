@@ -3133,22 +3133,35 @@ async fn bios_deep_scan() -> Result<u32, String> {
     let sys_dir = libretro_system_dir();
     let _ = std::fs::create_dir_all(&sys_dir);
 
-    let mut roots: Vec<PathBuf> = vec![PathBuf::from("D:\\")];
-    if let Some(home) = dirs::home_dir() { roots.push(home); }
-    // tambem outras letras comuns
-    for letter in ['E', 'F', 'G'] {
-        let p = PathBuf::from(format!("{}:\\", letter));
-        if p.is_dir() { roots.push(p); }
+    let mut roots: Vec<PathBuf> = Vec::new();
+    // v0.9.29: Android tambem. PS1 no celular crashava por BIOS faltando em
+    // /storage/emulated/0/Ludex/system/ — agora varremos Download, RetroArch,
+    // outras pastas comuns de BIOS no aparelho e importamos pra Ludex/system.
+    #[cfg(target_os = "android")] {
+        // Cobertura ampla na raiz do storage user-acessivel.
+        roots.push(PathBuf::from("/storage/emulated/0"));
+    }
+    #[cfg(not(target_os = "android"))] {
+        roots.push(PathBuf::from("D:\\"));
+        if let Some(home) = dirs::home_dir() { roots.push(home); }
+        for letter in ['E', 'F', 'G'] {
+            let p = PathBuf::from(format!("{}:\\", letter));
+            if p.is_dir() { roots.push(p); }
+        }
     }
 
     let skip = |name: &str| -> bool {
         let n = name.to_ascii_lowercase();
         matches!(n.as_str(),
+            // Windows
             "windows" | "$recycle.bin" | "appdata" | "node_modules" | ".git" |
             "program files" | "program files (x86)" | "programdata" | "perflogs" |
             "$windows.~bt" | "$windows.~ws" | "system volume information" |
             "intel" | "amd" | "nvidia" | "msocache" | "recovery" | "boot" |
-            "target" | "build" | "dist" | "out"
+            "target" | "build" | "dist" | "out" |
+            // Android: thumbnails de fotos + pastas de apps com Mb de cache
+            ".thumbnails" | ".trash" | "android" | "log" | ".cache" |
+            "whatsapp" | "telegram" | "obb" | "data"
         )
     };
 
