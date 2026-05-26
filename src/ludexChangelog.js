@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.31": [
+    "Estabilidade hot-path: input, analogico e leitura de audio agora tambem nao crashavam o app se o core panicar (catch_unwind nos 3 IPC chamados por frame).",
+  ],
   "0.9.30": [
     "Celular: erro 'falha ao carregar jogo' agora mostra botao 'Procurar BIOS agora' quando o problema e BIOS faltando — 1 clique resolve em vez de ter que ir nos Ajustes.",
     "Estabilidade extra: save state, load state, troca de disco e cheats agora tambem nao crashavam o app se o core panicar.",

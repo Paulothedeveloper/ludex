@@ -3629,16 +3629,24 @@ fn libretro_clear_options() {
 /// Dreno do buffer de audio. Retorna bytes raw (i16 LE interleaved L,R,L,R...).
 #[tauri::command]
 fn libretro_take_audio() -> tauri::ipc::Response {
-    let mut g = libretro::audio_buf().lock().unwrap();
-    if g.is_empty() {
-        return tauri::ipc::Response::new(Vec::new());
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut g = libretro::audio_buf().lock().unwrap();
+        if g.is_empty() {
+            return Vec::new();
+        }
+        let n = g.len();
+        let mut buf = Vec::with_capacity(n * 2);
+        for sample in g.drain(..) {
+            buf.extend_from_slice(&sample.to_le_bytes());
+        }
+        buf
+    })) {
+        Ok(buf) => tauri::ipc::Response::new(buf),
+        Err(e) => {
+            log::error!("[libretro_take_audio] PANIC: {}", panic_to_err(e));
+            tauri::ipc::Response::new(Vec::new())
+        }
     }
-    let n = g.len();
-    let mut buf = Vec::with_capacity(n * 2);
-    for sample in g.drain(..) {
-        buf.extend_from_slice(&sample.to_le_bytes());
-    }
-    tauri::ipc::Response::new(buf)
 }
 
 // ===== v0.9.2: CHEATS =====
@@ -3793,23 +3801,31 @@ fn parse_cht(txt: &str) -> Vec<CheatEntry> {
     out
 }
 
+// v0.9.31: set_input/set_analog rodam por FRAME (60+ vezes/seg). Se algum
+// panic em outro callback poisonou o Mutex, lock().unwrap() panica e derruba o
+// app. catch_unwind tornar a operacao silenciosa em caso de panic — perder
+// 1 input < perder o app inteiro.
 #[tauri::command]
 fn libretro_set_input(button_id: u32, pressed: bool) {
-    if button_id >= 16 { return; }
-    let s = libretro::state();
-    let mut g = s.lock().unwrap();
-    g.input_state[button_id as usize] = pressed;
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if button_id >= 16 { return; }
+        let s = libretro::state();
+        let mut g = s.lock().unwrap();
+        g.input_state[button_id as usize] = pressed;
+    }));
 }
 
 /// v0.8.45: stick analogico. stick: 0=L, 1=R. x/y em [-32767, 32767]
 #[tauri::command]
 fn libretro_set_analog(stick: u32, x: i32, y: i32) {
-    if stick >= 2 { return; }
-    let s = libretro::state();
-    let mut g = s.lock().unwrap();
-    let slot = (stick as usize) * 2;
-    g.analog_state[slot] = x.clamp(-32767, 32767) as i16;
-    g.analog_state[slot + 1] = y.clamp(-32767, 32767) as i16;
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if stick >= 2 { return; }
+        let s = libretro::state();
+        let mut g = s.lock().unwrap();
+        let slot = (stick as usize) * 2;
+        g.analog_state[slot] = x.clamp(-32767, 32767) as i16;
+        g.analog_state[slot + 1] = y.clamp(-32767, 32767) as i16;
+    }));
 }
 
 /// v0.8.46: Info de discos do core (multi-disc PS1/Saturn/SegaCD).
