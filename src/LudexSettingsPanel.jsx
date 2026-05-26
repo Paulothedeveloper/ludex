@@ -644,6 +644,22 @@ export default function SettingsPanel({
             </button>
             <button
               className="pb-settings-btn"
+              onClick={async () => {
+                sfx.click();
+                if (!confirm("Vou varrer D:\\, E:\\, F:\\, G:\\ e sua pasta de usuario inteira atras de arquivos com nome de BIOS (scph5500.bin, dc_boot.bin, sega_101.bin etc). Pode demorar 30s-2min. Continuar?")) return;
+                try {
+                  const n = await invoke("bios_deep_scan");
+                  if (n > 0) alert(`Deep-scan importou ${n} BIOS pra system\\.`);
+                  else alert("Deep-scan nao achou nenhum arquivo com nome de BIOS conhecida. Voce precisa baixar manualmente (BIOS sao copyright).");
+                  await refreshBiosStatus();
+                } catch (e) { alert("Falha: " + e); }
+              }}
+              title="Varre D:\\, outras unidades e a home do usuario atras de BIOS no PC inteiro"
+            >
+              Procurar BIOS no PC inteiro
+            </button>
+            <button
+              className="pb-settings-btn"
               onClick={async () => { sfx.click(); try { await invoke("open_system_folder"); } catch (e) { console.error(e); } }}
             >
               Abrir pasta system\

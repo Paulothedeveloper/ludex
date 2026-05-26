@@ -3113,6 +3113,76 @@ fn bios_search_paths() -> Vec<PathBuf> {
     paths
 }
 
+/// v0.9.26: deep-scan agressivo — varre D:\ e a home do user atras de QUALQUER
+/// arquivo com nome de BIOS conhecida (case-insensitive). Pula pastas obvias de
+/// sistema (Windows, AppData, Program Files, etc) e limita profundidade a 6.
+/// Pra resolver "ah meu BIOS ta em alguma pasta que eu nao lembro" sem o Paulo
+/// ter que mover na mao. Idempotente: se ja tem em system\, pula.
+#[tauri::command]
+async fn bios_deep_scan() -> Result<u32, String> {
+    let mut all_needed: Vec<&'static str> = required_bios_files("pcsx2_libretro").iter()
+        .chain(required_bios_files("flycast_libretro").iter())
+        .chain(required_bios_files("mednafen_saturn_libretro").iter())
+        .chain(required_bios_files("opera_libretro").iter())
+        .chain(required_bios_files("swanstation_libretro").iter())
+        .chain(required_bios_files("virtualjaguar_libretro").iter())
+        .copied().collect();
+    all_needed.sort();
+    all_needed.dedup();
+    let lowered: Vec<String> = all_needed.iter().map(|s| s.to_ascii_lowercase()).collect();
+    let sys_dir = libretro_system_dir();
+    let _ = std::fs::create_dir_all(&sys_dir);
+
+    let mut roots: Vec<PathBuf> = vec![PathBuf::from("D:\\")];
+    if let Some(home) = dirs::home_dir() { roots.push(home); }
+    // tambem outras letras comuns
+    for letter in ['E', 'F', 'G'] {
+        let p = PathBuf::from(format!("{}:\\", letter));
+        if p.is_dir() { roots.push(p); }
+    }
+
+    let skip = |name: &str| -> bool {
+        let n = name.to_ascii_lowercase();
+        matches!(n.as_str(),
+            "windows" | "$recycle.bin" | "appdata" | "node_modules" | ".git" |
+            "program files" | "program files (x86)" | "programdata" | "perflogs" |
+            "$windows.~bt" | "$windows.~ws" | "system volume information" |
+            "intel" | "amd" | "nvidia" | "msocache" | "recovery" | "boot" |
+            "target" | "build" | "dist" | "out"
+        )
+    };
+
+    let mut copied = 0u32;
+    for root in &roots {
+        if !root.is_dir() { continue; }
+        log::info!("[bios] deep-scan walking {}", root.display());
+        for entry in WalkDir::new(root).max_depth(6)
+            .into_iter()
+            .filter_entry(|e| {
+                if !e.file_type().is_dir() { return true; }
+                let nm = e.file_name().to_string_lossy().to_string();
+                !skip(&nm)
+            })
+            .filter_map(|e| e.ok())
+        {
+            if !entry.file_type().is_file() { continue; }
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else { continue; };
+            let lower = name.to_ascii_lowercase();
+            if let Some(idx) = lowered.iter().position(|t| t == &lower) {
+                let target = all_needed[idx];
+                let dest = sys_dir.join(target);
+                if dest.is_file() { continue; }
+                if std::fs::copy(path, &dest).is_ok() {
+                    log::info!("[bios] deep-scan: {} -> {}", path.display(), dest.display());
+                    copied += 1;
+                }
+            }
+        }
+    }
+    Ok(copied)
+}
+
 #[tauri::command]
 fn bios_try_auto_import() -> Result<u32, String> {
     // Importa BIOS de todos os sistemas que conhecemos (PS2, Saturn, Dreamcast, etc)
@@ -6097,6 +6167,7 @@ pub fn run() {
             libretro_cores_status,
             download_libretro_core,
             bios_status,
+            bios_deep_scan,
             check_update_info,
             android_download_apk,
             android_install_apk,

@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.26": [
+    "Launcher PC: novo botao 'Procurar BIOS no PC inteiro' varre D:\\, outras unidades e sua home atras de qualquer arquivo com nome de BIOS conhecida (scph5500.bin, dc_boot.bin etc) e importa pra system\\ automaticamente.",
+  ],
   "0.9.25": [
     "Launcher PC: secao Cores libretro ganhou 'Atualizar instalados' (re-baixa todos os cores pra versao nightly mais recente) e botao ↻/↓ por core na lista detalhada.",
   ],
