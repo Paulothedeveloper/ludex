@@ -2766,12 +2766,47 @@ function MobileEmulatorView({ system, game, onClose }) {
   // (ex: Wii/GameCube sem core ARM no Android) pulava hooks = React #300 (crash
   // "Ludex falhou ao iniciar"). Agora todos os hooks rodam sempre.
   if (error) {
+    // v0.9.30: hint contextual no celular tb (paridade com PC). Erro de BIOS,
+    // core faltando ou crash interno mostra acao concreta pro Paulo (rodar
+    // deep-scan) em vez de so a stacktrace seca.
+    const errLow = String(error).toLowerCase();
+    const isBios = errLow.includes("bios") || errLow.includes("required");
+    const isCoreMissing = errLow.includes("core nao encontrado") || errLow.includes("sem core libretro");
+    const isPanic = errLow.includes("crash interno") || errLow.includes("panic");
     return (
       <div className="lmx-emu-root">
         <div className="lmx-emu-error">
           <h2>Erro ao carregar jogo</h2>
           <pre>{error}</pre>
-          <button className="lmx-settings-btn primary" onClick={onClose}>Voltar</button>
+          {(isBios || isPanic) && (
+            <div style={{ marginTop: 12, padding: 12, background: "rgba(255,255,255,0.05)", borderRadius: 10 }}>
+              <p style={{ margin: "0 0 10px 0", fontSize: 13 }}>
+                {isBios
+                  ? "Provavel: BIOS do sistema falta em Ludex/system/."
+                  : "Provavel: BIOS ou config invalida do core."}
+                {" "}Va em Ajustes &rarr; <b>Procurar BIOS no celular inteiro</b>.
+              </p>
+              <button className="lmx-settings-btn primary" style={{ width: "100%" }}
+                onClick={async () => {
+                  try {
+                    const n = await invoke("bios_deep_scan");
+                    mAlert(n > 0
+                      ? `Importei ${n} BIOS. Tente abrir o jogo de novo.`
+                      : "Nenhuma BIOS encontrada no storage. Coloque os .bin em Download e tente novamente.");
+                  } catch (e) { mAlert(`Falha: ${e}`); }
+                }}>
+                Procurar BIOS agora
+              </button>
+            </div>
+          )}
+          {isCoreMissing && (
+            <div style={{ marginTop: 12, padding: 12, background: "rgba(255,255,255,0.05)", borderRadius: 10 }}>
+              <p style={{ margin: 0, fontSize: 13 }}>
+                Core libretro <b>{system?.libretro_core || "?"}</b> nao esta dentro do APK pra este sistema no Android. Suporte vai chegar em versao futura — por enquanto use o launcher no PC.
+              </p>
+            </div>
+          )}
+          <button className="lmx-settings-btn primary" onClick={onClose} style={{ marginTop: 12 }}>Voltar</button>
         </div>
       </div>
     );

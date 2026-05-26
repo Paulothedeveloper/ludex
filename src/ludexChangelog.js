@@ -4,6 +4,10 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.30": [
+    "Celular: erro 'falha ao carregar jogo' agora mostra botao 'Procurar BIOS agora' quando o problema e BIOS faltando — 1 clique resolve em vez de ter que ir nos Ajustes.",
+    "Estabilidade extra: save state, load state, troca de disco e cheats agora tambem nao crashavam o app se o core panicar.",
+  ],
   "0.9.29": [
     "Celular: novo botao 'Procurar BIOS no celular inteiro' nos Ajustes — varre o storage inteiro atras de qualquer .bin com nome de BIOS conhecida (scph5501.bin, dc_boot.bin etc) e importa pra Ludex/system/. Resolve PS1/Dreamcast/Saturn travando ao abrir.",
   ],

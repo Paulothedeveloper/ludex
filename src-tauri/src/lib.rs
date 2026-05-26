@@ -3394,6 +3394,20 @@ fn panic_to_err(e: Box<dyn std::any::Any + Send>) -> String {
     else { "panic desconhecido".to_string() }
 }
 
+/// v0.9.30: helper generico — chama uma closure dentro de catch_unwind. Em panic
+/// retorna Err(format!("panic em {}: <msg>", label)) sem derrubar a Tauri.
+fn safe_call<F, R>(label: &'static str, f: F) -> Result<R, String>
+where F: FnOnce() -> Result<R, String> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+        Ok(r) => r,
+        Err(e) => {
+            let msg = panic_to_err(e);
+            log::error!("[{}] PANIC: {}", label, msg);
+            Err(format!("crash interno em {}: {}", label, msg))
+        }
+    }
+}
+
 #[tauri::command]
 fn libretro_load_game(core_filename: String, rom_path: String) -> Result<LibretroLoadResult, String> {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -3636,6 +3650,9 @@ struct CheatInput { code: String, enabled: bool }
 /// foram aplicados.
 #[tauri::command]
 fn libretro_apply_cheats(cheats: Vec<CheatInput>) -> Result<u32, String> {
+    safe_call("libretro_apply_cheats", move || libretro_apply_cheats_inner(cheats))
+}
+fn libretro_apply_cheats_inner(cheats: Vec<CheatInput>) -> Result<u32, String> {
     let slot = libretro_slot();
     let g = slot.lock().unwrap();
     let core = g.as_ref().ok_or("nenhum jogo carregado")?;
@@ -3820,6 +3837,9 @@ fn libretro_get_disc_info() -> DiscInfo {
 /// idx: indice do disco (0..num_images-1)
 #[tauri::command]
 fn libretro_swap_disc(idx: u32) -> Result<(), String> {
+    safe_call("libretro_swap_disc", move || libretro_swap_disc_inner(idx))
+}
+fn libretro_swap_disc_inner(idx: u32) -> Result<(), String> {
     let s = libretro::state();
     let g = s.lock().unwrap();
     let Some(ptr) = g.disk_control else { return Err("Core nao suporta troca de disco".into()); };
@@ -3841,6 +3861,9 @@ fn libretro_swap_disc(idx: u32) -> Result<(), String> {
 /// v0.8.46: Substitui o arquivo do disco atual por outro (carregar disco 2 de outro ISO).
 #[tauri::command]
 fn libretro_replace_disc(path: String) -> Result<(), String> {
+    safe_call("libretro_replace_disc", move || libretro_replace_disc_inner(path))
+}
+fn libretro_replace_disc_inner(path: String) -> Result<(), String> {
     let s = libretro::state();
     let g = s.lock().unwrap();
     let Some(ptr) = g.disk_control else { return Err("Core nao suporta troca de disco".into()); };
@@ -3888,41 +3911,45 @@ fn save_thumb_path(rom_path: &str, slot: u32) -> Option<PathBuf> {
 
 #[tauri::command]
 fn libretro_save_state(rom_path: String, slot: u32, thumbnail_png: Option<Vec<u8>>) -> Result<String, String> {
-    let path = save_state_path(&rom_path, slot).ok_or("path indisponivel")?;
-    let slot_lock = libretro_slot();
-    let g = slot_lock.lock().unwrap();
-    let core = g.as_ref().ok_or("nenhum core ativo")?;
-    let bytes = unsafe { core.serialize()? };
-    std::fs::write(&path, &bytes).map_err(|e| {
-        log::error!("save_state: {}", e);
-        format!("escrever state: {}", e)
-    })?;
-    if let Some(png) = thumbnail_png {
-        if let Some(thumb) = save_thumb_path(&rom_path, slot) {
-            let _ = std::fs::write(&thumb, &png);
+    safe_call("libretro_save_state", move || {
+        let path = save_state_path(&rom_path, slot).ok_or("path indisponivel")?;
+        let slot_lock = libretro_slot();
+        let g = slot_lock.lock().unwrap();
+        let core = g.as_ref().ok_or("nenhum core ativo")?;
+        let bytes = unsafe { core.serialize()? };
+        std::fs::write(&path, &bytes).map_err(|e| {
+            log::error!("save_state: {}", e);
+            format!("escrever state: {}", e)
+        })?;
+        if let Some(png) = thumbnail_png {
+            if let Some(thumb) = save_thumb_path(&rom_path, slot) {
+                let _ = std::fs::write(&thumb, &png);
+            }
         }
-    }
-    log::info!("save_state slot={} rom={}", slot, rom_path);
-    Ok(path.to_string_lossy().to_string())
+        log::info!("save_state slot={} rom={}", slot, rom_path);
+        Ok(path.to_string_lossy().to_string())
+    })
 }
 
 #[tauri::command]
 fn libretro_load_state(rom_path: String, slot: u32) -> Result<(), String> {
-    let path = save_state_path(&rom_path, slot).ok_or("path indisponivel")?;
-    if !path.is_file() {
-        return Err(format!("nenhum save no slot {}", slot));
-    }
-    let bytes = std::fs::read(&path).map_err(|e| format!("ler state: {}", e))?;
-    let slot_lock = libretro_slot();
-    let g = slot_lock.lock().unwrap();
-    let core = g.as_ref().ok_or("nenhum core ativo")?;
-    let res = unsafe { core.unserialize(&bytes) };
-    if let Err(ref e) = res {
-        log::error!("load_state slot={}: {}", slot, e);
-    } else {
-        log::info!("load_state slot={} rom={}", slot, rom_path);
-    }
-    res
+    safe_call("libretro_load_state", move || {
+        let path = save_state_path(&rom_path, slot).ok_or("path indisponivel")?;
+        if !path.is_file() {
+            return Err(format!("nenhum save no slot {}", slot));
+        }
+        let bytes = std::fs::read(&path).map_err(|e| format!("ler state: {}", e))?;
+        let slot_lock = libretro_slot();
+        let g = slot_lock.lock().unwrap();
+        let core = g.as_ref().ok_or("nenhum core ativo")?;
+        let res = unsafe { core.unserialize(&bytes) };
+        if let Err(ref e) = res {
+            log::error!("load_state slot={}: {}", slot, e);
+        } else {
+            log::info!("load_state slot={} rom={}", slot, rom_path);
+        }
+        res
+    })
 }
 
 #[tauri::command]
