@@ -3500,18 +3500,20 @@ fn libretro_load_game_inner(core_filename: String, rom_path: String) -> Result<L
 /// segura botao FF — minimiza overhead JNI (1 invoke vs N).
 #[tauri::command]
 fn libretro_skip_frames(n: u32) -> Result<(), String> {
-    let slot = libretro_slot();
-    let g = slot.lock().unwrap();
-    if let Some(core) = g.as_ref() {
-        for _ in 0..n.min(16) {
-            unsafe { let _ = core.run(); }
+    safe_call("libretro_skip_frames", move || {
+        let slot = libretro_slot();
+        let g = slot.lock().unwrap();
+        if let Some(core) = g.as_ref() {
+            for _ in 0..n.min(16) {
+                unsafe { let _ = core.run(); }
+            }
+            // v0.9.2: NAO limpar audio_buf aqui. O pacing por relogio de audio do
+            // frontend roda frames extras (skip) pra catch-up e PRECISA do audio
+            // produzido nesses frames, senao volta o underrun/stutter. O proprio
+            // AUDIO_BUF_LIMIT (drop-oldest) protege contra acumulo se o front travar.
         }
-        // v0.9.2: NAO limpar audio_buf aqui. O pacing por relogio de audio do
-        // frontend roda frames extras (skip) pra catch-up e PRECISA do audio
-        // produzido nesses frames, senao volta o underrun/stutter. O proprio
-        // AUDIO_BUF_LIMIT (drop-oldest) protege contra acumulo se o front travar.
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 #[tauri::command]
@@ -3607,23 +3609,29 @@ fn libretro_run_frame_av_inner(want_video: bool) -> tauri::ipc::Response {
 /// Aplicado no proximo GET_VARIABLE — pra ter efeito imediato, recarregar core.
 #[tauri::command]
 fn libretro_set_option(key: String, value: String) {
-    log::info!("[libretro] user set option {} = {}", key, value);
-    libretro::set_option_override(key, value);
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        log::info!("[libretro] user set option {} = {}", key, value);
+        libretro::set_option_override(key, value);
+    }));
 }
 
 /// Le valor atual de uma opcao (override ou default). Usado pelo UI.
 #[tauri::command]
 fn libretro_get_option(key: String) -> Option<String> {
-    let overrides = libretro::option_overrides().lock().unwrap();
-    overrides.get(&key).and_then(|c| c.to_str().ok().map(String::from))
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let overrides = libretro::option_overrides().lock().unwrap();
+        overrides.get(&key).and_then(|c| c.to_str().ok().map(String::from))
+    })).ok().flatten()
 }
 
 /// Limpa todos overrides (volta aos defaults). Usado pelo botao "Restaurar".
 #[tauri::command]
 fn libretro_clear_options() {
-    let mut overrides = libretro::option_overrides().lock().unwrap();
-    overrides.clear();
-    log::info!("[libretro] overrides limpos");
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut overrides = libretro::option_overrides().lock().unwrap();
+        overrides.clear();
+        log::info!("[libretro] overrides limpos");
+    }));
 }
 
 /// Dreno do buffer de audio. Retorna bytes raw (i16 LE interleaved L,R,L,R...).
@@ -3835,6 +3843,13 @@ struct DiscInfo { supported: bool, num_images: u32, current_image: u32, ejected:
 
 #[tauri::command]
 fn libretro_get_disc_info() -> DiscInfo {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(libretro_get_disc_info_inner))
+        .unwrap_or_else(|e| {
+            log::error!("[libretro_get_disc_info] PANIC: {}", panic_to_err(e));
+            DiscInfo { supported: false, num_images: 0, current_image: 0, ejected: false }
+        })
+}
+fn libretro_get_disc_info_inner() -> DiscInfo {
     let s = libretro::state();
     let g = s.lock().unwrap();
     let Some(ptr) = g.disk_control else {
@@ -3982,6 +3997,13 @@ struct SaveSlotInfo {
 
 #[tauri::command]
 fn libretro_list_states(rom_path: String) -> Vec<SaveSlotInfo> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || libretro_list_states_inner(rom_path)))
+        .unwrap_or_else(|e| {
+            log::error!("[libretro_list_states] PANIC: {}", panic_to_err(e));
+            Vec::new()
+        })
+}
+fn libretro_list_states_inner(rom_path: String) -> Vec<SaveSlotInfo> {
     let mut out = Vec::new();
     for slot in 0..10 {
         let Some(p) = save_state_path(&rom_path, slot) else { continue };

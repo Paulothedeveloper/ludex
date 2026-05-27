@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.32": [
+    "Estabilidade total: TODOS os IPC do emulador agora protegidos contra crash (set/get/clear option, skip frames, info de disco, lista de saves). Qualquer panic no core vira mensagem de erro, app nunca morre.",
+  ],
   "0.9.31": [
     "Estabilidade hot-path: input, analogico e leitura de audio agora tambem nao crashavam o app se o core panicar (catch_unwind nos 3 IPC chamados por frame).",
   ],
