@@ -352,7 +352,7 @@ export default function LudexMobile() {
         }
       }
     }
-    Promise.all(Array.from({ length: 3 }, worker)).catch(() => {});
+    Promise.all(Array.from({ length: 4 }, worker)).catch(() => {});
     return () => { cancelled = true; };
   }, [openSystem]);
 
@@ -385,7 +385,9 @@ export default function LudexMobile() {
         }
       }
     }
-    Promise.all(Array.from({ length: 2 }, worker)).catch(() => {});
+    // v0.9.33: 2 -> 4 workers (paridade com PC). S25 Ultra aguenta com sobra,
+    // capas carregam ~2x mais rapido no scroll inicial.
+    Promise.all(Array.from({ length: 4 }, worker)).catch(() => {});
     return () => { cancelled = true; };
   }, [systems, recents]);
 

@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.33": [
+    "Capas no celular agora carregam mais rapido no scroll inicial (4 downloads paralelos, era 2-3).",
+  ],
   "0.9.32": [
     "Estabilidade total: TODOS os IPC do emulador agora protegidos contra crash (set/get/clear option, skip frames, info de disco, lista de saves). Qualquer panic no core vira mensagem de erro, app nunca morre.",
   ],
