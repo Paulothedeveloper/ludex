@@ -724,6 +724,7 @@ export default function LudexMobile() {
             onConfigChange={setConfig}
             appTheme={appTheme}
             onSetTheme={setAppTheme}
+            onRestartTutorial={() => { setTutorialDone(false); setActiveTab("home"); }}
           />
         )}
         </div>
@@ -759,9 +760,13 @@ export default function LudexMobile() {
       {whatsNew && splashDone && tutorialDone && (
         <WhatsNewModal data={whatsNew} onClose={() => { markVersionSeen(whatsNew.current); setWhatsNew(null); }} />
       )}
-      {/* Tutorial first run */}
+      {/* Tutorial first run (v0.9.34: spotlight com blur cobrindo todas features) */}
       {!tutorialDone && splashDone && (
-        <TutorialOverlay onDone={() => { markFirstRunDone(); setTutorialDone(true); }} />
+        <TutorialOverlay
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          onDone={() => { markFirstRunDone(); setTutorialDone(true); }}
+        />
       )}
       {/* v0.9.4: editor de perfil (foto + nome + avatar) */}
       {profileEditorOpen && activeProfile && (
@@ -775,7 +780,7 @@ export default function LudexMobile() {
 
       {/* v0.9.11: bottom tab bar FLUTUANTE estilo console (PS5/Xbox) — sem texto,
           icones novos, pilula de destaque no ativo. */}
-      <nav className="lmx-tabs lmx-tabs-float">
+      <nav className="lmx-tabs lmx-tabs-float" data-tour="tabs">
         <TabBtn icon={<IconNavHome />} label="Inicio" active={activeTab === "home"} onClick={() => changeTab("home")} />
         <TabBtn icon={<IconNavLibrary />} label="Sistemas" active={activeTab === "systems"} onClick={() => changeTab("systems")} />
         <TabBtn icon={<IconNavSearch />} label="Buscar" active={activeTab === "search"} onClick={() => changeTab("search")} />
@@ -835,9 +840,9 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
   return (
     <div className="lmx-home">
       {/* Hero header */}
-      <header className="lmx-home-hero">
+      <header className="lmx-home-hero" data-tour="home-hero">
         {/* v0.9.3: avatar do perfil presente na home (toca = abre Ajustes/perfil) */}
-        <button className="lmx-home-avatar" onClick={onOpenProfile} aria-label="Editar perfil">
+        <button className="lmx-home-avatar" onClick={onOpenProfile} aria-label="Editar perfil" data-tour="home-avatar">
           <img src={profileImg} alt="Perfil" />
         </button>
         <div className="lmx-home-greeting">
@@ -856,6 +861,7 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
           onClick={() => onReloadCovers && onReloadCovers()}
           aria-label="Recarregar capas"
           title="Recarregar capas"
+          data-tour="home-reload"
         >
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 9 15 9" />
@@ -872,11 +878,15 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
 
       {/* v0.9.14: "Mais jogados" — distinto de "Adicionados recentemente" abaixo
           (antes duplicava). Some sozinho se nao ha tempo de jogo nem capa. */}
-      <FeaturedCarousel title="Mais jogados" items={mostPlayed} covers={covers} onPick={onPickGame} />
+      <div data-tour="home-mais-jogados">
+        <FeaturedCarousel title="Mais jogados" items={mostPlayed} covers={covers} onPick={onPickGame} />
+      </div>
 
       {/* v0.8.22: Continue onde parou (recents) */}
       {recents && recents.length > 0 && (
-        <RecentsBanner recents={recents} covers={covers} onResume={onResume} />
+        <div data-tour="home-continue">
+          <RecentsBanner recents={recents} covers={covers} onResume={onResume} />
+        </div>
       )}
 
       {!loading && nonEmptySystems.length === 0 && (
@@ -1027,7 +1037,7 @@ function SystemsTab({ systems, onPickSystem }) {
   }, [systems]);
 
   return (
-    <div className="lmx-systems">
+    <div className="lmx-systems" data-tour="tab-systems">
       <header className="lmx-page-header">
         <h1>Sistemas</h1>
       </header>
@@ -1083,11 +1093,11 @@ function SearchTab({ systems, covers, search, setSearch, onPickGame }) {
   }, [systems, terms, trimmed]);
 
   return (
-    <div className="lmx-search">
+    <div className="lmx-search" data-tour="tab-search">
       <header className="lmx-page-header">
         <h1>Buscar</h1>
       </header>
-      <div className="lmx-search-input-wrap">
+      <div className="lmx-search-input-wrap" data-tour="search-input">
         <IconSearch />
         <input
           type="text"
@@ -1262,7 +1272,7 @@ function ExternalControllerCard() {
     };
   }, []);
   return (
-    <section className="lmx-settings-card">
+    <section className="lmx-settings-card" data-tour="settings-controle">
       <div className="lmx-settings-label">Controle externo</div>
       <div className="lmx-ctrl-status">
         <span className={`lmx-ctrl-dot ${padName ? "on" : ""}`} />
@@ -1297,7 +1307,7 @@ function BiosDeepScanCard() {
     }
   }, [busy]);
   return (
-    <section className="lmx-settings-card">
+    <section className="lmx-settings-card" data-tour="settings-bios">
       <div className="lmx-settings-label">BIOS dos emuladores</div>
       <p className="lmx-settings-hint">
         PS1, PS2, Dreamcast, Saturn e 3DO precisam de BIOS pra rodar. Sem ela, o emulador trava ao abrir.
@@ -1313,7 +1323,7 @@ function BiosDeepScanCard() {
   );
 }
 
-function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, currentRomsRoot, config, onConfigChange, appTheme, onSetTheme }) {
+function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, currentRomsRoot, config, onConfigChange, appTheme, onSetTheme, onRestartTutorial }) {
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [keyInput, setKeyInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1342,12 +1352,12 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
   }
 
   return (
-    <div className="lmx-settings">
+    <div className="lmx-settings" data-tour="tab-settings">
       <header className="lmx-page-header">
         <h1>Ajustes</h1>
       </header>
 
-      <section className="lmx-settings-card">
+      <section className="lmx-settings-card" data-tour="settings-profile">
         <div className="lmx-settings-row">
           <div>
             <div className="lmx-settings-label">Perfil ativo</div>
@@ -1360,7 +1370,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
 
       <BiosDeepScanCard />
 
-      <section className="lmx-settings-card">
+      <section className="lmx-settings-card" data-tour="settings-theme">
         <div className="lmx-settings-label">Tema do app</div>
         <div className="lmx-theme-grid">
           {APP_THEMES.map(([id, lbl]) => (
@@ -1423,7 +1433,22 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
         </section>
       )}
 
-      <section className="lmx-settings-card">
+      {/* v0.9.34: re-abrir tutorial */}
+      <section className="lmx-settings-card" data-tour="settings-tutorial">
+        <div className="lmx-settings-label">Tutorial</div>
+        <p className="lmx-settings-hint">
+          Ver o passo a passo de cada funcao do app de novo (com destaque visual em cada elemento).
+        </p>
+        <button
+          className="lmx-settings-btn ghost"
+          onClick={() => onRestartTutorial && onRestartTutorial()}
+          style={{ marginTop: 8 }}
+        >
+          Ver tutorial novamente
+        </button>
+      </section>
+
+      <section className="lmx-settings-card" data-tour="settings-folder">
         <div className="lmx-settings-label">Pasta de ROMs</div>
         <div className="lmx-settings-paths">
           <code>{currentRomsRoot || "(padrao: /storage/emulated/0/Ludex/roms/)"}</code>
@@ -3184,39 +3209,170 @@ function RecentsBanner({ recents, covers, onResume }) {
 }
 
 // ============================================================
-// === TUTORIAL OVERLAY (3 cards primeira vez) ================
+// === TUTORIAL OVERLAY (v0.9.34 — spotlight + blur por feature)
 // ============================================================
-function TutorialOverlay({ onDone }) {
-  const steps = [
-    { title: "Bem-vindo ao Ludex Mobile", body: "Sua biblioteca retro no celular: GBA, NES, SNES, GB/GBC, Mega Drive, NDS, PS1 e mais — direto no Android, sem PC.", icon: "M5 4a2 2 0 012-2h10a2 2 0 012 2v16a2 2 0 01-2 2H7a2 2 0 01-2-2zM12 18h.01" },
-    { title: "Adiciona suas ROMs", body: "Vai em Ajustes > 'Escolher pasta no celular' e aponta pra pasta com seus arquivos (.gba/.nes/.iso/.smc/etc). O Ludex encontra as ROMs automaticamente.", icon: "M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" },
-    { title: "Controle Bluetooth", body: "Pareia qualquer controle (Xbox/PS/Switch/8BitDo) nas Configuracoes do Android. Ao abrir um jogo, o Ludex reconhece automaticamente e voce joga sem touchscreen.", icon: "M6 9h12M6 15h2m8 0h2M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z" },
-    { title: "Auto-update", body: "Quando sai versao nova no GitHub, o Ludex avisa na hora e baixa o APK direto. Voce so confirma a instalacao do Android.", icon: "M21 12a9 9 0 11-18 0 9 9 0 0118 0zM12 7v5l3 3" },
-    { title: "Versao Windows tem MAIS", body: "PS2, GameCube, Wii, 3DS, Saturn, Switch, PS3, Xbox 360, RetroAchievements, Discord Rich Presence, musica ambiente, wallpapers — tudo na versao paga de PC.", icon: "M21 9V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-4" },
-  ];
+// Substitui a v0.9.4 (3-cards genericos). Agora aponta pra cada elemento
+// real do app (via data-tour="..."), troca de aba sozinho, e usa 4 divs
+// com backdrop-filter blur ao redor do alvo (efeito vidro fosco em volta,
+// alvo nitido). Mesmo padrao do tour do PC (LudexOnboarding.jsx) pra
+// paridade. Cada step tem `tab` (pra qual aba ele pertence), `selector`
+// (CSS query do alvo) e `body` explicando o que aquela feature faz.
+const MOBILE_TOUR_STEPS = [
+  { id: "welcome", tab: "home", title: "Bem-vindo ao Ludex Mobile", body: "Vou te mostrar o que cada parte do app faz. Sao ~15 passos rapidos, pode pular a qualquer momento.", placement: "center" },
+  { id: "home-avatar", tab: "home", selector: '[data-tour="home-avatar"]', title: "Seu perfil", body: "Toque pra trocar foto, nome e avatar. Seus saves, favoritos e tempo de jogo ficam no perfil ativo.", placement: "bottom" },
+  { id: "home-reload", tab: "home", selector: '[data-tour="home-reload"]', title: "Recarregar capas", body: "Apaga o cache de capas e re-busca tudo do zero. Util quando alguma capa nao baixou ou veio errada.", placement: "bottom" },
+  { id: "home-mais-jogados", tab: "home", selector: '[data-tour="home-mais-jogados"]', title: "Mais jogados", body: "Seus titulos com mais tempo de jogo aparecem aqui automaticamente.", placement: "bottom" },
+  { id: "home-continue", tab: "home", selector: '[data-tour="home-continue"]', title: "Continue onde parou", body: "Mostra o ultimo jogo que voce abriu. Tocar = retoma direto do save state.", placement: "bottom" },
+  { id: "tabs", tab: "home", selector: '[data-tour="tabs"]', title: "Navegacao", body: "4 abas: Inicio, Sistemas (lista de 27+ consoles), Buscar e Ajustes.", placement: "top" },
+  { id: "tab-systems", tab: "systems", selector: '[data-tour="tab-systems"]', title: "Sistemas", body: "Todos consoles suportados (SNES, GBA, NDS, PS1, etc). Toque num pra ver os jogos. Sistemas sem ROM aparecem em cinza.", placement: "center" },
+  { id: "tab-search", tab: "search", selector: '[data-tour="search-input"]', title: "Buscar", body: "Busca em TODOS seus jogos de uma vez. Ignora acentos e maiusculas ('Pokemon' acha 'Pokémon').", placement: "bottom" },
+  { id: "settings-profile", tab: "settings", selector: '[data-tour="settings-profile"]', title: "Perfil ativo", body: "Mostra qual perfil esta em uso. Saves e historico sao por perfil.", placement: "bottom" },
+  { id: "settings-controle", tab: "settings", selector: '[data-tour="settings-controle"]', title: "Controle externo", body: "Controle Bluetooth/USB conectado aparece aqui. Para remapear, abra um jogo -> engrenagem -> Opcoes do Emulador -> Controle.", placement: "bottom" },
+  { id: "settings-bios", tab: "settings", selector: '[data-tour="settings-bios"]', title: "BIOS", body: "PS1, PS2, Dreamcast e Saturn precisam de BIOS pra rodar. Coloque seus .bin em Download e clique aqui — o app varre o celular inteiro e copia certinho.", placement: "bottom" },
+  { id: "settings-theme", tab: "settings", selector: '[data-tour="settings-theme"]', title: "Tema do app", body: "Troca o visual (fundo, cards, accent). Opcoes: Roxo Ludex (padrao), Switch Dark, PS3 Wave, Sunset, Forest e Light.", placement: "top" },
+  { id: "settings-tutorial", tab: "settings", selector: '[data-tour="settings-tutorial"]', title: "Ver tutorial de novo", body: "Quando quiser refrescar — botao aqui sempre re-abre este passo a passo.", placement: "top" },
+  { id: "settings-folder", tab: "settings", selector: '[data-tour="settings-folder"]', title: "Pasta de ROMs", body: "Aponte pra pasta onde estao suas ROMs (.gba/.nes/.iso/.smc/etc). O Ludex varre subpastas inteiras e detecta cada sistema pela extensao.", placement: "top" },
+  { id: "done", tab: "home", title: "Tudo pronto!", body: "Bons jogos. Voce sempre pode reabrir este tutorial em Ajustes -> Ver tutorial novamente.", placement: "center" },
+];
+
+function useTourTargetRect(selector, deps) {
+  const [rect, setRect] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    function measure() {
+      if (cancelled) return;
+      if (!selector) return setRect(null);
+      const el = document.querySelector(selector);
+      if (!el) return setRect(null);
+      const r = el.getBoundingClientRect();
+      // ignora alvos colapsados (selector existe mas height 0)
+      if (r.width < 2 || r.height < 2) return setRect(null);
+      setRect(r);
+    }
+    measure();
+    // re-mede ao longo do tempo pq mudanca de aba causa entrance animation
+    const id = setInterval(measure, 180);
+    window.addEventListener("resize", measure);
+    return () => { cancelled = true; clearInterval(id); window.removeEventListener("resize", measure); };
+  }, [selector, ...deps]);
+  return rect;
+}
+
+function TutorialSpotlight({ rect }) {
+  // 4 divs em volta do rect: cada uma com backdrop-filter blur(8px) + dark.
+  // O retangulo central fica nitido. Usar 4 divs em vez de SVG mask porque
+  // backdrop-filter nao funciona dentro de <mask>. Webview Android (Chromium
+  // 110+) suporta backdrop-filter desde 2022, S25 Ultra tem Chromium 130+.
+  if (!rect) {
+    // sem alvo (welcome/done) — overlay full
+    return <div className="lmx-tour-full-overlay" />;
+  }
+  const pad = 10;
+  const r = {
+    top: Math.max(0, rect.top - pad),
+    left: Math.max(0, rect.left - pad),
+    width: rect.width + pad * 2,
+    height: rect.height + pad * 2,
+  };
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  return (
+    <>
+      {/* TOP */}
+      <div className="lmx-tour-blur" style={{ top: 0, left: 0, width: "100%", height: r.top }} />
+      {/* BOTTOM */}
+      <div className="lmx-tour-blur" style={{ top: r.top + r.height, left: 0, width: "100%", height: Math.max(0, vh - (r.top + r.height)) }} />
+      {/* LEFT (apenas faixa horizontal do alvo) */}
+      <div className="lmx-tour-blur" style={{ top: r.top, left: 0, width: r.left, height: r.height }} />
+      {/* RIGHT */}
+      <div className="lmx-tour-blur" style={{ top: r.top, left: r.left + r.width, width: Math.max(0, vw - (r.left + r.width)), height: r.height }} />
+      {/* Highlight ring sobre o alvo (nitido) */}
+      <div
+        className="lmx-tour-ring"
+        style={{ top: r.top, left: r.left, width: r.width, height: r.height }}
+      />
+    </>
+  );
+}
+
+function TutorialBanner({ step, rect, idx, total, onNext, onPrev, onSkip }) {
+  const style = useMemo(() => {
+    const w = Math.min(360, window.innerWidth - 32);
+    const margin = 18;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (!rect || step.placement === "center") {
+      return { top: vh / 2 - 130, left: vw / 2 - w / 2, width: w };
+    }
+    let top, left;
+    if (step.placement === "top") {
+      top = rect.top - margin - 220;
+    } else {
+      // default bottom
+      top = rect.bottom + margin;
+    }
+    left = Math.max(margin, Math.min(vw - w - margin, rect.left + rect.width / 2 - w / 2));
+    top = Math.max(margin, Math.min(vh - 250, top));
+    return { top, left, width: w };
+  }, [rect, step]);
+
+  return (
+    <div className="lmx-tour-banner" style={style} role="dialog" aria-label={step.title}>
+      <div className="lmx-tour-step">Passo {idx + 1} de {total}</div>
+      <h2 className="lmx-tour-title">{step.title}</h2>
+      <p className="lmx-tour-body">{step.body}</p>
+      <div className="lmx-tour-actions">
+        <button className="lmx-tour-btn lmx-tour-btn-ghost" onClick={onSkip}>Pular</button>
+        <div className="lmx-tour-nav">
+          {idx > 0 && <button className="lmx-tour-btn lmx-tour-btn-ghost" onClick={onPrev}>Voltar</button>}
+          <button className="lmx-tour-btn lmx-tour-btn-primary" onClick={onNext}>
+            {idx === total - 1 ? "Concluir" : "Proximo"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TutorialOverlay({ activeTab, setActiveTab, onDone }) {
   const [idx, setIdx] = useState(0);
-  const cur = steps[idx];
+  const step = MOBILE_TOUR_STEPS[idx];
+  // Troca de aba quando o step pede uma aba diferente. 320ms de espera pra
+  // animacao de entrada da aba assentar antes de medir o rect.
+  const [tabReady, setTabReady] = useState(true);
+  useEffect(() => {
+    if (!step) return;
+    if (step.tab && step.tab !== activeTab) {
+      setTabReady(false);
+      setActiveTab(step.tab);
+      const t = setTimeout(() => setTabReady(true), 360);
+      return () => clearTimeout(t);
+    } else {
+      setTabReady(true);
+    }
+  }, [idx, step, activeTab, setActiveTab]);
+
+  const rect = useTourTargetRect(tabReady ? step?.selector : null, [idx, tabReady]);
+
   const next = () => {
-    if (idx + 1 >= steps.length) { onDone(); return; }
+    if (idx + 1 >= MOBILE_TOUR_STEPS.length) { onDone(); return; }
     setIdx(idx + 1);
   };
+  const prev = () => { if (idx > 0) setIdx(idx - 1); };
+  const skip = () => onDone();
+
   return (
-    <div className="lmx-tutorial-overlay" onClick={next}>
-      <div className="lmx-tutorial-card" onClick={(e) => e.stopPropagation()}>
-        <div className="lmx-tutorial-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d={cur.icon} />
-          </svg>
-        </div>
-        <h2>{cur.title}</h2>
-        <p>{cur.body}</p>
-        <div className="lmx-tutorial-dots">
-          {steps.map((_, i) => <span key={i} className={i === idx ? "active" : ""} />)}
-        </div>
-        <button className="lmx-settings-btn primary" onClick={next}>
-          {idx + 1 >= steps.length ? "Comecar" : "Proximo"}
-        </button>
-      </div>
+    <div className="lmx-tour-root" role="dialog" aria-modal="true">
+      <TutorialSpotlight rect={rect} />
+      <TutorialBanner
+        step={step}
+        rect={rect}
+        idx={idx}
+        total={MOBILE_TOUR_STEPS.length}
+        onNext={next}
+        onPrev={prev}
+        onSkip={skip}
+      />
     </div>
   );
 }

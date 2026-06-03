@@ -66,41 +66,65 @@ export function getProfileAvatarUrl(profile, convertFileSrc) {
 // Steps do tour. Cada step tem um seletor (data-tour) que aponta pro elemento
 // na home — o spotlight overlay mede getBoundingClientRect e abre uma janela
 // na máscara. Banner liquid glass aparece numa posição relativa ao alvo.
+// v0.9.34: muito mais steps + cada um explica funcao de um elemento real
+// (era so 5 steps, agora cobre topbar inteira, continue jogando, ordem,
+// grid, ajustes, busca, sortear, perfil, atalhos). Pode pular a qualquer hora.
 const TOUR_STEPS = [
   {
     id: "topbar",
     selector: '[data-tour="topbar"]',
     title: "Topo do Ludex",
-    body: "Mostra qual jogo está selecionado, botão de sortear aleatório (atalho: R), busca rápida (Ctrl+K ou L2/LB), seu perfil e os ajustes. Quando você conecta um controle, aparece um aviso verde aqui em cima.",
+    body: "Avatar do seu perfil, sistema selecionado, atalhos pra abrir pastas (ROMs, DLCs, Mods), controle e indicador de gamepad conectado. Tudo acessivel sem sair da home.",
+    placement: "bottom",
+  },
+  {
+    id: "search",
+    selector: '[data-tour="search"]',
+    title: "Buscar jogo (atalho: / )",
+    body: "Busca rapida em TODOS seus jogos de todos sistemas. Aceita acentos e ignora maiusculas ('mario' acha 'Super Mario'). No controle, L2+LB tambem abre.",
+    placement: "bottom",
+  },
+  {
+    id: "random",
+    selector: '[data-tour="random"]',
+    title: "Sortear (atalho: R)",
+    body: "Escolhe um jogo aleatorio da sua biblioteca inteira — bom pra quebrar a paralisia de 'tenho muito jogo nao sei o que jogar'.",
+    placement: "bottom",
+  },
+  {
+    id: "settings",
+    selector: '[data-tour="settings"]',
+    title: "Configuracoes (atalho: S)",
+    body: "Tema, perfil, musica ambiente, wallpaper, RetroAchievements, Discord Rich Presence, auto-update do app, pasta de ROMs, cores libretro, BIOS, atalhos. Tudo aqui.",
+    placement: "left",
+  },
+  {
+    id: "continue",
+    selector: '[data-tour="continue"]',
+    title: "Continue jogando",
+    body: "Mostra o ultimo jogo que voce abriu (com capa). Tocar = retoma exatamente de onde parou (save state automatico).",
     placement: "bottom",
   },
   {
     id: "systems",
     selector: '[data-tour="systems"]',
     title: "Plataformas (27+ sistemas)",
-    body: "PS1, PS2, N64, GameCube, Wii, 3DS, Saturn, Dreamcast, GBA, NDS, Switch e mais — todos com core embedded (não precisa baixar nada). Use ←/→ no teclado ou D-pad pra navegar. LB/RB ou L2/R2 pulam categoria inteira.",
-    placement: "bottom",
+    body: "PS1, PS2, N64, GameCube, Wii, 3DS, Saturn, Dreamcast, GBA, NDS, Switch e mais — todos com core embedded (nao precisa baixar nada). Use Up/Down no teclado ou D-pad pra navegar. LB/RB pulam categoria inteira.",
+    placement: "right",
   },
   {
     id: "sort",
     selector: '[data-tour="sort"]',
-    title: "Filtros e ordenação",
-    body: "Padrão / A-Z / Recentes (último jogado) / Mais jogados / Favoritos. A barra de busca também filtra por nome em tempo real.",
+    title: "Filtros e ordenacao",
+    body: "Padrao / A-Z / Recentes (ultimo jogado) / Mais jogados / Favoritos. Mantenha 'Recentes' pra ver no topo o jogo que voce abriu ultimo.",
     placement: "bottom",
   },
   {
     id: "grid",
     selector: '[data-tour="grid"]',
     title: "Sua biblioteca",
-    body: "Clique pra abrir detalhes (capa, screenshots, sua nota, tempo jogado, status). Duplo-clique pra iniciar. Se você fechou um jogo antes, ao reabrir aparece prompt pra continuar do save state.",
+    body: "Clique pra abrir detalhes (capa, screenshots, sua nota, tempo jogado, status). Duplo-clique pra iniciar. Botao direito abre menu com 'Remover', 'Favorito', 'Renomear' etc.",
     placement: "top",
-  },
-  {
-    id: "settings",
-    selector: '[data-tour="settings"]',
-    title: "Configurações (atalho: S)",
-    body: "Tema, perfil, música ambiente, wallpaper, RetroAchievements, Discord Rich Presence, auto-update do app. Em cada jogo aberto você ainda tem 'Opções do sistema' pra resolução, performance e remap de controle por emulador.",
-    placement: "left",
   },
 ];
 
@@ -122,31 +146,33 @@ function useTargetRect(selector, deps) {
 }
 
 function SpotlightOverlay({ rect }) {
-  // Mostra overlay escuro com um buraco no rect alvo. Usa SVG mask pra recortar.
+  // v0.9.34: 4 divs com backdrop-filter blur em volta do alvo (era SVG mask).
+  // Backdrop-filter so funciona em <div>, nao dentro de <mask> — entao usamos
+  // 4 retangulos cobrindo top/bottom/left/right do alvo, cada um borrado.
+  // Resultado: alvo nitido, resto da tela com vidro fosco escurecido.
+  if (!rect) {
+    return <div className="lx-tour-full-blur" />;
+  }
   const pad = 12;
-  const r = rect ? {
-    x: Math.max(0, rect.left - pad),
-    y: Math.max(0, rect.top - pad),
-    w: rect.width + pad * 2,
-    h: rect.height + pad * 2,
-  } : null;
+  const r = {
+    top: Math.max(0, rect.top - pad),
+    left: Math.max(0, rect.left - pad),
+    width: rect.width + pad * 2,
+    height: rect.height + pad * 2,
+  };
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
   return (
-    <svg className="lx-tour-spot" width="100%" height="100%">
-      <defs>
-        <mask id="spot-mask">
-          <rect x="0" y="0" width="100%" height="100%" fill="#fff" />
-          {r && <rect x={r.x} y={r.y} width={r.w} height={r.h} rx="14" ry="14" fill="#000" />}
-        </mask>
-      </defs>
-      <rect x="0" y="0" width="100%" height="100%" fill="rgba(8,5,20,0.78)" mask="url(#spot-mask)" />
-      {r && (
-        <rect
-          x={r.x} y={r.y} width={r.w} height={r.h} rx="14" ry="14"
-          fill="none" stroke="rgba(167,139,250,0.85)" strokeWidth="2.5"
-          style={{ filter: "drop-shadow(0 0 18px rgba(167,139,250,0.55))" }}
-        />
-      )}
-    </svg>
+    <>
+      <div className="lx-tour-blur" style={{ top: 0, left: 0, width: "100%", height: r.top }} />
+      <div className="lx-tour-blur" style={{ top: r.top + r.height, left: 0, width: "100%", height: Math.max(0, vh - (r.top + r.height)) }} />
+      <div className="lx-tour-blur" style={{ top: r.top, left: 0, width: r.left, height: r.height }} />
+      <div className="lx-tour-blur" style={{ top: r.top, left: r.left + r.width, width: Math.max(0, vw - (r.left + r.width)), height: r.height }} />
+      <div
+        className="lx-tour-ring"
+        style={{ top: r.top, left: r.left, width: r.width, height: r.height }}
+      />
+    </>
   );
 }
 
@@ -338,9 +364,14 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
  * Não é desmontado pelo pai (LudexLauncher) — fica em cima de tudo até o user
  * concluir. Quando termina, chama onComplete({ name, avatar | customPhotoPath })
  * e o pai persiste o perfil + chama complete_first_run() no backend.
+ *
+ * v0.9.34: prop `tourOnly` = true pula o intro e a criacao de perfil, vai
+ * direto pro tour. Usado quando o user clica "Ver tutorial novamente" nos
+ * Ajustes (ja tem perfil, so quer rever as explicacoes). onComplete e
+ * chamado sem args nesse modo.
  */
-export default function LudexOnboarding({ onComplete }) {
-  const [phase, setPhase] = useState("intro"); // intro | tour | profile
+export default function LudexOnboarding({ onComplete, tourOnly = false }) {
+  const [phase, setPhase] = useState(tourOnly ? "tour" : "intro"); // intro | tour | profile
   const [stepIdx, setStepIdx] = useState(0);
   const step = TOUR_STEPS[stepIdx];
   const rect = useTargetRect(phase === "tour" ? step?.selector : null, [stepIdx, phase]);
@@ -359,7 +390,11 @@ export default function LudexOnboarding({ onComplete }) {
 
   function nextStep() {
     if (stepIdx >= TOUR_STEPS.length - 1) {
-      setPhase("profile");
+      if (tourOnly) {
+        onComplete && onComplete();
+      } else {
+        setPhase("profile");
+      }
     } else {
       setStepIdx(stepIdx + 1);
     }
@@ -368,7 +403,11 @@ export default function LudexOnboarding({ onComplete }) {
     if (stepIdx > 0) setStepIdx(stepIdx - 1);
   }
   function skipTour() {
-    setPhase("profile");
+    if (tourOnly) {
+      onComplete && onComplete();
+    } else {
+      setPhase("profile");
+    }
   }
 
   if (phase === "intro") {

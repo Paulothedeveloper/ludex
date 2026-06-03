@@ -1957,6 +1957,8 @@ export default function LudexLauncher() {
   const [androidDemo, setAndroidDemo] = useState(null);  // { expired, days_left, is_admin_unlocked, ... }
   // First-run onboarding + utilitarios novos do v0.4
   const [firstRunActive, setFirstRunActive] = useState(false);
+  // v0.9.34: re-abrir tour quando user clica em "Ver tutorial novamente" nos Ajustes
+  const [tourReplayActive, setTourReplayActive] = useState(false);
   const [whatsNew, setWhatsNew] = useState(null); // v0.9.8: novidades pos-update
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [suggestionsTab, setSuggestionsTab] = useState("roms");
@@ -3781,6 +3783,7 @@ export default function LudexLauncher() {
             onShowLogs={() => { closeSettings(); setTimeout(() => setLogsOpen(true), MODAL_EXIT_MS); }}
             onShowHealth={() => { closeSettings(); setTimeout(() => setHealthOpen(true), MODAL_EXIT_MS); }}
             onOpenSuggestions={() => { closeSettings(); setTimeout(() => { setSuggestionsTab("roms"); setSuggestionsOpen(true); }, MODAL_EXIT_MS); }}
+            onReplayTour={() => { closeSettings(); setTimeout(() => setTourReplayActive(true), MODAL_EXIT_MS); }}
             sfx={sfx}
             ambientMusic={ambientMusic}
             THEMES={THEMES}
@@ -3973,12 +3976,13 @@ export default function LudexLauncher() {
             className="pb-search-pill"
             onClick={() => { sfx.confirm(); setSearchOpen(true); }}
             title="Buscar jogo (/)"
+            data-tour="search"
           >
             <SearchIcon />
             <span className="pb-search-pill-label">Buscar jogo</span>
             <kbd className="pb-search-pill-kbd">/</kbd>
           </button>
-          <button className="pb-icon-btn" onClick={pickRandomGame} title="Surpresa! (R) — escolhe jogo aleatorio">
+          <button className="pb-icon-btn" onClick={pickRandomGame} title="Surpresa! (R) — escolhe jogo aleatorio" data-tour="random">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <rect x="3" y="3" width="18" height="18" rx="2.5" />
               <circle cx="8" cy="8" r="1.4" fill="currentColor" />
@@ -4010,12 +4014,14 @@ export default function LudexLauncher() {
           if (!lpSystem) return null;
           if (!lpSystem.games.find((g) => g.path === lp.rom_path)) return null;
           return (
+            <div data-tour="continue">
             <ContinueBanner
               lastPlayed={lp}
               system={lpSystem}
               coverSrc={cover}
               onResume={() => selectGameByPath(lp.system_id, lp.rom_path)}
             />
+            </div>
           );
         })()}
 
@@ -4266,6 +4272,7 @@ export default function LudexLauncher() {
           onShowLogs={() => { closeSettings(); setTimeout(() => setLogsOpen(true), MODAL_EXIT_MS); }}
           onShowHealth={() => { closeSettings(); setTimeout(() => setHealthOpen(true), MODAL_EXIT_MS); }}
           onOpenSuggestions={() => { closeSettings(); setTimeout(() => { setSuggestionsTab("roms"); setSuggestionsOpen(true); }, MODAL_EXIT_MS); }}
+          onReplayTour={() => { closeSettings(); setTimeout(() => setTourReplayActive(true), MODAL_EXIT_MS); }}
           sfx={sfx}
           ambientMusic={ambientMusic}
           THEMES={THEMES}
@@ -4507,6 +4514,10 @@ export default function LudexLauncher() {
        * cima de tudo (z-index 9000) ate o user concluir. Skip em Android. */}
       {firstRunActive && splashDone && !IS_ANDROID && (
         <LudexOnboarding onComplete={handleFirstRunComplete} />
+      )}
+      {/* v0.9.34: replay do tour (sem criar perfil) — disparado por Ajustes */}
+      {tourReplayActive && (
+        <LudexOnboarding tourOnly onComplete={() => setTourReplayActive(false)} />
       )}
     </div>
   );

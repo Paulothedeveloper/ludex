@@ -4,6 +4,11 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.34": [
+    "Tutorial refeito: agora aponta cada feature do app (avatar, busca, mais jogados, continue jogando, sistemas, ajustes, BIOS, tema, controle, pasta) com efeito de vidro fosco em volta e destaque no elemento. Mesmo padrao no celular e no PC.",
+    "Botao 'Ver tutorial novamente' nos Ajustes (celular e PC) — refaz o passo a passo a qualquer hora.",
+    "Tema do app agora muda fundo+cards+accent de verdade (era so o texto). Switch Dark, PS3 Wave, Sunset, Forest e Light ganharam paleta completa.",
+  ],
   "0.9.33": [
     "Capas no celular agora carregam mais rapido no scroll inicial (4 downloads paralelos, era 2-3).",
   ],

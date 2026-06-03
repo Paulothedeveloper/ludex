@@ -26,6 +26,10 @@
   --lmx-accent: #c4b5fd;
   --lmx-accent-2: #ec4899;
   --lmx-gradient: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%);
+  /* v0.9.34: glow tematico do fundo. Era hardcoded roxo/pink, agora cada tema
+     define os 2 stops -> o fundo do app realmente muda (era so o texto antes). */
+  --lmx-glow-1: rgba(124, 58, 237, 0.18);
+  --lmx-glow-2: rgba(236, 72, 153, 0.12);
   --lmx-radius: 14px;
   --lmx-radius-lg: 20px;
   --lmx-radius-pill: 999px;
@@ -38,12 +42,14 @@
 
 /* v0.9.20: REVERTIDO pro tema FULL (igual o launcher do PC). Paulo esclareceu que
    o tema deve mudar fundo, superficies, bordas, texto e accent — nao so texto.
-   (A v0.9.18 era so-texto baseado em pedido anterior; agora alinhado com o PC.) */
-.lmx[data-theme="switch-dark"] { --lmx-bg:#161616; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.08); --lmx-border:rgba(255,255,255,0.1); --lmx-text:#fff; --lmx-text-dim:rgba(255,255,255,0.5); --lmx-accent:#cbd5e1; }
-.lmx[data-theme="ps3-wave"]    { --lmx-bg:#021232; --lmx-surface:rgba(255,255,255,0.06); --lmx-surface-2:rgba(255,255,255,0.1);  --lmx-border:rgba(125,155,196,0.28); --lmx-text:#e8f1ff; --lmx-text-dim:#7d9bc4; --lmx-accent:#7db0ff; }
-.lmx[data-theme="sunset"]      { --lmx-bg:#1a0a14; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.09); --lmx-border:rgba(252,211,77,0.22); --lmx-text:#fff8f0; --lmx-text-dim:#c9a8b8; --lmx-accent:#ffb066; }
-.lmx[data-theme="forest"]      { --lmx-bg:#0a1612; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.09); --lmx-border:rgba(134,239,172,0.22); --lmx-text:#e8fff2; --lmx-text-dim:#9bc4a8; --lmx-accent:#86efac; }
-.lmx[data-theme="light"]       { --lmx-bg:#ededed; --lmx-surface:rgba(0,0,0,0.04);       --lmx-surface-2:rgba(0,0,0,0.07);       --lmx-border:rgba(0,0,0,0.12);      --lmx-text:#1a1a1a; --lmx-text-muted:rgba(0,0,0,0.6); --lmx-text-dim:rgba(0,0,0,0.5); --lmx-accent:#6d28d9; }
+   (A v0.9.18 era so-texto baseado em pedido anterior; agora alinhado com o PC.)
+   v0.9.34: cada tema agora tambem sobrescreve --lmx-accent-2 e os glows do fundo,
+   senao o radial-gradient roxo/pink ficava por cima e so o texto mudava (relatado). */
+.lmx[data-theme="switch-dark"] { --lmx-bg:#161616; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.08); --lmx-border:rgba(255,255,255,0.1); --lmx-text:#fff; --lmx-text-dim:rgba(255,255,255,0.5); --lmx-accent:#cbd5e1; --lmx-accent-2:#94a3b8; --lmx-glow-1:rgba(203,213,225,0.10); --lmx-glow-2:rgba(148,163,184,0.08); --lmx-gradient: linear-gradient(135deg,#3a3a3a 0%,#1f1f1f 100%); }
+.lmx[data-theme="ps3-wave"]    { --lmx-bg:#021232; --lmx-surface:rgba(255,255,255,0.06); --lmx-surface-2:rgba(255,255,255,0.1);  --lmx-border:rgba(125,155,196,0.28); --lmx-text:#e8f1ff; --lmx-text-dim:#7d9bc4; --lmx-accent:#7db0ff; --lmx-accent-2:#1d4ed8; --lmx-glow-1:rgba(29,78,216,0.28); --lmx-glow-2:rgba(125,176,255,0.18); --lmx-gradient: linear-gradient(135deg,#1d4ed8 0%,#021232 100%); }
+.lmx[data-theme="sunset"]      { --lmx-bg:#1a0a14; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.09); --lmx-border:rgba(252,211,77,0.22); --lmx-text:#fff8f0; --lmx-text-dim:#c9a8b8; --lmx-accent:#ffb066; --lmx-accent-2:#ff6b35; --lmx-glow-1:rgba(255,107,53,0.22); --lmx-glow-2:rgba(252,211,77,0.16); --lmx-gradient: linear-gradient(135deg,#ff6b35 0%,#2a0a1a 100%); }
+.lmx[data-theme="forest"]      { --lmx-bg:#0a1612; --lmx-surface:rgba(255,255,255,0.05); --lmx-surface-2:rgba(255,255,255,0.09); --lmx-border:rgba(134,239,172,0.22); --lmx-text:#e8fff2; --lmx-text-dim:#9bc4a8; --lmx-accent:#86efac; --lmx-accent-2:#22c55e; --lmx-glow-1:rgba(34,197,94,0.20); --lmx-glow-2:rgba(134,239,172,0.14); --lmx-gradient: linear-gradient(135deg,#22c55e 0%,#0a1a0a 100%); }
+.lmx[data-theme="light"]       { --lmx-bg:#ededed; --lmx-surface:rgba(0,0,0,0.04);       --lmx-surface-2:rgba(0,0,0,0.07);       --lmx-border:rgba(0,0,0,0.12);      --lmx-text:#1a1a1a; --lmx-text-muted:rgba(0,0,0,0.6); --lmx-text-dim:rgba(0,0,0,0.5); --lmx-accent:#6d28d9; --lmx-accent-2:#3b82f6; --lmx-glow-1:rgba(109,40,217,0.12); --lmx-glow-2:rgba(59,130,246,0.08); --lmx-gradient: linear-gradient(135deg,#6d28d9 0%,#3b82f6 100%); }
 .lmx[data-theme="light"] { background-image: none; }
 /* Tema Light precisa de cor de texto explicita em superficies escuras de conteudo. */
 .lmx[data-theme="light"] .lmx-page-header h1,
@@ -60,9 +66,11 @@
   display: flex;
   flex-direction: column;
   background: var(--lmx-bg);
+  /* v0.9.34: usa --lmx-glow-1/2 (varia por tema). Antes era roxo/pink hardcoded,
+     entao trocar pra forest/ps3-wave/sunset deixava o app igual visualmente. */
   background-image:
-    radial-gradient(circle at top right, rgba(124, 58, 237, 0.18), transparent 50%),
-    radial-gradient(circle at bottom left, rgba(236, 72, 153, 0.12), transparent 60%);
+    radial-gradient(circle at top right, var(--lmx-glow-1), transparent 50%),
+    radial-gradient(circle at bottom left, var(--lmx-glow-2), transparent 60%);
   color: var(--lmx-text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   overflow: hidden;
@@ -2305,9 +2313,10 @@
   position: fixed;
   inset: 0;
   background: var(--lmx-bg);
+  /* v0.9.34: glow segue o tema */
   background-image:
-    radial-gradient(circle at top right, rgba(124, 58, 237, 0.25), transparent 50%),
-    radial-gradient(circle at bottom left, rgba(236, 72, 153, 0.18), transparent 60%);
+    radial-gradient(circle at top right, var(--lmx-glow-1), transparent 50%),
+    radial-gradient(circle at bottom left, var(--lmx-glow-2), transparent 60%);
   z-index: 99999;
   display: flex;
   align-items: center;
@@ -2586,3 +2595,121 @@
 @media (prefers-reduced-motion: reduce) {
   .lmx-home > *, .lmx-card, .lmx-systems-row, .lmx-wheel-item { animation: none !important; }
 }
+
+/* =================================================================
+ * v0.9.34: TUTORIAL OVERLAY (spotlight + blur por feature)
+ * ================================================================= */
+.lmx-tour-root {
+  position: fixed;
+  inset: 0;
+  z-index: 99000;
+  pointer-events: auto;
+  animation: lmx-fade-in 220ms ease-out;
+}
+/* fallback quando nao ha alvo (welcome/done) — full overlay com blur */
+.lmx-tour-full-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+/* cada uma das 4 faixas em volta do alvo. backdrop-filter desfoca o
+   conteudo POR BAIXO -> efeito de vidro fosco. background semi escuro
+   reforca o destaque do alvo (que fica nitido). */
+.lmx-tour-blur {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: top 240ms ease, left 240ms ease, width 240ms ease, height 240ms ease;
+}
+/* anel de destaque ao redor do alvo (sem fundo, so borda + glow) */
+.lmx-tour-ring {
+  position: absolute;
+  border: 2px solid var(--lmx-accent, #c4b5fd);
+  border-radius: 14px;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 4px rgba(196, 181, 253, 0.18),
+    0 0 24px 6px rgba(196, 181, 253, 0.35);
+  transition: top 240ms ease, left 240ms ease, width 240ms ease, height 240ms ease;
+  animation: lmx-tour-pulse 1.8s ease-in-out infinite;
+}
+@keyframes lmx-tour-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(196, 181, 253, 0.18), 0 0 24px 6px rgba(196, 181, 253, 0.35); }
+  50%      { box-shadow: 0 0 0 6px rgba(196, 181, 253, 0.28), 0 0 34px 10px rgba(196, 181, 253, 0.55); }
+}
+/* banner com titulo + body + nav */
+.lmx-tour-banner {
+  position: absolute;
+  background: rgba(20, 12, 40, 0.92);
+  border: 1px solid var(--lmx-border);
+  border-radius: var(--lmx-radius-lg);
+  padding: 18px 18px 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  animation: lmx-tour-banner-in 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lmx[data-theme="light"] .lmx-tour-banner {
+  background: rgba(245, 240, 250, 0.96);
+  color: var(--lmx-text);
+}
+@keyframes lmx-tour-banner-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.lmx-tour-step {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lmx-accent);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.lmx-tour-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--lmx-text);
+  margin: 0 0 8px;
+  line-height: 1.25;
+}
+.lmx-tour-body {
+  font-size: 13.5px;
+  color: var(--lmx-text-muted);
+  line-height: 1.45;
+  margin: 0 0 14px;
+}
+.lmx-tour-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.lmx-tour-nav {
+  display: flex;
+  gap: 8px;
+}
+.lmx-tour-btn {
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms ease, background 160ms ease;
+}
+.lmx-tour-btn-primary {
+  background: var(--lmx-gradient);
+  color: #fff;
+}
+.lmx-tour-btn-primary:active { transform: scale(0.96); }
+.lmx-tour-btn-ghost {
+  background: transparent;
+  color: var(--lmx-text-muted);
+  border: 1px solid var(--lmx-border);
+}
+.lmx-tour-btn-ghost:active { background: var(--lmx-surface-2); }

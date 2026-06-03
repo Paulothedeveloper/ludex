@@ -29,6 +29,7 @@ export default function SettingsPanel({
   onToggleMusic, onSetMusicVolume,
   onShowLogs, onShowHealth,
   onOpenSuggestions,
+  onReplayTour,
   modalGamepadRef,
   // v0.9.0: artefatos module-level do launcher passados via props
   sfx, ambientMusic, THEMES, DEFAULT_CUSTOM_THEME, ACHIEVEMENTS,
@@ -885,6 +886,15 @@ export default function SettingsPanel({
             <InfoIcon /> Ver logs do app
           </button>
           <p className="pb-settings-hint">Útil quando algum jogo não abre — mostra as últimas 200 linhas do log.</p>
+        </div>
+
+        {/* v0.9.34: re-abrir tour spotlight pra rever cada feature do launcher */}
+        <div className="pb-settings-section">
+          <h3>Tutorial</h3>
+          <button className="pb-settings-btn" onClick={() => { sfx.click(); onReplayTour && onReplayTour(); }}>
+            <InfoIcon /> Ver tutorial novamente
+          </button>
+          <p className="pb-settings-hint">Refaz o passo a passo da home (topbar, busca, sortear, sistemas, grid, ajustes) com destaque em cada elemento.</p>
         </div>
 
         {/* v0.9.1: Sincroniza perfil + conquistas + favoritos + game_meta + recents
