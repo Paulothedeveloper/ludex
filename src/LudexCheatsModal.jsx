@@ -1,5 +1,5 @@
 // v0.9.2: Modal de cheats in-game. Usado tanto no EmulatorView (PC) quanto no
-// emulador mobile. Auto-contido (estilos inline) pra nao depender do CSS de cada
+// emulador mobile. Auto-contido (estilos inline) pra não depender do CSS de cada
 // contexto. Busca cheats abertos online + permite adicionar manualmente.
 
 import React, { useState, useEffect, useCallback } from "react";

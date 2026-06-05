@@ -1651,9 +1651,55 @@ fn launch_game(system_id: String, rom_path: String) -> Result<(), String> {
         command.creation_flags(HIGH_PRIORITY_CLASS);
     }
 
+    // v0.9.36: log MUITO mais verboso pra debugar erros silenciosos (Paulo reportou
+    // "RPCS3 dando erro" sem mais detalhe). Logamos o comando completo, argumentos
+    // e cwd ANTES de spawnar. Stdout/stderr ficam no log do app pra inspecao via
+    // Ajustes > Diagnostico (em vez de sumir num void).
+    log::info!(
+        "[emu spawn] system={} exe={} args={:?} rom={} cwd={}",
+        system_id,
+        exe.display(),
+        cfg.launch_args,
+        rom_arg_path.display(),
+        exe.parent().map(|p| p.display().to_string()).unwrap_or_default(),
+    );
+    // RPCS3 especificamente: captura stderr pra ter o motivo do "Invalid file"
+    // ou "BootROM not found" disponivel nos logs do Ludex.
+    if system_id == "ps3" {
+        command.stdout(std::process::Stdio::piped());
+        command.stderr(std::process::Stdio::piped());
+    }
     let mut child = command
         .spawn()
-        .map_err(|e| format!("Falha ao executar emulador: {}", e))?;
+        .map_err(|e| format!("Falha ao executar emulador: {} (exe={} args={:?})", e, exe.display(), cfg.launch_args))?;
+
+    // PS3: dreina stderr em thread separada e loga (RPCS3 imprime no stderr).
+    if system_id == "ps3" {
+        if let Some(stderr) = child.stderr.take() {
+            std::thread::spawn(move || {
+                use std::io::{BufRead, BufReader};
+                let reader = BufReader::new(stderr);
+                for line in reader.lines().take(300) {
+                    if let Ok(l) = line {
+                        if l.contains("error") || l.contains("Error") || l.contains("E ") || l.contains("F ") {
+                            log::error!("[rpcs3] {}", l);
+                        } else {
+                            log::info!("[rpcs3] {}", l);
+                        }
+                    }
+                }
+            });
+        }
+        if let Some(stdout) = child.stdout.take() {
+            std::thread::spawn(move || {
+                use std::io::{BufRead, BufReader};
+                let reader = BufReader::new(stdout);
+                for line in reader.lines().take(300).flatten() {
+                    log::info!("[rpcs3:out] {}", line);
+                }
+            });
+        }
+    }
 
     let pid = child.id();
     let started_at = std::time::SystemTime::now()

@@ -1,6 +1,6 @@
 // Musica ambiente compartilhada: playlist MP3 com shuffle + crossfade.
 // v0.9.9: extraido de LudexLauncher pra ser usado IGUAL no app mobile e no
-// launcher do PC (Paulo: "musica de fundo do app = mesma do launcher Windows").
+// launcher do PC (Paulo: "música de fundo do app = mesma do launcher Windows").
 // Le os MP3s via list_music_tracks (Rust resolve a pasta: /storage/emulated/0/
 // Ludex/music no Android, <install>/music no desktop).
 
@@ -23,11 +23,11 @@ export const ambientMusic = {
   current: 0,
   targetVolume: 0.3,
   fadeInterval: null,
-  fadeOutInterval: null,  // fade-out tem interval separado pra nao colidir com fade-in
+  fadeOutInterval: null,  // fade-out tem interval separado pra não colidir com fade-in
   // Generation counter pra invalidar callbacks pendentes. Cada start()/stop()
   // incrementa. Listeners (ended/error) so disparam _next() se sua geracao ainda
-  // for a atual. Resolve race quando user desativa musica e o ended listener
-  // dispara depois — bug que fazia musica nova tocar sozinha apos desativar.
+  // for a atual. Resolve race quando user desativa música e o ended listener
+  // dispara depois — bug que fazia música nova tocar sozinha após desativar.
   generation: 0,
 
   async load() {
@@ -45,7 +45,7 @@ export const ambientMusic = {
 
   start(volume = 0.3) {
     // Hard stop antes (sem fade-out, sem propagar listeners) pra eliminar audio
-    // antigo COMPLETAMENTE antes do novo. Evita 2 musicas tocando ao mesmo tempo.
+    // antigo COMPLETAMENTE antes do novo. Evita 2 músicas tocando ao mesmo tempo.
     this.stop({ immediate: true });
     if (!this.playlist.length) return;
     this.targetVolume = Math.max(0, Math.min(1, volume));
@@ -109,9 +109,9 @@ export const ambientMusic = {
     if (this.audio) this._fadeTo(this.targetVolume, 300);
   },
 
-  // Para a musica. Sempre incrementa generation (invalida listeners pendentes),
+  // Para a música. Sempre incrementa generation (invalida listeners pendentes),
   // remove os listeners do audio atual e pausa. immediate=false faz fade-out
-  // cosmetico de 400ms (o audio ja foi desligado, ended/error nao disparam nada).
+  // cosmetico de 400ms (o audio ja foi desligado, ended/error não disparam nada).
   stop(opts = {}) {
     const immediate = !!opts.immediate;
     this.generation++;

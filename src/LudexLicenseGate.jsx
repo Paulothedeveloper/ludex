@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import VirtualKeyboard from "./LudexOSK";
 
 /**
- * Tela bloqueante mostrada antes de qualquer outra coisa quando o app nao
+ * Tela bloqueante mostrada antes de qualquer outra coisa quando o app não
  * tem license valida. Renderiza:
  * - Logo Ludex
  * - Input pra colar license key (com OSK pra controle)

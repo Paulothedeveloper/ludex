@@ -1,11 +1,11 @@
-// v0.8.37: Manifest de opcoes por sistema. Define quais opcoes libretro o user
-// pode mexer pela UI de cada emulador. Cada opcao tem key (variavel libretro),
+// v0.8.37: Manifest de opções por sistema. Define quais opções libretro o user
+// pode mexer pela UI de cada emulador. Cada opção tem key (variavel libretro),
 // label (PT-BR), type, choices (pra select), default e category.
 //
 // Categorias: 'video', 'performance', 'audio', 'sistema'
 //
 // Persistencia: localStorage chave 'ludex.options.<systemId>' = {key: value, ...}
-// Apply: invoke('libretro_set_option', {key, value}) — efeito no proximo load_game.
+// Apply: invoke('libretro_set_option', {key, value}) — efeito no próximo load_game.
 
 import { invoke } from '@tauri-apps/api/core';
 
@@ -186,7 +186,7 @@ export const SYSTEM_OPTIONS = {
   // ===== PSP (PPSSPP) =====
   psp: [
     // v0.9.20: defaults reduzidos pra equilibrio FPS/audio (Paulo: PSP lento +
-    // baixo FPS + audio ruim). 2x nativo (960x544) ja parece otimo e roda solto;
+    // baixo FPS + audio ruim). 2x nativo (960x544) ja parece ótimo e roda solto;
     // auto frame skip on evita audio crackling em momentos pesados.
     sel('ppsspp_internal_resolution', 'Resolução Interna', 'video',
       ['480x272', '960x544', '1440x816', '1920x1088', '2400x1360', '2880x1632', '3360x1904', '3840x2176'],
@@ -370,7 +370,7 @@ export const SYSTEM_OPTIONS = {
     sel('mgba_skip_bios', 'Pular BIOS', 'sistema',
       ['ON', 'OFF'],
       'ON'),
-    // v0.9.1: opcoes adicionais pra max controle
+    // v0.9.1: opções adicionais pra max controle
     sel('mgba_audio_low_pass_filter', 'Filtro Audio Low-Pass', 'audio',
       ['off', 'on'],
       'off'),
@@ -476,9 +476,9 @@ SYSTEM_OPTIONS.sms = SYSTEM_OPTIONS.md;
 SYSTEM_OPTIONS.gg = SYSTEM_OPTIONS.md;
 SYSTEM_OPTIONS.segacd = SYSTEM_OPTIONS.md;
 
-// ===== v0.9.1: opcoes do FRONTEND (Ludex), nao do core libretro =====
+// ===== v0.9.1: opções do FRONTEND (Ludex), não do core libretro =====
 // Aplicadas no LudexEmulatorView (audio gain, deadzone analogica, rewind,
-// fast-forward speed). Chave comeca com 'ludex_' pra nao colidir com cores.
+// fast-forward speed). Chave começa com 'ludex_' pra não colidir com cores.
 // Persistidas no mesmo localStorage por sistema. Atualizam em tempo real.
 const FRONTEND_OPTIONS = [
   sel('ludex_audio_volume', 'Volume Áudio', 'audio',
@@ -517,12 +517,12 @@ const FRONTEND_OPTIONS = [
     'disabled'),
 ];
 
-// Adiciona FRONTEND_OPTIONS no fim de cada sistema (preserva opcoes especificas do core)
+// Adiciona FRONTEND_OPTIONS no fim de cada sistema (preserva opções especificas do core)
 for (const sysId of Object.keys(SYSTEM_OPTIONS)) {
   SYSTEM_OPTIONS[sysId] = [...SYSTEM_OPTIONS[sysId], ...FRONTEND_OPTIONS];
 }
 
-// Lista de opcoes que NAO precisam de reload (frontend) — UI usa pra esconder badge
+// Lista de opções que NAO precisam de reload (frontend) — UI usa pra esconder badge
 export const HOT_RELOAD_KEYS = new Set([
   ...FRONTEND_OPTIONS.map(o => o.key),
   // Opcoes do core que aceitam hot-reload via GET_VARIABLE_UPDATE
@@ -530,11 +530,11 @@ export const HOT_RELOAD_KEYS = new Set([
   // requerem rebuild do contexto)
 ]);
 
-// Opcoes que SAO de frontend (nao manda pro core via libretro_set_option)
+// Opcoes que SAO de frontend (não manda pro core via libretro_set_option)
 export const FRONTEND_OPTION_KEYS = new Set(FRONTEND_OPTIONS.map(o => o.key));
 
-// v0.9.1: opcoes que o core marca como "(Restart)" — mudancas so aplicam no
-// proximo Jogar, nao em tempo real. UI deve mostrar badge claro e toast quando
+// v0.9.1: opções que o core marca como "(Restart)" — mudancas so aplicam no
+// próximo Jogar, não em tempo real. UI deve mostrar badge claro e toast quando
 // user mexer. Lista extraida dos logs SET_VARIABLES de cada core.
 export const RESTART_REQUIRED_KEYS = new Set([
   // PCSX2 — todos marcados (Restart) no SET_VARIABLES
@@ -635,9 +635,9 @@ export const SCREEN_LAYOUTS = {
   },
 };
 
-// Aplica todas opcoes salvas de um sistema (chamado antes de load_game).
-// v0.9.1: skip opcoes frontend-only (ludex_*) — essas sao lidas pelo EmulatorView
-// diretamente do localStorage, nao mandam pro core libretro.
+// Aplica todas opções salvas de um sistema (chamado antes de load_game).
+// v0.9.1: skip opções frontend-only (ludex_*) — essas sao lidas pelo EmulatorView
+// diretamente do localStorage, não mandam pro core libretro.
 export async function applySystemOptions(systemId) {
   const values = loadSystemOptions(systemId);
   for (const [key, value] of Object.entries(values)) {
@@ -648,7 +648,7 @@ export async function applySystemOptions(systemId) {
 
 // v0.9.1: helper pra LudexEmulatorView ler config frontend efetiva.
 // Retorna {audioGain, deadzone, rewindEnabled, rewindBufferMb, ffSpeed, autoSaveOnExit, pixelFilter, showFps}
-// com fallback pros defaults se nao houver salvo.
+// com fallback pros defaults se não houver salvo.
 export function getFrontendConfig(systemId) {
   const values = loadSystemOptions(systemId);
   const parsePercent = (v, def) => {
@@ -675,7 +675,7 @@ export function getFrontendConfig(systemId) {
   };
 }
 
-// Aplica opcoes de TODOS sistemas (chamado no boot)
+// Aplica opções de TODOS sistemas (chamado no boot)
 export async function applyAllSavedOptions() {
   for (const systemId of Object.keys(SYSTEM_OPTIONS)) {
     await applySystemOptions(systemId);
@@ -771,7 +771,7 @@ export function padIdxForLibretroBtn(map, libretroId) {
 }
 
 // Atualiza mapa: padIdx -> libretroId. Se outro padIdx ja mapeia esse libretroId,
-// troca os dois (swap) pra nao ter botoes sem funcao.
+// troca os dois (swap) pra não ter botões sem função.
 export function remapPadButton(systemId, padIdx, libretroId) {
   const map = effectivePadMap(systemId);
   // Acha outro padIdx que mapeia esse libretroId atualmente

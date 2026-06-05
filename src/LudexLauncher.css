@@ -4756,9 +4756,11 @@
    alvo aplica backdrop-filter blur(10px) + escurece — alvo fica nitido. */
 .lx-tour-blur {
   position: absolute;
-  background: rgba(8, 5, 20, 0.62);
-  backdrop-filter: blur(10px) saturate(120%);
-  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  /* v0.9.36: escureceu 0.62 -> 0.82 + blur 10 -> 16 pra que o alvo fique
+     evidente e o resto da tela não compita por atenção. */
+  background: rgba(8, 5, 20, 0.82);
+  backdrop-filter: blur(16px) saturate(110%);
+  -webkit-backdrop-filter: blur(16px) saturate(110%);
   pointer-events: auto;
   z-index: 1;
   transition: top 220ms ease, left 220ms ease, width 220ms ease, height 220ms ease;
@@ -4777,17 +4779,29 @@
   position: absolute;
   z-index: 1;
   pointer-events: none;
-  border: 2.5px solid rgba(167, 139, 250, 0.85);
+  /* v0.9.36: borda 2.5 -> 4px branco sólido + glow mais intenso. */
+  border: 4px solid #ffffff;
   border-radius: 14px;
   box-shadow:
-    0 0 0 5px rgba(167, 139, 250, 0.20),
-    0 0 30px 8px rgba(167, 139, 250, 0.45);
+    0 0 0 7px rgba(167, 139, 250, 0.35),
+    0 0 44px 14px rgba(167, 139, 250, 0.62),
+    0 0 0 1px rgba(0, 0, 0, 0.5) inset;
   transition: top 220ms ease, left 220ms ease, width 220ms ease, height 220ms ease;
-  animation: lxTourPulse 1.8s ease-in-out infinite;
+  animation: lxTourPulse 1.6s ease-in-out infinite;
 }
 @keyframes lxTourPulse {
-  0%, 100% { box-shadow: 0 0 0 5px rgba(167, 139, 250, 0.20), 0 0 30px 8px rgba(167, 139, 250, 0.45); }
-  50%      { box-shadow: 0 0 0 7px rgba(167, 139, 250, 0.30), 0 0 40px 12px rgba(167, 139, 250, 0.62); }
+  0%, 100% {
+    box-shadow:
+      0 0 0 7px rgba(167, 139, 250, 0.35),
+      0 0 44px 14px rgba(167, 139, 250, 0.62),
+      0 0 0 1px rgba(0, 0, 0, 0.5) inset;
+  }
+  50%      {
+    box-shadow:
+      0 0 0 11px rgba(167, 139, 250, 0.45),
+      0 0 60px 20px rgba(167, 139, 250, 0.80),
+      0 0 0 1px rgba(0, 0, 0, 0.5) inset;
+  }
 }
 .lx-tour-banner {
   position: absolute;

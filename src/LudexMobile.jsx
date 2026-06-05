@@ -21,7 +21,7 @@ import { WhatsNewModal } from "./LudexWhatsNew";
 import { open as openDialog, message as nativeMessage, ask as nativeAsk } from "@tauri-apps/plugin-dialog";
 
 // v0.9.2: window.alert/confirm/prompt sao NO-OP no WebView do Android (Tauri) —
-// por isso varios botoes "nao funcionavam" no APK. Usa os dialogs NATIVOS do
+// por isso varios botões "não funcionavam" no APK. Usa os dialogs NATIVOS do
 // plugin-dialog. mAlert/mConfirm sao async (await). Pra prompt (sem equivalente
 // nativo) usamos input in-app (modais proprios).
 const mAlert = (msg) => { try { return nativeMessage(String(msg), { title: "Ludex" }); } catch { return Promise.resolve(); } };
@@ -40,7 +40,7 @@ import {
   isAmbientOn, setAmbientPref, startAmbient, stopAmbient,
   formatPlayTime, formatRelative,
 } from "./ludexMobileFeatures";
-import { ambientMusic } from "./ludexAmbientMusic"; // v0.9.9: musica ambiente igual ao PC
+import { ambientMusic } from "./ludexAmbientMusic"; // v0.9.9: música ambiente igual ao PC
 import { SystemIcon } from "./ludexIcons"; // v0.9.12: mesmos icones de sistema do PC
 import { SystemSettingsModal, SuggestionsModal } from "./LudexExtras"; // v0.9.1: + SuggestionsModal pra paridade com desktop
 import { DEFAULT_AVATARS, avatarUrl } from "./LudexOnboarding"; // v0.9.1: reusa avatares SVG do desktop (regra: NUNCA emoji em UI prod)
@@ -75,14 +75,14 @@ function SysGlyph({ id }) { return <SystemIcon id={id} />; }
 
 // ============================================================
 // === SISTEMAS SUPORTADOS NO ANDROID =========================
-// Whitelist dos sistemas com core libretro .so ARM disponivel
+// Whitelist dos sistemas com core libretro .so ARM disponível
 // (autenticos Ludex embedded). Todos os outros (Switch/PS3/Xbox/etc)
-// nao funcionam em Android e SAO OCULTOS na UI mobile.
+// não funcionam em Android e SAO OCULTOS na UI mobile.
 // ============================================================
 const ANDROID_SUPPORTED = new Set([
   // Nintendo (embedded via libretro ARM)
   "snes", "nes", "gb", "gbc", "n64", "gba", "ds", "wii", "gc", "vb",
-  // Sony — so PS1 e PSP tem core libretro ARM. PS2/PS3/PS4/Vita: nao suportado.
+  // Sony — so PS1 e PSP tem core libretro ARM. PS2/PS3/PS4/Vita: não suportado.
   "ps1", "psp",
   // Sega
   "dreamcast", "saturn", "md", "sms", "gg", "segacd",
@@ -176,7 +176,7 @@ export default function LudexMobile() {
   const [search, setSearch] = useState("");
   const [androidDemo, setAndroidDemo] = useState(null);
   const [launching, setLaunching] = useState(false);
-  // v0.8.21: auto-update Android (banner obrigatorio quando ha versao nova)
+  // v0.8.21: auto-update Android (banner obrigatorio quando ha versão nova)
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateState, setUpdateState] = useState({ stage: "idle", msg: "" }); // idle | downloading | installing | error
   // v0.8.22: achievement toast + telemetria local
@@ -220,7 +220,7 @@ export default function LudexMobile() {
       try {
         const c = await invoke("load_config");
         if (c) setConfig(c);
-        // Auto-cria profile se nao tem — e PERSISTE na hora. Sem o save_config o
+        // Auto-cria profile se não tem — e PERSISTE na hora. Sem o save_config o
         // profile vivia so no state do React: a cada cold start gerava um id novo,
         // entao stats e saves chaveados por profile id se perdiam silenciosamente.
         if (!c?.profiles?.length) {
@@ -258,13 +258,13 @@ export default function LudexMobile() {
         }
       } catch (e) { /* desktop ou erro -- ignora */ }
 
-      // v0.8.14: checa permissao logo no startup (sem esperar scan retornar 0)
+      // v0.8.14: checa permissão logo no startup (sem esperar scan retornar 0)
       try {
         const has = await invoke("android_has_all_files_access");
         setHasFilesAccess(has);
       } catch { setHasFilesAccess(true); /* desktop = sempre true */ }
 
-      // v0.8.21: auto-check de update no startup (background, nao bloqueia UI)
+      // v0.8.21: auto-check de update no startup (background, não bloqueia UI)
       setTimeout(() => {
         invoke("check_update_info")
           .then((info) => { if (info?.available) setUpdateInfo(info); })
@@ -274,7 +274,7 @@ export default function LudexMobile() {
       try {
         const sys = await invoke("scan_roms_overrides", { romsRoot: null, overrides: loadSystemFolders() });
         // Filtra: APK so mostra sistemas com core libretro ARM (autenticos embedded).
-        // Switch/Wii U/PS3/Xbox/etc nao tem core ARM = nao funcionam em Android.
+        // Switch/Wii U/PS3/Xbox/etc não tem core ARM = não funcionam em Android.
         // v0.8.22: child mode filtra ROMs adultas por keyword no nome
         const filtered = (sys || [])
           .filter((s) => ANDROID_SUPPORTED.has(s.id))
@@ -291,7 +291,7 @@ export default function LudexMobile() {
     return () => clearTimeout(t);
   }, []);
 
-  // v0.9.8: novidades pos-update (compara versao atual com a ultima vista)
+  // v0.9.8: novidades pos-update (compara versão atual com a ultima vista)
   useEffect(() => {
     (async () => {
       try {
@@ -314,10 +314,18 @@ export default function LudexMobile() {
   }, []);
 
   // Achievement unlock callback (toast)
+  // v0.9.36: anima entrada + saida. Antes sumia abrupto em 4.2s. Agora: visible
+  // 3.5s + leaving 600ms (anima slide+fade pra baixo) + unmount.
+  const [achLeaving, setAchLeaving] = useState(false);
   const onUnlockAch = useCallback((ach) => {
+    setAchLeaving(false);
     setAchievementToast(ach);
     sfx.achievement(); haptic([20, 40, 20]);
-    setTimeout(() => setAchievementToast(null), 4200);
+    // Marca leaving aos 3.5s pra disparar CSS exit animation (lmx-ach-down 600ms)
+    const tLeave = setTimeout(() => setAchLeaving(true), 3500);
+    // Unmount real aos 4.1s (depois do exit acabar)
+    const tHide  = setTimeout(() => { setAchievementToast(null); setAchLeaving(false); }, 4100);
+    return () => { clearTimeout(tLeave); clearTimeout(tHide); };
   }, []);
 
   // Run achievement engine on mount + a cada mudanca em recents/stats
@@ -392,8 +400,8 @@ export default function LudexMobile() {
   }, [systems, recents]);
 
   // v0.9.20: refresh do home REAL — antes so esvaziava o cache e o state, mas
-  // o effect de fetch nao re-disparava (deps inalteradas) -> capas sumiam e nao
-  // voltavam, e jogos novos na pasta nao apareciam. Agora:
+  // o effect de fetch não re-disparava (deps inalteradas) -> capas sumiam e não
+  // voltavam, e jogos novos na pasta não apareciam. Agora:
   //   1) limpa o cache em disco,
   //   2) zera o state (todos os paths viram undefined -> aptos a re-fetch),
   //   3) re-scaneia a pasta (descobre jogos novos / remove os apagados),
@@ -414,13 +422,13 @@ export default function LudexMobile() {
   }, [reloadingCovers, rescanSystems]);
 
   // ============ LANCAR JOGO ============
-  // Android: so libretro embedded. Sistemas sem core ARM nao aparecem na lista
-  // (filtrados por ANDROID_SUPPORTED). PS2/PS3/PS4/Vita/Xbox/Switch: nao suportados.
+  // Android: so libretro embedded. Sistemas sem core ARM não aparecem na lista
+  // (filtrados por ANDROID_SUPPORTED). PS2/PS3/PS4/Vita/Xbox/Switch: não suportados.
   const [playingGame, setPlayingGame] = useState(null);
   const sessionStartRef = useRef(null);
   const launchGame = useCallback((system, game) => {
     if (!system.libretro_core) {
-      mAlert(`Sistema "${system.name}" nao tem core libretro embedded pra Android.`);
+      mAlert(`Sistema "${system.name}" não tem core libretro embedded para Android.`);
       return;
     }
     playPlatformJingle(system.id);
@@ -432,6 +440,21 @@ export default function LudexMobile() {
     });
     setRecents(loadRecents());
     setPlayingGame({ system, game });
+    // v0.9.36: trava a tela em landscape ao abrir o jogo, mesmo se o user tem
+    // "rotação automática" desligada no sistema (auto-lock do Android ignora
+    // a preferência do sistema dentro do app via Screen Orientation API).
+    try {
+      if (window.screen?.orientation?.lock) {
+        window.screen.orientation.lock('landscape').catch(() => {
+          // Alguns devices bloqueiam .lock() fora de fullscreen — pede fullscreen primeiro.
+          try {
+            document.documentElement.requestFullscreen?.().then(() => {
+              window.screen.orientation.lock('landscape').catch(() => {});
+            }).catch(() => {});
+          } catch {}
+        });
+      }
+    } catch {}
   }, []);
   const closeEmulator = useCallback(() => {
     // Trackeia tempo de jogo + atualiza recents/achievements
@@ -444,10 +467,16 @@ export default function LudexMobile() {
     checkAchievements(onUnlockAch);
     sfx.shutdown(); haptic(30);
     setPlayingGame(null);
+    // v0.9.36: solta o lock landscape ao sair do jogo (volta pra preferência do
+    // sistema/usuário). Fail-silent — se nunca travou, .unlock() é no-op.
+    try {
+      window.screen?.orientation?.unlock?.();
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    } catch {}
   }, [playingGame, onUnlockAch]);
 
   // ============ MUSICA AMBIENTE APP-WIDE (paridade PC) ============
-  // v0.9.9: toca a MESMA musica ambiente do launcher do Windows (MP3 da pasta
+  // v0.9.9: toca a MESMA música ambiente do launcher do Windows (MP3 da pasta
   // Ludex/music com shuffle + crossfade, via ludexAmbientMusic). Antes so tocava
   // dentro da aba Ajustes (o AmbientMusicToggle era dono do playback). Agora o
   // playback e global: toca em qualquer tela, PAUSA dentro do emulador, e volta
@@ -487,11 +516,11 @@ export default function LudexMobile() {
   // LudexMobile so roda em Android (App.jsx faz routing) -> sempre modal custom.
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
 
-  // v0.9.3: BACK do Android (gesto de swipe / botao) navega DENTRO do app em vez
+  // v0.9.3: BACK do Android (gesto de swipe / botão) navega DENTRO do app em vez
   // de MINIMIZAR. Antes qualquer back minimizava o app em qualquer aba (bug) e o
   // user era obrigado a usar as setas. Agora usa History API: mantemos um "trap"
-  // no historico; ao voltar, desfazemos UM nivel de navegacao e re-armamos o
-  // trap. So na raiz (Inicio, nada aberto) o proximo back sai do app.
+  // no histórico; ao voltar, desfazemos UM nível de navegação e re-armamos o
+  // trap. So na raiz (Inicio, nada aberto) o próximo back sai do app.
   const navStateRef = useRef({});
   navStateRef.current = { activeTab, openSystem, openGame, playingGame, folderPickerOpen, profileEditorOpen, sysFolderPick };
   const closeEmulatorRef = useRef(closeEmulator);
@@ -508,7 +537,7 @@ export default function LudexMobile() {
       else if (s.openGame) setOpenGame(null);
       else if (s.openSystem) setOpenSystem(null);
       else if (s.activeTab && s.activeTab !== "home") setActiveTab("home");
-      else handled = false; // raiz -> deixa o proximo back sair do app
+      else handled = false; // raiz -> deixa o próximo back sair do app
       if (handled) { try { history.pushState({ lx: 1 }, ""); } catch {} }
     };
     window.addEventListener("popstate", onPop);
@@ -516,7 +545,7 @@ export default function LudexMobile() {
   }, []);
 
   const dbg = useCallback((msg) => {
-    // v0.8.12 debug: WebView release nao loga console no logcat,
+    // v0.8.12 debug: WebView release não loga console no logcat,
     // entao usa frontend_log (Tauri tauri_plugin_log -> LogDir).
     try { invoke("frontend_log", { level: "info", message: `[picker] ${msg}` }); } catch {}
     try { console.log(`[Ludex] ${msg}`); } catch {}
@@ -526,7 +555,7 @@ export default function LudexMobile() {
     dbg("pickRomsFolder() chamado");
     // Fecha overlays/sub-telas pra o modal ficar visivel
     // (modal e renderizado so na tela principal — early return de openSystem/openGame
-    //  fazia o modal nao aparecer ate user voltar, causando o "trava o celular")
+    //  fazia o modal não aparecer ate user voltar, causando o "trava o celular")
     setOpenSystem(null);
     setOpenGame(null);
     setPlayingGame(null);
@@ -555,12 +584,12 @@ export default function LudexMobile() {
         if (c) setConfig(c);
       } catch {}
       if (totalGames === 0) {
-        // Checa permissao de acesso a todos os arquivos
+        // Checa permissão de acesso a todos os arquivos
         let hasAccess = true;
         try { hasAccess = await invoke("android_has_all_files_access"); } catch {}
         if (!hasAccess) {
           const ok = await mConfirm(
-            "O Ludex precisa de permissao para acessar seus arquivos.\n\n" +
+            "O Ludex precisa de permissão para acessar seus arquivos.\n\n" +
             "Vou abrir Configuracoes -- ative 'Permitir gerenciar todos os arquivos' e volte aqui.\n\nAbrir agora?"
           );
           if (ok) {
@@ -582,7 +611,7 @@ export default function LudexMobile() {
   }, [dbg]);
 
   // ============ UPDATE OBRIGATORIO (bloqueia tudo) ============
-  // v0.8.21: nao deixa user usar app desatualizado em mobile
+  // v0.8.21: não deixa user usar app desatualizado em mobile
   if (updateInfo?.available) {
     return (
       <UpdateRequiredScreen
@@ -592,7 +621,7 @@ export default function LudexMobile() {
           // v0.9.3: em vez de baixar/instalar dentro do app (instavel no WebView),
           // abre a release no GitHub no NAVEGADOR PADRAO do celular. O user baixa
           // o APK por la e instala. Mais confiavel e e o que o Paulo pediu.
-          setUpdateState({ stage: "installing", msg: "Abrindo a pagina da atualizacao no navegador..." });
+          setUpdateState({ stage: "installing", msg: "Abrindo a pagina da atualização no navegador..." });
           try {
             await invoke("open_url", { url: "https://github.com/EllaeMyApp/ludex/releases/latest" });
           } catch (e) {
@@ -730,7 +759,7 @@ export default function LudexMobile() {
         </div>
       </main>
 
-      {/* Folder picker modal (Android nao tem SAF nativo no Tauri ainda) */}
+      {/* Folder picker modal (Android não tem SAF nativo no Tauri ainda) */}
       {folderPickerOpen && (
         <FolderPickerModal
           onClose={() => setFolderPickerOpen(false)}
@@ -740,7 +769,7 @@ export default function LudexMobile() {
 
       {/* Achievement toast global */}
       {achievementToast && (
-        <div className="lmx-ach-toast">
+        <div className={`lmx-ach-toast ${achLeaving ? "leaving" : ""}`}>
           <div className="lmx-ach-toast-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d={achievementToast.icon} />
@@ -824,7 +853,7 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
   }, [systems]);
 
   // v0.9.14: "Mais jogados" (distinto de "Adicionados recentemente") — usa o tempo
-  // de jogo. Some sozinho se ainda nao ha tempo registrado.
+  // de jogo. Some sozinho se ainda não ha tempo registrado.
   const mostPlayed = useMemo(() => {
     const all = [];
     for (const sys of systems) {
@@ -877,7 +906,7 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
       )}
 
       {/* v0.9.14: "Mais jogados" — distinto de "Adicionados recentemente" abaixo
-          (antes duplicava). Some sozinho se nao ha tempo de jogo nem capa. */}
+          (antes duplicava). Some sozinho se não ha tempo de jogo nem capa. */}
       <div data-tour="home-mais-jogados">
         <FeaturedCarousel title="Mais jogados" items={mostPlayed} covers={covers} onPick={onPickGame} />
       </div>
@@ -896,7 +925,7 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
           {!hasFilesAccess ? (
             <>
               <p>
-                O Ludex precisa de permissao pra acessar suas ROMs no celular.
+                O Ludex precisa de permissão pra acessar suas ROMs no celular.
                 <br /><br />
                 Apos clicar, ative o switch do <b>Ludex</b> em <b>"Acesso a todos os arquivos"</b> e volte aqui.
               </p>
@@ -909,7 +938,7 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
               <p>
                 Escolha a pasta no seu celular onde tem as ROMs.
                 Pode ser <code>/Download</code>, <code>/Ludex/roms</code>,
-                ou qualquer outra que voce ja tenha jogos.
+                ou qualquer outra que você ja tenha jogos.
               </p>
               <button className="lmx-settings-btn primary" onClick={onPickFolder} style={{ maxWidth: 280, margin: "16px auto 0" }}>
                 Escolher pasta de ROMs
@@ -966,7 +995,7 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
 // ============================================================
 // === FEATURED CAROUSEL (v0.9.9 - paridade launcher PC) ======
 // Carrossel horizontal de capas GRANDES no topo da home. Usa os jogos mais
-// recentes que JA tem capa baixada (some inteiro enquanto nao ha capa, pra nao
+// recentes que JA tem capa baixada (some inteiro enquanto não ha capa, pra não
 // mostrar placeholders feios). Scroll-snap horizontal premium.
 // ============================================================
 function FeaturedCarousel({ items, covers, onPick, title = "Destaques" }) {
@@ -1206,9 +1235,9 @@ function UpdateChecker() {
     try {
       const info = await invoke("check_update_info");
       if (info?.available) {
-        setMsg({ kind: "info", text: `Nova versao v${info.latest} disponivel! Reinicie o app pra ver o prompt de atualizacao.` });
+        setMsg({ kind: "info", text: `Nova versão v${info.latest} disponível! Reinicie o app pra ver o prompt de atualização.` });
       } else {
-        setMsg({ kind: "ok", text: `Voce ja esta na versao mais recente (v${info?.current || "?"}).` });
+        setMsg({ kind: "ok", text: `Voce ja esta na versão mais recente (v${info?.current || "?"}).` });
       }
     } catch (e) {
       setMsg({ kind: "error", text: `Erro: ${e}` });
@@ -1217,11 +1246,11 @@ function UpdateChecker() {
   return (
     <>
       <p className="lmx-settings-hint">
-        O Ludex verifica automaticamente no inicio. Se houver versao nova, aparece
+        O Ludex verifica automaticamente no início. Se houver versão nova, aparece
         prompt obrigatorio pra atualizar.
       </p>
       <button className="lmx-settings-btn primary" onClick={check} disabled={busy}>
-        {busy ? "Verificando..." : "Verificar atualizacao"}
+        {busy ? "Verificando..." : "Verificar atualização"}
       </button>
       {msg && <p className={`lmx-settings-msg ${msg.kind}`}>{msg.text}</p>}
     </>
@@ -1249,7 +1278,7 @@ function SoundToggle() {
 }
 
 // v0.9.12: #10 — controle externo (Bluetooth/USB), paridade com o launcher do PC.
-// Mostra status ao vivo da conexao. Funciona automatico no jogo; remap fica na
+// Mostra status ao vivo da conexão. Funciona automático no jogo; remap fica na
 // aba Controle das Opcoes do Emulador (por sistema, igual ao PC).
 function ExternalControllerCard() {
   const [padName, setPadName] = useState(null);
@@ -1280,7 +1309,7 @@ function ExternalControllerCard() {
       </div>
       <p className="lmx-settings-hint">
         Controles Bluetooth/USB funcionam automaticamente dentro do jogo. Para
-        remapear os botoes, abra um jogo → menu (engrenagem) → Opcoes do Emulador →
+        remapear os botões, abra um jogo → menu (engrenagem) → Opcoes do Emulador →
         aba Controle (por sistema, igual ao launcher do PC).
       </p>
     </section>
@@ -1342,7 +1371,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
         setShowKeyInput(false);
         setKeyInput("");
       } else {
-        setMsg({ kind: "error", text: "License nao destravou (nao e admin)" });
+        setMsg({ kind: "error", text: "License não destravou (não e admin)" });
       }
     } catch (e) {
       setMsg({ kind: "error", text: String(e) });
@@ -1404,7 +1433,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
           {!androidDemo.is_admin_unlocked && (
             <>
               <button className="lmx-settings-btn primary" onClick={() => invoke("open_url", { url: "https://pauloadriel98.gumroad.com/l/ludex" }).catch(() => {})}>
-                Comprar versao Windows (R$ 49,90)
+                Comprar versão Windows (R$ 49,90)
               </button>
               {!showKeyInput ? (
                 <button className="lmx-settings-btn ghost" onClick={() => setShowKeyInput(true)}>
@@ -1437,7 +1466,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
       <section className="lmx-settings-card" data-tour="settings-tutorial">
         <div className="lmx-settings-label">Tutorial</div>
         <p className="lmx-settings-hint">
-          Ver o passo a passo de cada funcao do app de novo (com destaque visual em cada elemento).
+          Ver o passo a passo de cada função do app de novo (com destaque visual em cada elemento).
         </p>
         <button
           className="lmx-settings-btn ghost"
@@ -1451,14 +1480,14 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
       <section className="lmx-settings-card" data-tour="settings-folder">
         <div className="lmx-settings-label">Pasta de ROMs</div>
         <div className="lmx-settings-paths">
-          <code>{currentRomsRoot || "(padrao: /storage/emulated/0/Ludex/roms/)"}</code>
+          <code>{currentRomsRoot || "(padrão: /storage/emulated/0/Ludex/roms/)"}</code>
         </div>
         <button className="lmx-settings-btn primary" onClick={onPickFolder}>
           Escolher pasta no celular
         </button>
         <p className="lmx-settings-hint">
           Apos escolher, o Ludex varre subpastas automaticamente. Cada sistema
-          aparece quando voce tem ROMs com extensao reconhecida (snes, gba, gb, iso, etc).
+          aparece quando você tem ROMs com extensão reconhecida (snes, gba, gb, iso, etc).
         </p>
       </section>
 
@@ -1472,7 +1501,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
         <button className="lmx-settings-btn primary" onClick={async () => {
           // v0.9.5: abrir uma pasta especifica e instavel entre gerenciadores de
           // arquivos do Android. Tenta abrir, mas SEMPRE mostra o caminho como
-          // fallback (antes falhava em silencio = "nao funciona").
+          // fallback (antes falhava em silencio = "não funciona").
           const base = await invoke("android_ludex_base_path").catch(() => "/storage/emulated/0/Ludex");
           let opened = false;
           try { await invoke("android_open_folder", { absPath: base }); opened = true; } catch {}
@@ -1516,7 +1545,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
         <div className="lmx-settings-label">Sobre</div>
         <div className="lmx-settings-value">Ludex Android v0.8.23</div>
         <p className="lmx-settings-hint">
-          A versao Windows tem auto-update, gamepad nativo, todos os sistemas embedded + Switch/Wii U/PS3/Xbox 360/PS Vita via emulador externo.
+          A versão Windows tem auto-update, gamepad nativo, todos os sistemas embedded + Switch/Wii U/PS3/Xbox 360/PS Vita via emulador externo.
         </p>
       </section>
     </div>
@@ -1659,7 +1688,7 @@ function GameDetailScreen({ system, game, coverSrc, onClose, onLaunch }) {
   };
 
   const heroSrc = details?.cover_path ? convertFileSrc(details.cover_path) : coverSrc;
-  const youtubeId = details?.videos?.[0]?.youtube_id;
+  const youtubeId = details?.vídeos?.[0]?.youtube_id;
   const summary = details?.summary || details?.storyline || "";
 
   return (
@@ -1696,7 +1725,7 @@ function GameDetailScreen({ system, game, coverSrc, onClose, onLaunch }) {
           {details?.developer && <span>· {details.developer}</span>}
           {game.size_mb && <span>· {game.size_mb} MB</span>}
         </div>
-        {/* v0.9.6: nota de usuarios externos (IGDB, 0-100) — paridade com PC */}
+        {/* v0.9.6: nota de usuários externos (IGDB, 0-100) — paridade com PC */}
         {details?.rating != null && (
           <div className="lmx-detail-webrating">
             <span className="lmx-detail-webrating-score">{Math.round(details.rating)}</span>
@@ -1708,7 +1737,7 @@ function GameDetailScreen({ system, game, coverSrc, onClose, onLaunch }) {
           <IconPlay /> JOGAR
         </button>
 
-        {/* v0.9.3: nota do usuario (estrelas) */}
+        {/* v0.9.3: nota do usuário (estrelas) */}
         <div className="lmx-detail-rating">
           <span className="lmx-detail-rating-label">Sua nota</span>
           <div className="lmx-detail-stars">
@@ -1929,8 +1958,8 @@ function profileImgSrc(profile, bust) {
 // ============================================================
 // === PROFILE EDITOR MODAL (v0.9.4) ==========================
 // Editor de perfil DIRETO (abre tocando no avatar da home): trocar FOTO de
-// verdade (picker de imagem), nome e avatar. Antes nao tinha como trocar foto
-// nem o nome era facil de achar — Paulo pediu varias vezes.
+// verdade (picker de imagem), nome e avatar. Antes não tinha como trocar foto
+// nem o nome era fácil de achar — Paulo pediu varias vezes.
 function ProfileEditorModal({ config, activeProfile, onConfigChange, onClose }) {
   const [name, setName] = useState(activeProfile?.name || "");
   const [avatarId, setAvatarId] = useState(activeProfile?.avatar_id || DEFAULT_AVATARS[0].id);
@@ -2041,7 +2070,7 @@ function DemoExpiredScreen({ demo, onUnlock }) {
         const newDemo = await invoke("android_demo_status");
         onUnlock(newDemo);
       } else {
-        setMsg({ kind: "error", text: "License nao e admin" });
+        setMsg({ kind: "error", text: "License não e admin" });
       }
     } catch (e) {
       setMsg({ kind: "error", text: String(e) });
@@ -2056,8 +2085,8 @@ function DemoExpiredScreen({ demo, onUnlock }) {
         <div className="lmx-demo-expired-icon"><IconClock /></div>
         <h1>Demo expirou</h1>
         <p>
-          Voce usou os {demo.demo_days_total} dias da versao Android gratuita.
-          Pra continuar, compre a versao Windows.
+          Voce usou os {demo.demo_days_total} dias da versão Android gratuita.
+          Pra continuar, compre a versão Windows.
         </p>
         <button className="lmx-settings-btn primary" onClick={() => invoke("open_url", { url: "https://pauloadriel98.gumroad.com/l/ludex" }).catch(() => {})}>
           Comprar Windows (R$ 49,90)
@@ -2092,7 +2121,7 @@ function DemoExpiredScreen({ demo, onUnlock }) {
 // libretro RetroPad IDs:
 //   0=B, 1=Y, 2=SELECT, 3=START, 4=UP, 5=DOWN, 6=LEFT, 7=RIGHT,
 //   8=A, 9=X, 10=L, 11=R, 12=L2, 13=R2, 14=L3, 15=R3
-// Cada sistema mostra SO os botoes que ele realmente usa, com label correto.
+// Cada sistema mostra SO os botões que ele realmente usa, com label correto.
 // ============================================================
 const SYSTEM_LAYOUTS = {
   // ---- Nintendo handhelds + clasicos sem X/Y/L/R ----
@@ -2121,7 +2150,7 @@ const SYSTEM_LAYOUTS = {
   wii: { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"},{id:13,label:"Z",color:"y"}], shoulders: ["L","R"], selectStart: true, analog: true },
   // ---- 3DS / DS ----
   ds:  { face: [{id:9,label:"X",color:"x"},{id:1,label:"Y",color:"y"},{id:8,label:"A",color:"a"},{id:0,label:"B",color:"b"}], shoulders: ["L","R"], selectStart: true },
-  // ---- TG-16/PCE: 2 botoes ----
+  // ---- TG-16/PCE: 2 botões ----
   tg16: { face: [{id:0,label:"II",color:"b"},{id:8,label:"I",color:"a"}], shoulders: false, selectStart: ["SEL","RUN"] },
   // ---- Atari 2600/Lynx/Jaguar ----
   a2600:  { face: [{id:8,label:"FIRE",color:"a"}], shoulders: false, selectStart: ["RST","SEL"] },
@@ -2229,7 +2258,7 @@ function MobileEmulatorView({ system, game, onClose }) {
     try { localStorage.setItem(`ludex.scale.${system.id}`, scaleMode); } catch {}
   }, [scaleMode, system.id]);
   const [stateMsg, setStateMsg] = useState(null);
-  // Edit mode + offsets custom dos grupos de botoes (dpad, face, system, shoulders)
+  // Edit mode + offsets custom dos grupos de botões (dpad, face, system, shoulders)
   const [editMode, setEditMode] = useState(false);
   const [offsets, setOffsets] = useState(() => loadCustomLayout(system.id) || {});
   const dragState = useRef(null);
@@ -2250,7 +2279,7 @@ function MobileEmulatorView({ system, game, onClose }) {
   const lastInputRef = useRef(Date.now());
   const [autoPaused, setAutoPaused] = useState(false);
   // v0.9.12: fast-forward FRACIONARIO. ffSpeed travado = 1 / 1.25 / 1.5 / 2.
-  // ffActive = turbo momentaneo (segurar o botao FF) -> sempre 2x.
+  // ffActive = turbo momentaneo (segurar o botão FF) -> sempre 2x.
   const [ffSpeed, setFfSpeed] = useState(1);
   const [ffActive, setFfActive] = useState(false);
   const ffEffectiveRef = useRef(1);
@@ -2304,9 +2333,17 @@ function MobileEmulatorView({ system, game, onClose }) {
   const groupStyle = useCallback((key) => {
     const o = offsets[key] || { x: 0, y: 0 };
     const sc = (ctrlPrefs.scale || 1) * (ctrlPrefs.groupScale?.[key] || 1);
-    const moved = o.x || o.y;
+    // v0.9.36: offsets do edit mode são salvos em portrait. Em landscape a
+    // tela rotaciona 90°, então aplicar Ox/Oy original joga o face/dpad/etc
+    // pra fora da tela visível (causa do "ordem enlouquece" + botões PS1/PS2
+    // sem resposta — eles estavam invisíveis fora da viewport). Em landscape
+    // ignoramos os offsets manuais e usamos só o scale.
+    const isLandscape = typeof window !== "undefined"
+      && window.matchMedia
+      && window.matchMedia("(orientation: landscape)").matches;
+    const moved = !isLandscape && (o.x || o.y);
     if (!moved && sc === 1) return undefined;
-    return { transform: `translate(${o.x}px, ${o.y}px) scale(${sc})` };
+    return { transform: `translate(${moved ? o.x : 0}px, ${moved ? o.y : 0}px) scale(${sc})` };
   }, [offsets, ctrlPrefs]);
   const resetLayout = useCallback(() => {
     setOffsets({});
@@ -2315,7 +2352,7 @@ function MobileEmulatorView({ system, game, onClose }) {
   // v0.9.12: layout de telas DS/3DS aplicado via RELOAD LIMPO do core (preservando
   // progresso com save state temporario). O hot-reload de layout no melonDS/citra
   // as vezes so meia-aplica e DUPLICA a tela (bug que o Paulo viu no "Destaque cima").
-  // Recarregar o core com a opcao ja setada aplica o layout do zero, sem glitch.
+  // Recarregar o core com a opção ja setada aplica o layout do zero, sem glitch.
   const [screenLayoutVals, setScreenLayoutVals] = useState(() => loadSystemOptions(system.id));
   const setCoreOptionLive = useCallback(async (key, value) => {
     const cur = { ...loadSystemOptions(system.id), [key]: value };
@@ -2340,7 +2377,7 @@ function MobileEmulatorView({ system, game, onClose }) {
   const canvasRef = useRef(null);
   const [info, setInfo] = useState(null);
   const [error, setError] = useState(null);
-  // v0.9.11: animacao de boot do emulador. Fica visivel por no minimo BOOT_MS E
+  // v0.9.11: animacao de boot do emulador. Fica visivel por no mínimo BOOT_MS E
   // ate o core+ROM carregarem (o que demorar mais) — cobre o "ecossistema" do
   // emulador carregando em celular fraco, sem flash de tela preta (pedido do Paulo).
   const BOOT_MS = 1500; // piso: some assim que o core carrega, mas nunca antes de 1.5s
@@ -2362,7 +2399,7 @@ function MobileEmulatorView({ system, game, onClose }) {
       try {
         const coreFile = system.libretro_core;
         if (!coreFile) { setError(`Sistema "${system.name}" sem core libretro`); return; }
-        // v0.8.38: aplica opcoes salvas do user antes de carregar
+        // v0.8.38: aplica opções salvas do user antes de carregar
         try { await applySystemOptions(system.id); } catch {}
         const result = await invoke("libretro_load_game", { coreFilename: coreFile, romPath: game.path });
         if (cancelled) return;
@@ -2379,15 +2416,15 @@ function MobileEmulatorView({ system, game, onClose }) {
         }
         try {
           // v0.9.5: NAO forcar sampleRate do core no AudioContext. No Android,
-          // se o device nao suporta a taxa exata do core (ex: GBA 32768Hz), o
+          // se o device não suporta a taxa exata do core (ex: GBA 32768Hz), o
           // construtor lanca NotSupportedError -> ficava SEM SOM. Usa a taxa
-          // padrao do device; o createBuffer abaixo usa a taxa do core e o
+          // padrão do device; o createBuffer abaixo usa a taxa do core e o
           // contexto faz o resample no playback.
           const ctx = new (window.AudioContext || window.webkitAudioContext)();
           await ctx.resume();
           audioCtxRef.current = ctx;
           audioNextTimeRef.current = ctx.currentTime + 0.05;
-          // resume tambem em qualquer toque (autoplay policy do WebView Android)
+          // resume também em qualquer toque (autoplay policy do WebView Android)
           const resumeOnTouch = () => { ctx.resume().catch(() => {}); };
           window.addEventListener("pointerdown", resumeOnTouch, { capture: true });
           audioResumeCleanupRef.current = () => window.removeEventListener("pointerdown", resumeOnTouch, { capture: true });
@@ -2409,13 +2446,13 @@ function MobileEmulatorView({ system, game, onClose }) {
   }, [system.id, game.path, system.libretro_core]);
 
   // Loop de frames — v0.9.9: PACING PELO RELOGIO DE AUDIO (igual ao desktop em
-  // LudexEmulatorView.jsx), nao por throttle de performance.now()/rAF. O loop antigo
+  // LudexEmulatorView.jsx), não por throttle de performance.now()/rAF. O loop antigo
   // gatava "1 frame por refresh" e, com o jank de IPC/render do WebView Android, a
   // producao de audio atrasava -> o buffer agendado esvaziava -> engasgo. Agora o
   // AudioContext.currentTime e o mestre: a cada tick medimos quanto audio ainda esta
   // no buffer (produzido - consumido) e rodamos quantos frames forem necessarios pra
   // repor ate TARGET_LATENCY, com catch-up via libretro_skip_frames. producedPerCh
-  // conta o audio produzido MESMO MUTADO, entao o pacing nao dispara sozinho.
+  // conta o audio produzido MESMO MUTADO, entao o pacing não dispara sozinho.
   // Buffer-alvo um pouco maior que o desktop (0.10/0.22 vs 0.07/0.16) pra absorver a
   // latencia extra do WebView. NAO voltar a pautar por rAF (regra anti-stutter).
   useEffect(() => {
@@ -2454,7 +2491,7 @@ function MobileEmulatorView({ system, game, onClose }) {
       ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
     }
 
-    // Conta o audio pra pacing SEMPRE; so agenda playback se nao estiver mutado.
+    // Conta o audio pra pacing SEMPRE; so agenda playback se não estiver mutado.
     function postAudioI16(i16) {
       const frames = i16.length / 2;
       if (frames <= 0) return;
@@ -2545,12 +2582,12 @@ function MobileEmulatorView({ system, game, onClose }) {
   }, [info]);
 
   // v0.9.10: input de toque com TRACKER GLOBAL no container dos controles.
-  // Antes cada botao tinha onTouchStart/End proprio; o touchend so dispara no
+  // Antes cada botão tinha onTouchStart/End proprio; o touchend so dispara no
   // elemento onde o toque COMECOU, entao "segurar pra baixo e deslizar o dedo pro
-  // analogico/outro botao" deixava o pra-baixo preso. Agora cada dedo (por
-  // identifier) sabe qual botao esta embaixo dele via elementFromPoint, e ao
-  // deslizar soltamos o antigo e apertamos o novo. Refcount por botao trata 2
-  // dedos no mesmo botao. Botoes so tem data-btn; quem ouve e o container.
+  // analogico/outro botão" deixava o pra-baixo preso. Agora cada dedo (por
+  // identifier) sabe qual botão esta embaixo dele via elementFromPoint, e ao
+  // deslizar soltamos o antigo e apertamos o novo. Refcount por botão trata 2
+  // dedos no mesmo botão. Botoes so tem data-btn; quem ouve e o container.
   const controlsRef = useRef(null);
   const pressCounts = useRef(new Map()); // btnId -> nº de dedos em cima
   const touchMap = useRef(new Map());    // touch.identifier -> btnId atual
@@ -2794,11 +2831,11 @@ function MobileEmulatorView({ system, game, onClose }) {
   // "Ludex falhou ao iniciar"). Agora todos os hooks rodam sempre.
   if (error) {
     // v0.9.30: hint contextual no celular tb (paridade com PC). Erro de BIOS,
-    // core faltando ou crash interno mostra acao concreta pro Paulo (rodar
+    // core faltando ou crash interno mostra ação concreta pro Paulo (rodar
     // deep-scan) em vez de so a stacktrace seca.
     const errLow = String(error).toLowerCase();
     const isBios = errLow.includes("bios") || errLow.includes("required");
-    const isCoreMissing = errLow.includes("core nao encontrado") || errLow.includes("sem core libretro");
+    const isCoreMissing = errLow.includes("core não encontrado") || errLow.includes("sem core libretro");
     const isPanic = errLow.includes("crash interno") || errLow.includes("panic");
     return (
       <div className="lmx-emu-root">
@@ -2829,7 +2866,7 @@ function MobileEmulatorView({ system, game, onClose }) {
           {isCoreMissing && (
             <div style={{ marginTop: 12, padding: 12, background: "rgba(255,255,255,0.05)", borderRadius: 10 }}>
               <p style={{ margin: 0, fontSize: 13 }}>
-                Core libretro <b>{system?.libretro_core || "?"}</b> nao esta dentro do APK pra este sistema no Android. Suporte vai chegar em versao futura — por enquanto use o launcher no PC.
+                Core libretro <b>{system?.libretro_core || "?"}</b> não esta dentro do APK pra este sistema no Android. Suporte vai chegar em versão futura — por enquanto use o launcher no PC.
               </p>
             </div>
           )}
@@ -2846,7 +2883,7 @@ function MobileEmulatorView({ system, game, onClose }) {
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
       </button>
       {/* v0.9.15: Fast-forward agora e TAP-TOGGLE (segurar/touch-hold era flaky no
-          WebView — "nao funcionava"). Toca = liga 2x, toca de novo = desliga. */}
+          WebView — "não funcionava"). Toca = liga 2x, toca de novo = desliga. */}
       <button
         className={`lmx-emu-ff-btn ${ffActive || ffSpeed > 1 ? "active" : ""}`}
         onClick={() => { setFfActive((a) => !a); haptic(10); }}
@@ -2920,7 +2957,7 @@ function MobileEmulatorView({ system, game, onClose }) {
                 </button>
                 <button className={`lmx-emu-menu-pill ${ctrlPrefs.hideWhenGamepad ? "on" : ""}`}
                         onClick={() => updateCtrlPrefs({ hideWhenGamepad: !ctrlPrefs.hideWhenGamepad })}>
-                  Esconder c/ controle: {ctrlPrefs.hideWhenGamepad ? "sim" : "nao"}
+                  Esconder c/ controle: {ctrlPrefs.hideWhenGamepad ? "sim" : "não"}
                 </button>
               </div>
               <div className="lmx-emu-menu-sublabel">Tamanho geral</div>
@@ -2986,8 +3023,8 @@ function MobileEmulatorView({ system, game, onClose }) {
                 ))}
               </div>
               <p className="lmx-settings-hint" style={{ marginTop: 6 }}>
-                Sustenta botao FF no canto pra acelerar so enquanto segura, ou trava
-                velocidade aqui (otimo pra Pokemon e RPGs lentos).
+                Sustenta botão FF no canto pra acelerar so enquanto segura, ou trava
+                velocidade aqui (ótimo pra Pokemon e RPGs lentos).
               </p>
             </div>
 
@@ -3214,24 +3251,24 @@ function RecentsBanner({ recents, covers, onResume }) {
 // Substitui a v0.9.4 (3-cards genericos). Agora aponta pra cada elemento
 // real do app (via data-tour="..."), troca de aba sozinho, e usa 4 divs
 // com backdrop-filter blur ao redor do alvo (efeito vidro fosco em volta,
-// alvo nitido). Mesmo padrao do tour do PC (LudexOnboarding.jsx) pra
+// alvo nitido). Mesmo padrão do tour do PC (LudexOnboarding.jsx) pra
 // paridade. Cada step tem `tab` (pra qual aba ele pertence), `selector`
 // (CSS query do alvo) e `body` explicando o que aquela feature faz.
 const MOBILE_TOUR_STEPS = [
   { id: "welcome", tab: "home", title: "Bem-vindo ao Ludex Mobile", body: "Vou te mostrar o que cada parte do app faz. Sao ~15 passos rapidos, pode pular a qualquer momento.", placement: "center" },
   { id: "home-avatar", tab: "home", selector: '[data-tour="home-avatar"]', title: "Seu perfil", body: "Toque pra trocar foto, nome e avatar. Seus saves, favoritos e tempo de jogo ficam no perfil ativo.", placement: "bottom" },
-  { id: "home-reload", tab: "home", selector: '[data-tour="home-reload"]', title: "Recarregar capas", body: "Apaga o cache de capas e re-busca tudo do zero. Util quando alguma capa nao baixou ou veio errada.", placement: "bottom" },
+  { id: "home-reload", tab: "home", selector: '[data-tour="home-reload"]', title: "Recarregar capas", body: "Apaga o cache de capas e re-busca tudo do zero. Util quando alguma capa não baixou ou veio errada.", placement: "bottom" },
   { id: "home-mais-jogados", tab: "home", selector: '[data-tour="home-mais-jogados"]', title: "Mais jogados", body: "Seus titulos com mais tempo de jogo aparecem aqui automaticamente.", placement: "bottom" },
-  { id: "home-continue", tab: "home", selector: '[data-tour="home-continue"]', title: "Continue onde parou", body: "Mostra o ultimo jogo que voce abriu. Tocar = retoma direto do save state.", placement: "bottom" },
+  { id: "home-continue", tab: "home", selector: '[data-tour="home-continue"]', title: "Continue onde parou", body: "Mostra o ultimo jogo que você abriu. Tocar = retoma direto do save state.", placement: "bottom" },
   { id: "tabs", tab: "home", selector: '[data-tour="tabs"]', title: "Navegacao", body: "4 abas: Inicio, Sistemas (lista de 27+ consoles), Buscar e Ajustes.", placement: "top" },
   { id: "tab-systems", tab: "systems", selector: '[data-tour="tab-systems"]', title: "Sistemas", body: "Todos consoles suportados (SNES, GBA, NDS, PS1, etc). Toque num pra ver os jogos. Sistemas sem ROM aparecem em cinza.", placement: "center" },
   { id: "tab-search", tab: "search", selector: '[data-tour="search-input"]', title: "Buscar", body: "Busca em TODOS seus jogos de uma vez. Ignora acentos e maiusculas ('Pokemon' acha 'Pokémon').", placement: "bottom" },
-  { id: "settings-profile", tab: "settings", selector: '[data-tour="settings-profile"]', title: "Perfil ativo", body: "Mostra qual perfil esta em uso. Saves e historico sao por perfil.", placement: "bottom" },
+  { id: "settings-profile", tab: "settings", selector: '[data-tour="settings-profile"]', title: "Perfil ativo", body: "Mostra qual perfil esta em uso. Saves e histórico sao por perfil.", placement: "bottom" },
   { id: "settings-controle", tab: "settings", selector: '[data-tour="settings-controle"]', title: "Controle externo", body: "Controle Bluetooth/USB conectado aparece aqui. Para remapear, abra um jogo -> engrenagem -> Opcoes do Emulador -> Controle.", placement: "bottom" },
   { id: "settings-bios", tab: "settings", selector: '[data-tour="settings-bios"]', title: "BIOS", body: "PS1, PS2, Dreamcast e Saturn precisam de BIOS pra rodar. Coloque seus .bin em Download e clique aqui — o app varre o celular inteiro e copia certinho.", placement: "bottom" },
-  { id: "settings-theme", tab: "settings", selector: '[data-tour="settings-theme"]', title: "Tema do app", body: "Troca o visual (fundo, cards, accent). Opcoes: Roxo Ludex (padrao), Switch Dark, PS3 Wave, Sunset, Forest e Light.", placement: "top" },
-  { id: "settings-tutorial", tab: "settings", selector: '[data-tour="settings-tutorial"]', title: "Ver tutorial de novo", body: "Quando quiser refrescar — botao aqui sempre re-abre este passo a passo.", placement: "top" },
-  { id: "settings-folder", tab: "settings", selector: '[data-tour="settings-folder"]', title: "Pasta de ROMs", body: "Aponte pra pasta onde estao suas ROMs (.gba/.nes/.iso/.smc/etc). O Ludex varre subpastas inteiras e detecta cada sistema pela extensao.", placement: "top" },
+  { id: "settings-theme", tab: "settings", selector: '[data-tour="settings-theme"]', title: "Tema do app", body: "Troca o visual (fundo, cards, accent). Opcoes: Roxo Ludex (padrão), Switch Dark, PS3 Wave, Sunset, Forest e Light.", placement: "top" },
+  { id: "settings-tutorial", tab: "settings", selector: '[data-tour="settings-tutorial"]', title: "Ver tutorial de novo", body: "Quando quiser refrescar — botão aqui sempre re-abre este passo a passo.", placement: "top" },
+  { id: "settings-folder", tab: "settings", selector: '[data-tour="settings-folder"]', title: "Pasta de ROMs", body: "Aponte pra pasta onde estão suas ROMs (.gba/.nes/.iso/.smc/etc). O Ludex varre subpastas inteiras e detecta cada sistema pela extensão.", placement: "top" },
   { id: "done", tab: "home", title: "Tudo pronto!", body: "Bons jogos. Voce sempre pode reabrir este tutorial em Ajustes -> Ver tutorial novamente.", placement: "center" },
 ];
 
@@ -3261,7 +3298,7 @@ function useTourTargetRect(selector, deps) {
 function TutorialSpotlight({ rect }) {
   // 4 divs em volta do rect: cada uma com backdrop-filter blur(8px) + dark.
   // O retangulo central fica nitido. Usar 4 divs em vez de SVG mask porque
-  // backdrop-filter nao funciona dentro de <mask>. Webview Android (Chromium
+  // backdrop-filter não funciona dentro de <mask>. Webview Android (Chromium
   // 110+) suporta backdrop-filter desde 2022, S25 Ultra tem Chromium 130+.
   if (!rect) {
     // sem alvo (welcome/done) — overlay full
@@ -3383,12 +3420,12 @@ function TutorialOverlay({ activeTab, setActiveTab, onDone }) {
 function WhyWindowsCard() {
   return (
     <section className="lmx-settings-card lmx-why-windows">
-      <div className="lmx-settings-label">Por que comprar a versao Windows?</div>
+      <div className="lmx-settings-label">Por que comprar a versão Windows?</div>
       <ul className="lmx-why-list">
         <li>27+ sistemas embedded: PS2, GameCube, Wii, 3DS, Saturn, Dreamcast e mais</li>
         <li>Switch, PS3, Xbox 360, PS Vita, Wii U via emuladores nativos</li>
         <li>RetroAchievements (conquistas reais por jogo)</li>
-        <li>Save states com slot multiplo + resume automatico</li>
+        <li>Save states com slot multiplo + resume automático</li>
         <li>Discord Rich Presence (mostra o jogo no seu perfil)</li>
         <li>Musica ambiente com playlist + crossfade</li>
         <li>Wallpapers customizados, perfis ilimitados</li>
@@ -3396,7 +3433,7 @@ function WhyWindowsCard() {
         <li>Notificacao quando controle conecta/desconecta</li>
         <li>Auto-update do app + cores libretro</li>
       </ul>
-      {/* v0.9.5: botao de compra removido daqui — ja existe no card de status da
+      {/* v0.9.5: botão de compra removido daqui — ja existe no card de status da
           licenca acima (estava aparecendo 2x). */}
     </section>
   );
@@ -3439,7 +3476,7 @@ function ChildModeCard() {
   const [on, setOnState] = useState(isChildModeOn());
   const [pinInput, setPinInput] = useState("");
   const [setupOpen, setSetupOpen] = useState(false);
-  // v0.9.2: window.prompt/alert nao funcionam no WebView Android -> input in-app
+  // v0.9.2: window.prompt/alert não funcionam no WebView Android -> input in-app
   const [disableOpen, setDisableOpen] = useState(false);
   const [disablePin, setDisablePin] = useState("");
   const [err, setErr] = useState(null);
@@ -3503,7 +3540,7 @@ function ChildModeCard() {
 // ============================================================
 function BackupRestoreCard() {
   const [msg, setMsg] = useState(null);
-  // v0.9.2: navigator.clipboard e window.prompt nao funcionam no WebView Android.
+  // v0.9.2: navigator.clipboard e window.prompt não funcionam no WebView Android.
   // Export mostra o JSON num textarea selecionavel (+ tenta clipboard como bonus).
   // Import usa textarea in-app em vez de prompt.
   const [exportText, setExportText] = useState(null);
@@ -3538,7 +3575,7 @@ function BackupRestoreCard() {
       {exportText && (
         <>
           <p className="lmx-settings-hint" style={{ marginTop: 8 }}>
-            Tentei copiar pro clipboard. Se nao colar, segura no texto abaixo, "Selecionar tudo" e copia:
+            Tentei copiar pro clipboard. Se não colar, segura no texto abaixo, "Selecionar tudo" e copia:
           </p>
           <textarea readOnly value={exportText} onFocus={(e) => e.target.select()} style={taStyle} />
         </>
@@ -3564,8 +3601,8 @@ function BackupRestoreCard() {
 // MP3s vão na pasta /storage/emulated/0/Ludex/music/ no Android. Vazio = chiptune.
 function AmbientMusicToggle() {
   // v0.9.9: o playback agora e app-wide (efeito no componente principal). Aqui o
-  // toggle so liga/desliga a preferencia e avisa via evento. Toca a MESMA musica
-  // do launcher do Windows (MP3 shuffle + crossfade), ou chiptune se nao ha MP3.
+  // toggle so liga/desliga a preferencia e avisa via evento. Toca a MESMA música
+  // do launcher do Windows (MP3 shuffle + crossfade), ou chiptune se não ha MP3.
   const [on, setOnState] = useState(isAmbientOn());
   const [count, setCount] = useState(ambientMusic.playlist.length);
   const [trackName, setTrackName] = useState(null);
@@ -3723,7 +3760,7 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
         const av = DEFAULT_AVATARS.find(a => a.id === p.avatar_id) || DEFAULT_AVATARS[0];
         const isEditing = editingId === p.id;
         if (isEditing) {
-          // v0.9.3: painel de edicao com nome + avatar + botoes explicitos
+          // v0.9.3: painel de edicao com nome + avatar + botões explicitos
           // (sem onBlur, que fechava antes de trocar o avatar no celular)
           return (
             <div key={p.id} style={{ padding: 12, marginBottom: 6, borderRadius: 10, background: "rgba(124,58,237,0.10)", border: "1px solid rgba(124,58,237,0.3)" }}>
@@ -3968,7 +4005,7 @@ function SourcesGuideCard() {
 // ============================================================
 // === LOGS VIEWER CARD (v0.9.1 - paridade Windows) ===========
 // ============================================================
-// Mostra ultimas 200 linhas do app log. Util quando algum jogo nao abre
+// Mostra ultimas 200 linhas do app log. Util quando algum jogo não abre
 // ou app trava - copia o log e me manda. Backend ja tem read_app_logs.
 function LogsViewerCard() {
   const [open, setOpen] = useState(false);
@@ -3984,20 +4021,20 @@ function LogsViewerCard() {
     } finally { setBusy(false); }
   };
   // v0.9.2: clipboard pode falhar no WebView Android. Tenta, e dá feedback;
-  // se falhar, o usuario segura no <pre> e seleciona manual.
+  // se falhar, o usuário segura no <pre> e seleciona manual.
   const copy = async () => {
     try {
       if (navigator.clipboard) { await navigator.clipboard.writeText(text); mAlert("Log copiado."); return; }
       throw new Error("sem clipboard");
     } catch {
-      mAlert("Nao consegui copiar automatico. Segura no texto do log e seleciona/copia manual.");
+      mAlert("Nao consegui copiar automático. Segura no texto do log e seleciona/copia manual.");
     }
   };
   return (
     <section className="lmx-settings-card">
       <div className="lmx-settings-label">Logs do app</div>
       <p className="lmx-settings-hint">
-        Ultimas 200 linhas. Util quando algum jogo nao abre — copia e me manda.
+        Ultimas 200 linhas. Util quando algum jogo não abre — copia e me manda.
       </p>
       <button className="lmx-settings-btn primary" onClick={() => { sfx.click(); load(); setOpen(true); }}>
         Abrir logs

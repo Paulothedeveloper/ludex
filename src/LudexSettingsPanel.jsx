@@ -2,7 +2,7 @@
 // arquivo principal. Recebe via props os artefatos module-level do launcher
 // (sfx, ambientMusic, THEMES, DEFAULT_CUSTOM_THEME, ACHIEVEMENTS) e os
 // sub-componentes (CustomThemeEditor, CollectionStats, TopPlayedList,
-// SessionsGraph, LicenseSettingsSection) pra evitar import circular e nao
+// SessionsGraph, LicenseSettingsSection) pra evitar import circular e não
 // duplicar codigo. Logica intacta.
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -67,7 +67,7 @@ export default function SettingsPanel({
     } catch (e) { console.error("bios status", e); }
   }, []);
   useEffect(() => { refreshBiosStatus(); }, [refreshBiosStatus]);
-  // v0.9.25: refactor — uma funcao generica que aceita lista de cores + force.
+  // v0.9.25: refactor — uma função generica que aceita lista de cores + force.
   // Usado por downloadMissingCores (faltando + force=false) e updateInstalledCores
   // (instalados + force=true pra atualizar pra nightly mais recente do buildbot).
   const runCoreDownloads = useCallback(async (list, force) => {
@@ -97,8 +97,8 @@ export default function SettingsPanel({
   const updateSingleCore = useCallback((filename) => {
     return runCoreDownloads([{ core_filename: filename }], true);
   }, [runCoreDownloads]);
-  // v0.8.37: Restaura opcoes salvas do user (per-system Settings) no boot.
-  // v0.8.39: defer pra fora do mount inicial — sequencia de invokes nao pode
+  // v0.8.37: Restaura opções salvas do user (per-system Settings) no boot.
+  // v0.8.39: defer pra fora do mount inicial — sequencia de invokes não pode
   // atrasar o setup do polling de gamepad nem do RAF do launcher.
   useEffect(() => {
     // v0.8.45: 0ms (era 250ms paranoia, ja descartada — gamepad bug era outro)
@@ -127,7 +127,7 @@ export default function SettingsPanel({
 
   async function saveRa() {
     if (!raUser.trim() || !raKey.trim()) {
-      setRaStatus({ kind: "error", text: "Informe usuario e Web API Key." });
+      setRaStatus({ kind: "error", text: "Informe usuário e Web API Key." });
       return;
     }
     setRaBusy(true);
@@ -215,7 +215,7 @@ export default function SettingsPanel({
         const items = getFocusables();
         const cur = items[focusIdx];
         if (cur) {
-          // Se o foco atual eh um botao em sequencia horizontal (theme card, etc), pula 1.
+          // Se o foco atual eh um botão em sequencia horizontal (theme card, etc), pula 1.
           // Detecta pela proximidade do bounding rect (mesma linha)
           const curRect = cur.getBoundingClientRect();
           const dir = action === "right" ? 1 : -1;
@@ -271,10 +271,10 @@ export default function SettingsPanel({
       await relaunch();
     } catch (e) {
       console.error("update check", e);
-      // v0.9.18: quando o release mais recente nao tem build pra esta plataforma
+      // v0.9.18: quando o release mais recente não tem build pra esta plataforma
       // (ex: release so-APK ou latest.json sem windows-x86_64), o updater lanca
-      // "None of the fallback platforms ... were found". Pro usuario isso nao e
-      // erro — e so "ainda nao ha update pra este sistema". Mostra mensagem amigavel.
+      // "None of the fallback platforms ... were found". Pro usuário isso não e
+      // erro — e so "ainda não ha update pra este sistema". Mostra mensagem amigavel.
       const msg = String(e || "");
       if (/fallback platforms|platforms` object|no longer supported|platform/i.test(msg)) {
         setUpdateStatus({ kind: "ok", text: "Você já está na versão mais recente!" });
@@ -573,7 +573,7 @@ export default function SettingsPanel({
               <p className="pb-settings-hint" style={{ marginTop: 0 }}>
                 <strong>{installed}/{total}</strong> cores instalados em <code>cores/</code>
                 {missing > 0 ? ` — ${missing} faltando.` : ` — tudo certo!`}
-                {missing > 0 && " Sem o .dll certo, o emulador crasha ou nao identifica os jogos."}
+                {missing > 0 && " Sem o .dll certo, o emulador crasha ou não identifica os jogos."}
               </p>
             );
           })()}
@@ -594,7 +594,7 @@ export default function SettingsPanel({
                 className="pb-settings-btn"
                 onClick={() => { sfx.click(); updateInstalledCores(); }}
                 disabled={coresBusy}
-                title="Re-baixa cada core instalado pra versao nightly mais recente do buildbot"
+                title="Re-baixa cada core instalado pra versão nightly mais recente do buildbot"
               >
                 {coresBusy && coresProgress?.current
                   ? `${coresProgress.done + 1}/${coresProgress.total}: ${coresProgress.current}`
@@ -606,7 +606,7 @@ export default function SettingsPanel({
             <p className="pb-settings-hint" style={{ marginTop: 6, color: coresProgress.fails.length > 0 ? "#fcd34d" : "#86efac" }}>
               {coresProgress.fails.length === 0
                 ? `OK — ${coresProgress.done} cores baixados.`
-                : `${coresProgress.done - coresProgress.fails.length} OK, ${coresProgress.fails.length} falharam (talvez nao existam no buildbot pra este target).`}
+                : `${coresProgress.done - coresProgress.fails.length} OK, ${coresProgress.fails.length} falharam (talvez não existam no buildbot pra este target).`}
             </p>
           )}
           <button
@@ -673,7 +673,7 @@ export default function SettingsPanel({
                 try {
                   const n = await invoke("bios_try_auto_import");
                   if (n > 0) alert(`Importei ${n} BIOS de PCSX2/bios, RetroArch/system, Documents, Downloads etc.`);
-                  else alert("Nada novo. Pra importar automatico, cola os .bin em D:\\BIOS, C:\\BIOS, Documents\\PCSX2\\bios, emulators\\PCSX2\\bios ou Downloads\\.");
+                  else alert("Nada novo. Pra importar automático, cola os .bin em D:\\BIOS, C:\\BIOS, Documents\\PCSX2\\bios, emulators\\PCSX2\\bios ou Downloads\\.");
                   await refreshBiosStatus();
                 } catch (e) { alert("Falha: " + e); }
               }}
@@ -684,15 +684,15 @@ export default function SettingsPanel({
               className="pb-settings-btn"
               onClick={async () => {
                 sfx.click();
-                if (!confirm("Vou varrer D:\\, E:\\, F:\\, G:\\ e sua pasta de usuario inteira atras de arquivos com nome de BIOS (scph5500.bin, dc_boot.bin, sega_101.bin etc). Pode demorar 30s-2min. Continuar?")) return;
+                if (!confirm("Vou varrer D:\\, E:\\, F:\\, G:\\ e sua pasta de usuário inteira atras de arquivos com nome de BIOS (scph5500.bin, dc_boot.bin, sega_101.bin etc). Pode demorar 30s-2min. Continuar?")) return;
                 try {
                   const n = await invoke("bios_deep_scan");
                   if (n > 0) alert(`Deep-scan importou ${n} BIOS pra system\\.`);
-                  else alert("Deep-scan nao achou nenhum arquivo com nome de BIOS conhecida. Voce precisa baixar manualmente (BIOS sao copyright).");
+                  else alert("Deep-scan não achou nenhum arquivo com nome de BIOS conhecida. Voce precisa baixar manualmente (BIOS sao copyright).");
                   await refreshBiosStatus();
                 } catch (e) { alert("Falha: " + e); }
               }}
-              title="Varre D:\\, outras unidades e a home do usuario atras de BIOS no PC inteiro"
+              title="Varre D:\\, outras unidades e a home do usuário atras de BIOS no PC inteiro"
             >
               Procurar BIOS no PC inteiro
             </button>
@@ -731,7 +731,7 @@ export default function SettingsPanel({
             </div>
           )}
           <p className="pb-settings-hint" style={{ marginTop: 6 }}>
-            BIOS sao arquivos protegidos por copyright — Ludex nao baixa por voce. Cola o .bin em qualquer uma das pastas conhecidas (D:\BIOS, Documents\PCSX2\bios, Downloads, etc) e clica em "Tentar auto-import", ou cola direto em <code>system\</code>.
+            BIOS sao arquivos protegidos por copyright — Ludex não baixa por você. Cola o .bin em qualquer uma das pastas conhecidas (D:\BIOS, Documents\PCSX2\bios, Downloads, etc) e clica em "Tentar auto-import", ou cola direto em <code>system\</code>.
           </p>
         </div>
 
@@ -952,7 +952,7 @@ export default function SettingsPanel({
  *
  * Use case: user usa Ludex no Windows E no celular com a MESMA license.
  * Quer conquista, favoritos e tempo de jogo sincronizados entre dispositivos.
- * Como nao temos backend (Gumroad nao guarda dados), sync e manual:
+ * Como não temos backend (Gumroad não guarda dados), sync e manual:
  *   - PC: copia config (Export). Cola no celular > Ajustes > Backup > Importar.
  *   - Celular -> PC: idem na direcao inversa.
  */
@@ -1000,7 +1000,7 @@ function DesktopBackupRestoreSection({ sfx }) {
       <p className="pb-settings-hint">
         Exporta perfil + conquistas + favoritos + tempo de jogo como JSON. No
         celular, abre Ajustes &gt; Backup e cola pra ter o mesmo progresso.
-        (Sync automatico via license key exigiria servidor — ainda nao implementado.)
+        (Sync automático via license key exigiria servidor — ainda não implementado.)
       </p>
       <button className="pb-settings-btn" onClick={doExport}>
         Copiar config (Export)

@@ -2423,9 +2423,18 @@
   box-shadow: 0 14px 36px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.3);
   animation: lmx-ach-up 380ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+/* v0.9.36: saida suave em vez de unmount abrupto. Caller adiciona .leaving
+   aos 3.5s e desmonta aos 4.1s, dando 600ms pra anima rodar. */
+.lmx-ach-toast.leaving {
+  animation: lmx-ach-down 600ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
 @keyframes lmx-ach-up {
   from { opacity: 0; transform: translate(-50%, 18px) scale(0.96); }
   to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@keyframes lmx-ach-down {
+  from { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  to   { opacity: 0; transform: translate(-50%, 22px) scale(0.94); }
 }
 .lmx-ach-toast-icon {
   width: 42px; height: 42px; flex-shrink: 0;
@@ -2619,26 +2628,42 @@
    reforca o destaque do alvo (que fica nitido). */
 .lmx-tour-blur {
   position: absolute;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /* v0.9.36: escureceu de 0.55 -> 0.78 + blur 8 -> 14 pra MATAR o ruído visual
+     em volta do alvo. Antes dava pra ler texto através e isso disputava
+     atenção com o que devia estar em evidência. */
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(14px) saturate(0.9);
+  -webkit-backdrop-filter: blur(14px) saturate(0.9);
   transition: top 240ms ease, left 240ms ease, width 240ms ease, height 240ms ease;
 }
-/* anel de destaque ao redor do alvo (sem fundo, so borda + glow) */
+/* anel de destaque ao redor do alvo (sem fundo, só borda + glow forte) */
 .lmx-tour-ring {
   position: absolute;
-  border: 2px solid var(--lmx-accent, #c4b5fd);
+  /* v0.9.36: borda 2 -> 3.5px + cor mais sólida + glow mais intenso pra que o
+     alvo fique INEQUIVOCAMENTE em evidência. Antes parecia decoração sutil. */
+  border: 3.5px solid #ffffff;
   border-radius: 14px;
   pointer-events: none;
   box-shadow:
-    0 0 0 4px rgba(196, 181, 253, 0.18),
-    0 0 24px 6px rgba(196, 181, 253, 0.35);
+    0 0 0 6px rgba(196, 181, 253, 0.32),
+    0 0 36px 12px rgba(196, 181, 253, 0.55),
+    0 0 0 1px rgba(0, 0, 0, 0.4) inset;
   transition: top 240ms ease, left 240ms ease, width 240ms ease, height 240ms ease;
-  animation: lmx-tour-pulse 1.8s ease-in-out infinite;
+  animation: lmx-tour-pulse 1.6s ease-in-out infinite;
 }
 @keyframes lmx-tour-pulse {
-  0%, 100% { box-shadow: 0 0 0 4px rgba(196, 181, 253, 0.18), 0 0 24px 6px rgba(196, 181, 253, 0.35); }
-  50%      { box-shadow: 0 0 0 6px rgba(196, 181, 253, 0.28), 0 0 34px 10px rgba(196, 181, 253, 0.55); }
+  0%, 100% {
+    box-shadow:
+      0 0 0 6px rgba(196, 181, 253, 0.32),
+      0 0 36px 12px rgba(196, 181, 253, 0.55),
+      0 0 0 1px rgba(0, 0, 0, 0.4) inset;
+  }
+  50%      {
+    box-shadow:
+      0 0 0 10px rgba(196, 181, 253, 0.42),
+      0 0 52px 18px rgba(196, 181, 253, 0.75),
+      0 0 0 1px rgba(0, 0, 0, 0.4) inset;
+  }
 }
 /* banner com titulo + body + nav */
 .lmx-tour-banner {

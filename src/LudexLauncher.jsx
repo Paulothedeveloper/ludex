@@ -48,7 +48,7 @@ import GameDetailPanel from "./LudexGameDetailPanel";
 // sfx/ambientMusic/THEMES/etc + sub-componentes ainda vivem aqui e sao
 // passados via props pra evitar duplicar codigo e impedir import circular.
 import SettingsPanel from "./LudexSettingsPanel";
-// v0.9.9: musica ambiente compartilhada com o app mobile (mesmo objeto).
+// v0.9.9: música ambiente compartilhada com o app mobile (mesmo objeto).
 import { ambientMusic } from "./ludexAmbientMusic";
 
 // === Captura global de erros JS -> log do Rust ===
@@ -385,7 +385,7 @@ function playPlatformJingle(systemId) {
 // ---------- Achievements ----------
 // v0.9.0: catalogo expandido de 7 -> 30 achievements cobrindo milestones de
 // launches, sistemas distintos, favoritos, tempo total, sistemas especificos,
-// hardcore/casual/explorer paths, sessoes longas e atalhos do power-user.
+// hardcore/casual/explorer paths, sessões longas e atalhos do power-user.
 function _distinctSystems(p) {
   const s = new Set();
   for (const k of Object.keys(p.play_time || {})) s.add(k.includes("::") ? k.split("::")[0] : k);
@@ -449,7 +449,7 @@ function formatRelativeDays(unixSec) {
 }
 
 // v0.8.50: Icones extraidos pra ludexIcons.jsx (230L removidas daqui).
-// SystemIcon tambem extraido (era ~100L com switch de 30 sistemas).
+// SystemIcon também extraido (era ~100L com switch de 30 sistemas).
 
 function ContinueBanner({ lastPlayed, system, coverSrc, onResume }) {
   return (
@@ -474,7 +474,7 @@ function ContinueBanner({ lastPlayed, system, coverSrc, onResume }) {
 
 
 /**
- * Section "Licença" no Settings. Mostra info da license atual e botoes de
+ * Section "Licença" no Settings. Mostra info da license atual e botões de
  * gerenciamento (revalidar online + desativar este PC).
  */
 function LicenseSettingsSection() {
@@ -491,7 +491,7 @@ function LicenseSettingsSection() {
     } catch (e) {
       setInfo(null);
     }
-    // is_admin nao vem do cache local — precisa consultar Gumroad
+    // is_admin não vem do cache local — precisa consultar Gumroad
     try {
       const adm = await invoke("admin_check_status");
       setIsAdmin(!!adm);
@@ -614,7 +614,7 @@ function friendlyPadName(id) {
   return s.length > 40 ? s.slice(0, 38) + "..." : s;
 }
 
-// v0.8.51: Toast pra conexao/desconexao de controle. Auto-fecha em 3.5s.
+// v0.8.51: Toast pra conexão/desconexao de controle. Auto-fecha em 3.5s.
 function GamepadStatusToast({ event, onDone }) {
   const doneRef = useRef(onDone);
   useEffect(() => { doneRef.current = onDone; }, [onDone]);
@@ -664,8 +664,8 @@ function AchievementToast({ achievement, onDone }) {
 }
 
 function SplashScreen({ profileName }) {
-  // Constelacao de botoes de controle. Pontos representam A/B/X/Y, D-pad,
-  // sticks, ombros e start/select/home; linhas finas conectam num padrao
+  // Constelacao de botões de controle. Pontos representam A/B/X/Y, D-pad,
+  // sticks, ombros e start/select/home; linhas finas conectam num padrão
   // de constelacao. Pulsa staggered, vibe astronomia + gaming.
   // Coordenadas em viewBox 800x600.
   const POINTS = [
@@ -697,7 +697,7 @@ function SplashScreen({ profileName }) {
     ["du","dr"], ["dr","dd"], ["dd","dl"], ["dl","du"],
     // ombros conectando
     ["lb","du"], ["rb","y"], ["lb","rb"],
-    // sticks ligando aos D-pad/botoes
+    // sticks ligando aos D-pad/botões
     ["ls","dl"], ["ls","dd"], ["rs","a"], ["rs","b"],
     // centro
     ["se","ho"], ["ho","st"], ["se","st"],
@@ -773,10 +773,10 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
   const [clearPhoto, setClearPhoto] = useState(false);
   const [photoErr, setPhotoErr] = useState(null);
   const [focusedIdx, setFocusedIdx] = useState(0);
-  // avatarId: usado quando user nao tem foto custom. Default = primeiro avatar.
+  // avatarId: usado quando user não tem foto custom. Default = primeiro avatar.
   const [avatarId, setAvatarId] = useState(DEFAULT_AVATARS[0].id);
 
-  // Total na lista = perfis + botao "Novo Perfil"
+  // Total na lista = perfis + botão "Novo Perfil"
   const totalCells = profiles.length + 1;
   useEffect(() => {
     if (focusedIdx >= totalCells) setFocusedIdx(0);
@@ -821,7 +821,7 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
 
   async function submit() {
     if (!name.trim()) return;
-    // Se nao tem foto custom (nem nova nem antiga preservada), usa avatar default
+    // Se não tem foto custom (nem nova nem antiga preservada), usa avatar default
     const usesAvatar = !photoPath && (clearPhoto || !editingProfile?.photo_path);
     if (mode === "create") {
       await onCreate({
@@ -848,7 +848,7 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
       ? "Editar Perfil"
       : "Quem está jogando?";
 
-  // Preview da foto atual no modo edit (se nao escolheu nova e nao marcou pra remover)
+  // Preview da foto atual no modo edit (se não escolheu nova e não marcou pra remover)
   const currentPhotoSrc = editingProfile && !clearPhoto && !photoPath && editingProfile.photo_path
     ? convertFileSrc(editingProfile.photo_path)
     : null;
@@ -870,7 +870,7 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
         return true;
       }
       if (action === "down" || action === "up") {
-        // se houver mais de 1 linha visualmente, +/- 4 (mesmo padrao do CSS grid)
+        // se houver mais de 1 linha visualmente, +/- 4 (mesmo padrão do CSS grid)
         setFocusedIdx((i) => {
           const cols = 4;
           const next = action === "down" ? i + cols : i - cols;
@@ -880,7 +880,7 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
       }
       if (action === "a") {
         if (focusedIdx >= profiles.length) {
-          // botao "Novo Perfil"
+          // botão "Novo Perfil"
           startCreate();
         } else {
           const p = profiles[focusedIdx];
@@ -961,7 +961,7 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
             )}
             {photoErr && <div className="pb-warn">{photoErr}</div>}
 
-            {/* Grid de avatares default - so visivel quando nao tem foto custom */}
+            {/* Grid de avatares default - so visivel quando não tem foto custom */}
             {!photoPath && !currentPhotoSrc && (
               <div className="lx-avatar-grid" style={{ marginTop: 8 }}>
                 {DEFAULT_AVATARS.map((av) => {
@@ -1049,7 +1049,7 @@ function GamepadDebugOverlay({ onClose }) {
       <div className="pb-gamepad-debug-body">
         {!snap || snap.pads.length === 0 ? (
           <div className="pb-gamepad-debug-empty">
-            Nenhum controle detectado. Aperte qualquer botao do controle pra acordar.
+            Nenhum controle detectado. Aperte qualquer botão do controle pra acordar.
           </div>
         ) : snap.pads.map((p) => (
           <div key={p.index} className="pb-gamepad-debug-pad">
@@ -1058,7 +1058,7 @@ function GamepadDebugOverlay({ onClose }) {
             </div>
             <div className="pb-gamepad-debug-meta">
               mapping: <code>{p.mapping}</code> {p.mapping !== "standard" && <span style={{color:"#f87171"}}>(NAO PADRAO — use modo XInput)</span>}
-              {" · "}botoes: {p.buttons.length} · eixos: {p.axes.length}
+              {" · "}botões: {p.buttons.length} · eixos: {p.axes.length}
             </div>
             <div className="pb-gamepad-debug-section">
               <div className="pb-gamepad-debug-label">Botoes pressionados:</div>
@@ -1340,7 +1340,7 @@ function TopPlayedList({ playTime, sessions, systems }) {
 }
 
 function CollectionStats({ gameMeta, systems }) {
-  // Conta total de jogos disponiveis na coleção
+  // Conta total de jogos disponíveis na coleção
   const totalGames = systems.reduce((sum, s) => sum + (s.games?.length || 0), 0);
 
   // Conta por status
@@ -1407,7 +1407,7 @@ function CollectionStats({ gameMeta, systems }) {
 }
 
 function SessionsGraph({ sessions }) {
-  // Agrupa sessoes por dia (ultimos 7 dias)
+  // Agrupa sessões por dia (ultimos 7 dias)
   const days = useMemo(() => {
     const out = [];
     const now = new Date();
@@ -1516,9 +1516,9 @@ function DiscPickerModal({ system, game, onCancel, onPick }) {
 
 
 /**
- * Preview popup compacto: aparece quando o usuario clica num card de jogo
+ * Preview popup compacto: aparece quando o usuário clica num card de jogo
  * (single click). Mostra cover + nome + sistema + screenshot rotativo + summary
- * curto + acoes (Jogar / Detalhes / Fechar). Pra ver tudo, o botao "Detalhes"
+ * curto + ações (Jogar / Detalhes / Fechar). Pra ver tudo, o botão "Detalhes"
  * abre o GameDetailPanel fullscreen.
  *
  * Double-click no card pula o popup e lanca direto (atalho power-user).
@@ -1545,13 +1545,13 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
     } catch {}
   }, [videoMuted]);
 
-  // Fetch details (com cache em memoria pra reabrir instantaneo)
+  // Fetch details (com cache em memória pra reabrir instantaneo)
   useEffect(() => {
     let cancelled = false;
     const cacheKey = `${system.id}::${game.path}`;
     const cached = detailsCache?.current?.get(cacheKey);
     if (cached) {
-      // Cache hit em memoria: zero delay
+      // Cache hit em memória: zero delay
       setDetails(cached);
       setLoading(false);
       setActiveShot(0);
@@ -1581,7 +1581,7 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
     return () => { cancelled = true; };
   }, [system.id, game.path, game.name, detailsCache]);
 
-  const youtubeId = !videoFailed && details?.videos?.[0]?.youtube_id ? details.videos[0].youtube_id : null;
+  const youtubeId = !videoFailed && details?.vídeos?.[0]?.youtube_id ? details.vídeos[0].youtube_id : null;
 
   // Rotaciona screenshots a cada 3.5s (somente quando NAO tem video)
   useEffect(() => {
@@ -1727,7 +1727,7 @@ function GameContextMenu({ x, y, system, game, isFavorite, onClose, onLaunch, on
   const [pos, setPos] = useState({ left: x, top: y });
 
   useEffect(() => {
-    // Ajusta pra nao sair da tela
+    // Ajusta pra não sair da tela
     if (!ref.current) return;
     const rect = ref.current.getBoundingClientRect();
     let left = x;
@@ -1827,8 +1827,8 @@ function DeleteConfirmModal({ game, system, onCancel, onConfirm }) {
 }
 
 /**
- * Tela mostrada quando a demo Android expirou (apos 7 dias de uso).
- * Tem botao "Tenho license admin" pra Paulo destravar uso permanente.
+ * Tela mostrada quando a demo Android expirou (após 7 dias de uso).
+ * Tem botão "Tenho license admin" pra Paulo destravar uso permanente.
  * Usuario comum NAO consegue destravar (only admin email vale).
  */
 function AndroidDemoExpired({ demo, onUnlock }) {
@@ -1848,7 +1848,7 @@ function AndroidDemoExpired({ demo, onUnlock }) {
         setMsg({ kind: "ok", text: "Destravado! Carregando..." });
         setTimeout(() => onUnlock(newDemo), 800);
       } else {
-        setMsg({ kind: "error", text: "License nao destravou (nao e admin)" });
+        setMsg({ kind: "error", text: "License não destravou (não e admin)" });
       }
     } catch (e) {
       setMsg({ kind: "error", text: String(e) });
@@ -1871,10 +1871,10 @@ function AndroidDemoExpired({ demo, onUnlock }) {
         </div>
         <h1>Demo expirou</h1>
         <p className="pb-demo-expired-sub">
-          Voce usou {demo.demo_days_total} dias da versao Android gratuita.
+          Voce usou {demo.demo_days_total} dias da versão Android gratuita.
         </p>
         <p className="pb-demo-expired-pitch">
-          Pra continuar sem limite, compra a versao <strong>Windows</strong> com mais features
+          Pra continuar sem limite, compra a versão <strong>Windows</strong> com mais features
           (auto-update, todos os sistemas embedded, license vitalicia, etc).
         </p>
 
@@ -1936,7 +1936,7 @@ export default function LudexLauncher() {
   const [launchMsg, setLaunchMsg] = useState(null);
   const [covers, setCovers] = useState({});
   const [splashDone, setSplashDone] = useState(false);
-  // v0.8.21: update banner (desktop nao bloqueia, user pode adiar)
+  // v0.8.21: update banner (desktop não bloqueia, user pode adiar)
   const [updateBanner, setUpdateBanner] = useState(null); // { version, update } | null
   const [updateInstalling, setUpdateInstalling] = useState(false);
   const [updateProgress, setUpdateProgress] = useState(0);
@@ -1965,7 +1965,7 @@ export default function LudexLauncher() {
   const [controlsTip, setControlsTip] = useState(null); // { system } | null
   const [settingsModal, setSettingsModal] = useState(null); // { systemId } | null — v0.8.37
   // Bottom-bar acessivel por D-pad direito ao final dos sistemas. -1 = inativo,
-  // 0 = botao Configuracoes, 1 = botao Sair. Quando >= 0, focusZone vira "util".
+  // 0 = botão Configuracoes, 1 = botão Sair. Quando >= 0, focusZone vira "útil".
   const [utilIdx, setUtilIdx] = useState(-1);
   const [romsRoot, setRomsRoot] = useState("");
   const [emulatorsRoot, setEmulatorsRoot] = useState("");
@@ -1979,7 +1979,7 @@ export default function LudexLauncher() {
   // Preview popup compacto: { system, game } | null
   const [previewPopup, setPreviewPopup] = useState(null);
   const [previewClosing, setPreviewClosing] = useState(false);
-  // Cache em memoria de GameDetails (chave = `${system.id}::${game.path}`)
+  // Cache em memória de GameDetails (chave = `${system.id}::${game.path}`)
   // Sobrevive enquanto o app esta aberto. Backend continua tendo cache em disco.
   const detailsCacheRef = useRef(new Map());
   // Selector de disco: { system, game } | null
@@ -1994,7 +1994,7 @@ export default function LudexLauncher() {
   const [sortMode, setSortMode] = useState("default");
   const [rescanBusy, setRescanBusy] = useState(false);
   const [achievementToast, setAchievementToast] = useState(null);
-  // v0.8.51: notificacao de gamepad conectado/desconectado (Windows API gamepadcontroller events)
+  // v0.8.51: notificação de gamepad conectado/desconectado (Windows API gamepadcontroller events)
   const [gamepadEvent, setGamepadEvent] = useState(null);
   const [screenshots, setScreenshots] = useState({});
   const [gamepadConnected, setGamepadConnected] = useState(false);
@@ -2023,7 +2023,7 @@ export default function LudexLauncher() {
   const [syncStatus, setSyncStatus] = useState({ busy: false, text: "" });
   // v0.9.24: contador incrementado pelo syncCovers pra invalidar o cache do
   // fetch-de-capas. Antes setSelectedSystemIdx(i=>i) era no-op (React bail-out
-  // em set-state com mesmo valor) -> capas nao re-baixavam apos "Sincronizar
+  // em set-state com mesmo valor) -> capas não re-baixavam após "Sincronizar
   // capas". Agora o effect tem [selected, coversRefreshKey] e re-roda.
   const [coversRefreshKey, setCoversRefreshKey] = useState(0);
   const [switchKeysStatus, setSwitchKeysStatus] = useState({ busy: false, message: null, kind: null });
@@ -2200,13 +2200,13 @@ export default function LudexLauncher() {
     return () => clearTimeout(t);
   }, []);
 
-  // v0.9.8: novidades pos-update. Espera o config carregar pra saber se e usuario
+  // v0.9.8: novidades pos-update. Espera o config carregar pra saber se e usuário
   // returning (tem profile) — so mostra pra quem ja usava o app.
   const whatsNewRanRef = useRef(false);
   useEffect(() => {
     if (whatsNewRanRef.current) return;
     const returning = !!config?.first_run_done || (config?.profiles?.length > 0);
-    if (!returning) return; // espera config / usuario novo nao mostra
+    if (!returning) return; // espera config / usuário novo não mostra
     whatsNewRanRef.current = true;
     (async () => {
       try {
@@ -2275,7 +2275,7 @@ export default function LudexLauncher() {
 
   // License check no startup. Roda ANTES do load_config completar pra evitar
   // mostrar a home brevemente. Se license existe local, tenta re-validar online;
-  // se valido (ou cache no grace period), libera. Se nao, mostra LicenseGate.
+  // se valido (ou cache no grace period), libera. Se não, mostra LicenseGate.
   // Em build de desenvolvimento (PLACEHOLDER token), pula gate (libera tudo).
   // Em Android (APK): pula license gate (Paulo, 2026-05-17) MAS aplica demo time limit (7 dias).
   useEffect(() => {
@@ -2292,7 +2292,7 @@ export default function LudexLauncher() {
           }
         } catch (e) {
           console.warn("android_demo_status falhou:", e);
-          setLicenseStatus(true);  // fallback: nao bloqueia
+          setLicenseStatus(true);  // fallback: não bloqueia
         }
       })();
       return;
@@ -2307,13 +2307,13 @@ export default function LudexLauncher() {
           const remote = await invoke("license_validate");
           setLicenseStatus(!!remote?.valid);
         } catch (e) {
-          // grace period esgotou e nao conseguiu validar
+          // grace period esgotou e não conseguiu validar
           console.warn("license_validate falhou:", e);
           setLicenseStatus(false);
         }
       } catch (e) {
         // Build de dev (PLACEHOLDER): backend retorna erro = pula gate
-        if (String(e).includes("nao configurado")) {
+        if (String(e).includes("não configurado")) {
           console.info("License gate desabilitado (PLACEHOLDER token)");
           setLicenseStatus(true);
         } else {
@@ -2340,9 +2340,9 @@ export default function LudexLauncher() {
       try {
         const c = await invoke("load_config");
         if (c) setConfig(c);
-        // First-run: ativa onboarding se nao tem profile ativo E nao tem first_run_done.
+        // First-run: ativa onboarding se não tem profile ativo E não tem first_run_done.
         // Configs migradas do Playbox (que ja tem profile) sao tratadas como done.
-        // Em Android: skip onboarding completo (UX desktop com tour de controle nao serve mobile).
+        // Em Android: skip onboarding completo (UX desktop com tour de controle não serve mobile).
         const hasProfile = (c?.profiles || []).length > 0 && !!c?.active_profile_id;
         if (IS_ANDROID) {
           // Auto-cria profile default no primeiro launch em Android (skip tour completo)
@@ -2515,7 +2515,7 @@ export default function LudexLauncher() {
     // CRITICO: minimiza/oculta o launcher ANTES de spawn do emulador.
     // Se spawnar primeiro, o launcher continua em fullscreen exclusive segurando foco
     // -> emulador abre por baixo, Windows trata launcher como prioridade, qualquer
-    //    botao do controle no emulador tambem chega no launcher e fecha o jogo.
+    //    botão do controle no emulador também chega no launcher e fecha o jogo.
     try {
       const w = getCurrentWindow();
       try { await w.setFullscreen(false); } catch {}
@@ -2533,7 +2533,7 @@ export default function LudexLauncher() {
         system_id: launchSystemId,
         started_at: Date.now(),
       };
-      // Discord Rich Presence (silent no-op se nao configurado)
+      // Discord Rich Presence (silent no-op se não configurado)
       const sysName = selected?.name || launchSystemId;
       invoke("discord_set_activity", { gameName: selectedGame.name, systemName: sysName }).catch(() => {});
       // total_launches/last_played/play_time agora são escritos pelo backend (launch_game + thread de wait).
@@ -2546,7 +2546,7 @@ export default function LudexLauncher() {
         const { achievements, newly } = checkAchievements(optimistic);
         if (newly.length > 0) {
           // v0.9.0 fix: persiste achievements no profile imediatamente em vez de
-          // depender so do game-ended (que pode nao disparar se user nao fechar emulador).
+          // depender so do game-ended (que pode não disparar se user não fechar emulador).
           updateActiveProfile((p) => ({ ...p, achievements }));
           setAchievementToast(newly[0]);
           sfx.achievement();
@@ -2661,7 +2661,7 @@ export default function LudexLauncher() {
       photoSourcePath: customPhotoPath || null,
     });
     try { await invoke("complete_first_run"); } catch (e) { console.error("complete_first_run", e); }
-    // v0.9.8: usuario novo nao ve "novidades" (ja viu o onboarding)
+    // v0.9.8: usuário novo não ve "novidades" (ja viu o onboarding)
     try { const v = await getVersion(); markVersionSeen(v); setWhatsNew(null); } catch {}
     setFirstRunActive(false);
     sfx.confirm();
@@ -2705,7 +2705,7 @@ export default function LudexLauncher() {
   }, []);
 
   const updateProfile = useCallback(async ({ id, name, photoSourcePath, clearPhoto, avatarId }) => {
-    let nextPhotoPath = undefined; // undefined = nao mexer
+    let nextPhotoPath = undefined; // undefined = não mexer
     if (clearPhoto) {
       try { await invoke("delete_profile_photo", { profileId: id }); } catch (e) { console.error(e); }
       nextPhotoPath = null;
@@ -2723,11 +2723,11 @@ export default function LudexLauncher() {
         if (p.id !== id) return p;
         const updated = { ...p, name };
         if (nextPhotoPath !== undefined) updated.photo_path = nextPhotoPath;
-        // avatar_id so eh aplicado quando nao tem foto custom (avatarId vem null
+        // avatar_id so eh aplicado quando não tem foto custom (avatarId vem null
         // do form quando a foto vence). Quando tem foto, avatar_id zera pra evitar
         // ambiguidade no display.
         if (avatarId !== undefined) {
-          updated.avatar_id = avatarId; // pode ser null tambem (limpar)
+          updated.avatar_id = avatarId; // pode ser null também (limpar)
         }
         return updated;
       }),
@@ -2739,7 +2739,7 @@ export default function LudexLauncher() {
     setConfig((prev) => ({
       ...prev,
       theme_id: themeId,
-      // Inicializa custom_theme com default se ainda nao existe
+      // Inicializa custom_theme com default se ainda não existe
       custom_theme: themeId === "custom" && !prev.custom_theme ? DEFAULT_CUSTOM_THEME : prev.custom_theme,
     }));
   }, []);
@@ -2793,7 +2793,7 @@ export default function LudexLauncher() {
     setSwitchKeysStatus({ busy: true, message: null, kind: null });
     try {
       const res = await invoke("setup_switch_keys", { romsRoot });
-      const msg = `OK · keys: ${res.keys_copied ? "copiadas" : "nao encontradas"} · firmware: ${res.firmware_files} arquivos\n${res.yuzu_dir}`;
+      const msg = `OK · keys: ${res.keys_copied ? "copiadas" : "não encontradas"} · firmware: ${res.firmware_files} arquivos\n${res.yuzu_dir}`;
       setSwitchKeysStatus({ busy: false, message: msg, kind: "ok" });
     } catch (e) {
       setSwitchKeysStatus({ busy: false, message: String(e), kind: "error" });
@@ -2805,7 +2805,7 @@ export default function LudexLauncher() {
     setWiiuKeysStatus({ busy: true, message: null, kind: null });
     try {
       const res = await invoke("setup_wiiu_keys", { romsRoot });
-      const msg = `OK · keys.txt: ${res.keys_copied ? "copiada" : "nao encontrada"} · extras: ${res.extra_files}\n${res.cemu_dir}`;
+      const msg = `OK · keys.txt: ${res.keys_copied ? "copiada" : "não encontrada"} · extras: ${res.extra_files}\n${res.cemu_dir}`;
       setWiiuKeysStatus({ busy: false, message: msg, kind: res.keys_copied ? "ok" : "error" });
     } catch (e) {
       setWiiuKeysStatus({ busy: false, message: String(e), kind: "error" });
@@ -3072,7 +3072,7 @@ export default function LudexLauncher() {
     return () => { try { unlisten && unlisten(); } catch {} };
   }, []);
 
-  // -------- Listener: emulador externo terminou (thread de wait registrou sessao) --------
+  // -------- Listener: emulador externo terminou (thread de wait registrou sessão) --------
   // Refetch config do disco pra atualizar play_time/sessions/last_played + dispara achievements.
   useEffect(() => {
     let unlisten;
@@ -3100,7 +3100,7 @@ export default function LudexLauncher() {
   }, [checkAchievements, updateActiveProfile]);
 
   // -------- Gamepad polling --------
-  // Refs pra valores que mudam a cada navegacao. Sem isso o useEffect re-cria
+  // Refs pra valores que mudam a cada navegação. Sem isso o useEffect re-cria
   // o RAF e zera o cooldown -> 1 toque pula varios itens.
   const padCtxRef = useRef({
     selected: null,
@@ -3166,7 +3166,7 @@ export default function LudexLauncher() {
       announcedId: null,
     };
     const DEADZONE = 0.7;
-    const REPEAT_DELAY = 380;   // tempo segurando antes de comecar a repetir
+    const REPEAT_DELAY = 380;   // tempo segurando antes de começar a repetir
     const REPEAT_RATE = 110;    // intervalo entre repeticoes
 
     function navGame(delta) {
@@ -3180,7 +3180,7 @@ export default function LudexLauncher() {
       sfx.nav();
       setSelectedSystemIdx((i) => Math.max(0, Math.min(ctx.displayedSystems.length - 1, i + delta)));
     }
-    // v0.8.41: navega categorias com LT/RT (L2/R2/ZL/ZR — botoes [6]/[7])
+    // v0.8.41: navega categorias com LT/RT (L2/R2/ZL/ZR — botões [6]/[7])
     function navCategory(delta) {
       const ctx = padCtxRef.current;
       const cats = SYSTEM_CATEGORIES;
@@ -3215,7 +3215,7 @@ export default function LudexLauncher() {
     function poll() {
       try {
         // Se o launcher esta oculto/minimizado, NAO processa input.
-        // Senao apertar botao no emulador externo (ex: B no Yuzu pra acao do jogo)
+        // Senao apertar botão no emulador externo (ex: B no Yuzu pra ação do jogo)
         // o launcher ve e dispara kill_running_game — fechando o jogo do nada.
         if (document.hidden || document.visibilityState !== "visible") {
           raf = requestAnimationFrame(poll);
@@ -3224,8 +3224,8 @@ export default function LudexLauncher() {
         const ctx = padCtxRef.current;
         const pads = navigator.getGamepads ? navigator.getGamepads() : [];
         // v0.8.40: Selecao inteligente de pad — Steam Input cria controle virtual
-        // que aparece primeiro mas sem mapping "standard" ou sem botoes. Antes
-        // pegavamos o primeiro pad nao-null e ja era. Agora:
+        // que aparece primeiro mas sem mapping "standard" ou sem botões. Antes
+        // pegavamos o primeiro pad não-null e ja era. Agora:
         //   1) Prioriza pads com mapping="standard" (Xbox/DS4 via XInput)
         //   2) Se ja temos um "ativo" (teve input recente), mantem ele
         //   3) Senao pega primeiro standard, fallback pra primeiro qualquer
@@ -3297,10 +3297,10 @@ export default function LudexLauncher() {
             }
           }
           st.prevRight = right; st.prevLeft = left; st.prevDown = down; st.prevUp = up;
-          // botoes: edge detection
+          // botões: edge detection
           if (aBtn && !st.prevA) modalGamepadRef.current?.("a");
           if (bBtn && !st.prevB) {
-            // B fecha modal sempre (fallback se modal nao consumir)
+            // B fecha modal sempre (fallback se modal não consumir)
             const consumed = modalGamepadRef.current?.("b");
             if (!consumed) {
               sfx.back();
@@ -3319,9 +3319,9 @@ export default function LudexLauncher() {
           raf = requestAnimationFrame(poll);
           return;
         }
-        // Quando launching: SO processa combo Select+R1 pra cancelar (combo dificil de
+        // Quando launching: SO processa combo Select+R1 pra cancelar (combo difícil de
         // disparar acidentalmente durante gameplay). Botao unico apertado no emulador
-        // externo nao deve fechar o jogo via launcher.
+        // externo não deve fechar o jogo via launcher.
         if (ctx.launching) {
           const isStandard2 = pad.mapping === "standard";
           const selectHeld = isStandard2 && !!pad.buttons[8]?.pressed; // Select / Back
@@ -3419,7 +3419,7 @@ export default function LudexLauncher() {
         if (rt && !st.prevRT) navCategory(1);
         st.prevLT = lt; st.prevRT = rt;
 
-        // v0.8.40: Aceita botoes em QUALQUER pad (era so standard). Steam Input,
+        // v0.8.40: Aceita botões em QUALQUER pad (era so standard). Steam Input,
         // DInput, e alguns pads BT reportam mapping="" mas seguem convencao
         // [0]=A/X, [1]=B/O, [9]=Start. Se errado, user adapta — melhor que dead.
         {
@@ -3518,12 +3518,12 @@ export default function LudexLauncher() {
       // Navegacao por zona (mesma logica do gamepad)
       if (e.key === "ArrowRight") {
         e.preventDefault(); sfx.nav();
-        if (focusZone === "util") {
+        if (focusZone === "útil") {
           setUtilIdx((i) => Math.min(1, i + 1));
         } else if (focusZone === "systems") {
           if (selectedSystemIdx >= displayedSystems.length - 1) {
             // Passa pra bottom bar (Configuracoes / Sair)
-            setFocusZone("util"); setUtilIdx(0);
+            setFocusZone("útil"); setUtilIdx(0);
           } else {
             setSelectedSystemIdx((i) => i + 1);
           }
@@ -3532,7 +3532,7 @@ export default function LudexLauncher() {
         }
       } else if (e.key === "ArrowLeft") {
         e.preventDefault(); sfx.nav();
-        if (focusZone === "util") {
+        if (focusZone === "útil") {
           if (utilIdx <= 0) {
             setFocusZone("systems"); setUtilIdx(-1);
           } else {
@@ -3549,10 +3549,10 @@ export default function LudexLauncher() {
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         if (focusZone === "systems") { sfx.nav(); setFocusZone("games"); }
-        else if (focusZone === "util") { sfx.nav(); setFocusZone("systems"); setUtilIdx(-1); }
+        else if (focusZone === "útil") { sfx.nav(); setFocusZone("systems"); setUtilIdx(-1); }
       } else if (e.key === "Enter") {
         e.preventDefault();
-        if (focusZone === "util") {
+        if (focusZone === "útil") {
           sfx.confirm();
           if (utilIdx === 0) { setSettingsOpen(true); }
           else if (utilIdx === 1) { handleQuit(); }
@@ -3560,7 +3560,7 @@ export default function LudexLauncher() {
         else if (selectedGame) handleLaunch();
       } else if (e.key === "Backspace") {
         e.preventDefault();
-        if (focusZone === "util") { sfx.back(); setFocusZone("systems"); setUtilIdx(-1); }
+        if (focusZone === "útil") { sfx.back(); setFocusZone("systems"); setUtilIdx(-1); }
         else if (focusZone === "games") { sfx.back(); setFocusZone("systems"); }
       }
     };
@@ -3570,7 +3570,7 @@ export default function LudexLauncher() {
 
   // License gate: bloqueia o app antes de qualquer outra coisa
   if (licenseStatus === null) {
-    // Ainda checando — render minimo (preto), evita flash
+    // Ainda checando — render mínimo (preto), evita flash
     return <div style={{ position: "fixed", inset: 0, background: "#04020c" }} />;
   }
   // Android: demo expirada bloqueia com tela propria (em vez do LudexLicenseGate desktop)
@@ -3583,7 +3583,7 @@ export default function LudexLauncher() {
 
   // ANDROID: layout mobile dedicado (touch-first, sem hints/topbar desktop).
   // Reusa todo state via closure — todos os modais (settings, preview, detail)
-  // continuam disponiveis pela closure tambem.
+  // continuam disponíveis pela closure também.
   if (IS_ANDROID) {
     return (
       <div className="lx-mobile">
@@ -3877,12 +3877,12 @@ export default function LudexLauncher() {
 
       {!splashDone && <SplashScreen profileName={activeProfile?.name} />}
 
-      {/* v0.8.21: update banner (nao bloqueia, user adia se quiser) */}
+      {/* v0.8.21: update banner (não bloqueia, user adia se quiser) */}
       {updateBanner && !updateInstalling && (
         <div className="pb-update-banner">
           <div className="pb-update-banner-text">
-            <strong>Atualizacao disponivel: v{updateBanner.version}</strong>
-            <span>Reinicie depois da instalacao pra usar a versao nova.</span>
+            <strong>Atualizacao disponível: v{updateBanner.version}</strong>
+            <span>Reinicie depois da instalação pra usar a versão nova.</span>
           </div>
           <button className="pb-btn pb-btn-primary" onClick={async () => {
             setUpdateInstalling(true);
@@ -3903,7 +3903,7 @@ export default function LudexLauncher() {
       )}
       {updateInstalling && (
         <div className="pb-update-banner pb-update-installing">
-          <strong>Baixando atualizacao... {updateProgress}%</strong>
+          <strong>Baixando atualização... {updateProgress}%</strong>
         </div>
       )}
 
@@ -4073,7 +4073,7 @@ export default function LudexLauncher() {
                   </span>
                 ) : (
                   <span className="pb-game-tag-name pb-game-tag-name-muted">
-                    {selected.folder_exists ? `${selected.name} · pasta vazia` : `${selected.name} · pasta /${selected.folder_name} nao existe`}
+                    {selected.folder_exists ? `${selected.name} · pasta vazia` : `${selected.name} · pasta /${selected.folder_name} não existe`}
                   </span>
                 )}
               </div>
@@ -4168,7 +4168,7 @@ export default function LudexLauncher() {
             )}
 
             {selected.games.length === 0 && !selected.emulator_exists && (
-              <div className="pb-warn">Emulador nao encontrado em disco</div>
+              <div className="pb-warn">Emulador não encontrado em disco</div>
             )}
 
             {selected.games.length === 0 && (
@@ -4224,14 +4224,14 @@ export default function LudexLauncher() {
           })}
           <div className="pb-sys-divider" />
           <button
-            className={`pb-sys pb-sys-util ${focusZone === "util" && utilIdx === 0 ? "active focused" : ""}`}
+            className={`pb-sys pb-sys-útil ${focusZone === "útil" && utilIdx === 0 ? "active focused" : ""}`}
             onClick={() => { sfx.open(); setSettingsOpen(true); }}
             title="Configuracoes (S / Y no controle)"
           >
             <span className="pb-sys-icon"><GearIcon /></span>
           </button>
           <button
-            className={`pb-sys pb-sys-util pb-sys-power ${focusZone === "util" && utilIdx === 1 ? "active focused" : ""}`}
+            className={`pb-sys pb-sys-útil pb-sys-power ${focusZone === "útil" && utilIdx === 1 ? "active focused" : ""}`}
             onClick={() => { sfx.back(); handleQuit(); }}
             title="Sair"
           >
@@ -4525,7 +4525,7 @@ export default function LudexLauncher() {
         </div>
       )}
 
-      {/* Modais novos do v0.4 (sugestoes de jogos + dicas de controle) */}
+      {/* Modais novos do v0.4 (sugestões de jogos + dicas de controle) */}
       <SuggestionsModal
         open={suggestionsOpen}
         defaultTab={suggestionsTab}
@@ -4547,7 +4547,7 @@ export default function LudexLauncher() {
         <WhatsNewModal data={whatsNew} onClose={() => { markVersionSeen(whatsNew.current); setWhatsNew(null); }} />
       )}
 
-      {/* First-run onboarding: tour spotlight + criacao de perfil. Fica em
+      {/* First-run onboarding: tour spotlight + criação de perfil. Fica em
        * cima de tudo (z-index 9000) ate o user concluir. Skip em Android. */}
       {firstRunActive && splashDone && !IS_ANDROID && (
         <LudexOnboarding onComplete={handleFirstRunComplete} />

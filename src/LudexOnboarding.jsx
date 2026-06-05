@@ -22,7 +22,7 @@ function buildAvatarSvg({ bg1, bg2, glyph, glyphColor = "#fff", glyphSize = 110 
   );
 }
 
-// Glyphs sao simbolos Unicode geometricos (nao emojis no padrao Unicode emoji
+// Glyphs sao simbolos Unicode geometricos (não emojis no padrão Unicode emoji
 // block) - renderizam como vetor monocromatico, sem variation-selector colorido.
 export const DEFAULT_AVATARS = [
   { id: "av-purple",   label: "Roxo Ludex",   svg: buildAvatarSvg({ bg1: "#7c3aed", bg2: "#5b21b6", glyph: "L",  glyphSize: 130 }) },
@@ -66,7 +66,7 @@ export function getProfileAvatarUrl(profile, convertFileSrc) {
 // Steps do tour. Cada step tem um seletor (data-tour) que aponta pro elemento
 // na home — o spotlight overlay mede getBoundingClientRect e abre uma janela
 // na máscara. Banner liquid glass aparece numa posição relativa ao alvo.
-// v0.9.34: muito mais steps + cada um explica funcao de um elemento real
+// v0.9.34: muito mais steps + cada um explica função de um elemento real
 // (era so 5 steps, agora cobre topbar inteira, continue jogando, ordem,
 // grid, ajustes, busca, sortear, perfil, atalhos). Pode pular a qualquer hora.
 const TOUR_STEPS = [
@@ -81,42 +81,42 @@ const TOUR_STEPS = [
     id: "search",
     selector: '[data-tour="search"]',
     title: "Buscar jogo (atalho: / )",
-    body: "Busca rapida em TODOS seus jogos de todos sistemas. Aceita acentos e ignora maiusculas ('mario' acha 'Super Mario'). No controle, L2+LB tambem abre.",
+    body: "Busca rapida em TODOS seus jogos de todos sistemas. Aceita acentos e ignora maiusculas ('mario' acha 'Super Mario'). No controle, L2+LB também abre.",
     placement: "bottom",
   },
   {
     id: "random",
     selector: '[data-tour="random"]',
     title: "Sortear (atalho: R)",
-    body: "Escolhe um jogo aleatorio da sua biblioteca inteira — bom pra quebrar a paralisia de 'tenho muito jogo nao sei o que jogar'.",
+    body: "Escolhe um jogo aleatorio da sua biblioteca inteira — bom pra quebrar a paralisia de 'tenho muito jogo não sei o que jogar'.",
     placement: "bottom",
   },
   {
     id: "settings",
     selector: '[data-tour="settings"]',
     title: "Configuracoes (atalho: S)",
-    body: "Tema, perfil, musica ambiente, wallpaper, RetroAchievements, Discord Rich Presence, auto-update do app, pasta de ROMs, cores libretro, BIOS, atalhos. Tudo aqui.",
+    body: "Tema, perfil, música ambiente, wallpaper, RetroAchievements, Discord Rich Presence, auto-update do app, pasta de ROMs, cores libretro, BIOS, atalhos. Tudo aqui.",
     placement: "left",
   },
   {
     id: "continue",
     selector: '[data-tour="continue"]',
     title: "Continue jogando",
-    body: "Mostra o ultimo jogo que voce abriu (com capa). Tocar = retoma exatamente de onde parou (save state automatico).",
+    body: "Mostra o ultimo jogo que você abriu (com capa). Tocar = retoma exatamente de onde parou (save state automático).",
     placement: "bottom",
   },
   {
     id: "systems",
     selector: '[data-tour="systems"]',
     title: "Plataformas (27+ sistemas)",
-    body: "PS1, PS2, N64, GameCube, Wii, 3DS, Saturn, Dreamcast, GBA, NDS, Switch e mais — todos com core embedded (nao precisa baixar nada). Use Up/Down no teclado ou D-pad pra navegar. LB/RB pulam categoria inteira.",
+    body: "PS1, PS2, N64, GameCube, Wii, 3DS, Saturn, Dreamcast, GBA, NDS, Switch e mais — todos com core embedded (não precisa baixar nada). Use Up/Down no teclado ou D-pad pra navegar. LB/RB pulam categoria inteira.",
     placement: "right",
   },
   {
     id: "sort",
     selector: '[data-tour="sort"]',
     title: "Filtros e ordenacao",
-    body: "Padrao / A-Z / Recentes (ultimo jogado) / Mais jogados / Favoritos. Mantenha 'Recentes' pra ver no topo o jogo que voce abriu ultimo.",
+    body: "Padrao / A-Z / Recentes (ultimo jogado) / Mais jogados / Favoritos. Mantenha 'Recentes' pra ver no topo o jogo que você abriu ultimo.",
     placement: "bottom",
   },
   {
@@ -147,7 +147,7 @@ function useTargetRect(selector, deps) {
 
 function SpotlightOverlay({ rect }) {
   // v0.9.34: 4 divs com backdrop-filter blur em volta do alvo (era SVG mask).
-  // Backdrop-filter so funciona em <div>, nao dentro de <mask> — entao usamos
+  // Backdrop-filter so funciona em <div>, não dentro de <mask> — entao usamos
   // 4 retangulos cobrindo top/bottom/left/right do alvo, cada um borrado.
   // Resultado: alvo nitido, resto da tela com vidro fosco escurecido.
   if (!rect) {
@@ -365,7 +365,7 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
  * concluir. Quando termina, chama onComplete({ name, avatar | customPhotoPath })
  * e o pai persiste o perfil + chama complete_first_run() no backend.
  *
- * v0.9.34: prop `tourOnly` = true pula o intro e a criacao de perfil, vai
+ * v0.9.34: prop `tourOnly` = true pula o intro e a criação de perfil, vai
  * direto pro tour. Usado quando o user clica "Ver tutorial novamente" nos
  * Ajustes (ja tem perfil, so quer rever as explicacoes). onComplete e
  * chamado sem args nesse modo.

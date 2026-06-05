@@ -70,7 +70,7 @@ export function totalPlayTime() {
 // ============ ACHIEVEMENTS INTERNOS ============
 // IDs simples + icon SVG path d (so 1 path por achievement, sem deps)
 // v0.9.0: catalogo expandido de 10 -> 25 cobrindo milestones de tempo, ROMs,
-// sistemas, sessoes longas, perfil power-user e ate dawn-player.
+// sistemas, sessões longas, perfil power-user e ate dawn-player.
 export const ACHIEVEMENTS = [
   // Onboarding / primeiros passos
   { id: "first_rom",       name: "Primeira ROM",          desc: "Carregou seu primeiro jogo no Ludex",                     icon: "M5 13l4 4L19 7" },
@@ -243,7 +243,7 @@ export function filterChildSafe(games) {
 }
 
 // ============ BACKUP / RESTORE ============
-// v0.9.14: prefs guardadas com chave crua (fora de KEYS) que tambem entram no
+// v0.9.14: prefs guardadas com chave crua (fora de KEYS) que também entram no
 // backup — antes se limpasse os dados, perdia tema/controle/layout.
 const RAW_PREF_KEYS = [
   "ludex.appTheme.v1",
@@ -366,7 +366,7 @@ export function setAmbientOn(on) {
 }
 // v0.9.9: persiste SO a preferencia liga/desliga (sem mexer no chiptune). O
 // playback app-wide (MP3 ambiente compartilhado com o PC, ou chiptune fallback)
-// e decidido no componente principal do LudexMobile, nao aqui.
+// e decidido no componente principal do LudexMobile, não aqui.
 export function setAmbientPref(on) {
   try { localStorage.setItem(KEYS.ambientMusic, on ? "1" : "0"); } catch {}
 }
@@ -375,7 +375,7 @@ export function startAmbient() {
   try {
     _ambientCtx = new (window.AudioContext || window.webkitAudioContext)();
     // v0.9.5: RESUME — no Android o AudioContext nasce suspenso; sem isso a
-    // musica chiptune nao saia som nenhum. E o volume era 0.012 (inaudivel) ->
+    // música chiptune não saia som nenhum. E o volume era 0.012 (inaudivel) ->
     // subido pra 0.06.
     _ambientCtx.resume().catch(() => {});
     // Loop simples C-E-G-C arpejo lento 4s

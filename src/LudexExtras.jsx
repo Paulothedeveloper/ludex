@@ -334,12 +334,12 @@ const CATEGORY_LABELS = {
 export function SystemSettingsModal({ open, onClose, systemId, systemName }) {
   const options = useMemo(() => (systemId ? getOptionsForSystem(systemId) : null), [systemId]);
   const [values, setValues] = useState({});
-  const [activeTab, setActiveTab] = useState("opcoes"); // 'opcoes' | 'controle'
+  const [activeTab, setActiveTab] = useState("opções"); // 'opções' | 'controle'
 
   useEffect(() => {
     if (!open || !systemId) return;
     setValues(loadSystemOptions(systemId) || {});
-    setActiveTab("opcoes");
+    setActiveTab("opções");
   }, [open, systemId]);
 
   // v0.8.39: Esc fecha modal (era so click-fora antes)
@@ -365,8 +365,8 @@ export function SystemSettingsModal({ open, onClose, systemId, systemName }) {
         <div className="lx-settings-tabs">
           {hasOpts && (
             <button
-              className={`lx-settings-tab ${activeTab === "opcoes" ? "active" : ""}`}
-              onClick={() => setActiveTab("opcoes")}
+              className={`lx-settings-tab ${activeTab === "opções" ? "active" : ""}`}
+              onClick={() => setActiveTab("opções")}
             >Vídeo / Performance</button>
           )}
           <button
@@ -375,7 +375,7 @@ export function SystemSettingsModal({ open, onClose, systemId, systemName }) {
           >Controle</button>
         </div>
 
-        {activeTab === "opcoes" && hasOpts && (
+        {activeTab === "opções" && hasOpts && (
           <SystemOptionsPanel
             systemId={systemId}
             options={options}
@@ -383,7 +383,7 @@ export function SystemSettingsModal({ open, onClose, systemId, systemName }) {
             setValues={setValues}
           />
         )}
-        {activeTab === "opcoes" && !hasOpts && (
+        {activeTab === "opções" && !hasOpts && (
           <div className="lx-settings-body">
             <p className="lx-settings-hint">
               Esse sistema usa defaults canônicos do libretro e ainda não tem opções configuráveis. A aba "Controle" funciona para todos.
@@ -421,21 +421,21 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
     byCategory[opt.category].push(opt);
   }
   const categories = Object.keys(byCategory);
-  // v0.9.1: toast pra avisar quando user mexer numa opcao restart-required
+  // v0.9.1: toast pra avisar quando user mexer numa opção restart-required
   const [restartToast, setRestartToast] = useState(null);
 
   const onChange = async (key, value) => {
     const next = { ...values, [key]: value };
     setValues(next);
     saveSystemOptions(systemId, next);
-    // v0.9.1: opcoes 'ludex_*' sao do frontend (audio gain, deadzone, etc),
-    // nao mandam pro core libretro. EmulatorView le elas direto do localStorage.
+    // v0.9.1: opções 'ludex_*' sao do frontend (audio gain, deadzone, etc),
+    // não mandam pro core libretro. EmulatorView le elas direto do localStorage.
     if (FRONTEND_OPTION_KEYS && FRONTEND_OPTION_KEYS.has(key)) {
       try { window.dispatchEvent(new CustomEvent("ludex:frontend-config-changed", { detail: { systemId, key, value } })); } catch {}
       return;
     }
     try { await invoke("libretro_set_option", { key, value }); } catch (e) { console.error(e); }
-    // v0.9.1: se opcao requer restart, avisa com toast persistente ate user fechar
+    // v0.9.1: se opção requer restart, avisa com toast persistente ate user fechar
     if (requiresRestart(key)) {
       setRestartToast({ key, label: options.find(o => o.key === key)?.label || key });
     }
@@ -530,9 +530,9 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
 
 /**
  * v0.8.42: UI de remap de controle por sistema.
- * Lista botoes libretro (B/A/Y/X/L1/R1/L2/R2/L3/R3/Start/Select) com o pad btn
+ * Lista botões libretro (B/A/Y/X/L1/R1/L2/R2/L3/R3/Start/Select) com o pad btn
  * atualmente mapeado pra cada. Click em "Remapear" entra em modo escuta:
- * proximo botao do pad pressionado vira o novo mapeamento.
+ * próximo botão do pad pressionado vira o novo mapeamento.
  */
 function ControllerRemapPanel({ systemId }) {
   const [map, setMap] = useState(() => effectivePadMap(systemId));
@@ -547,7 +547,7 @@ function ControllerRemapPanel({ systemId }) {
     if (listening == null) return;
     let raf;
     const prev = new Array(20).fill(false);
-    // marca estado inicial pra nao capturar botoes ja segurados
+    // marca estado inicial pra não capturar botões ja segurados
     const pads0 = navigator.getGamepads ? navigator.getGamepads() : [];
     let pad0 = null;
     for (const p of pads0) {

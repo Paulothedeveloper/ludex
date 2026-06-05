@@ -7,10 +7,10 @@ import { invoke } from "@tauri-apps/api/core";
  *
  * Lista vendas via Gumroad /v2/sales. Permite filtrar por email e force
  * deactivate (decrementa uses count) de qualquer license individual. Pra ban
- * total / refund, manda Paulo pro dashboard Gumroad (a API publica nao expoe
+ * total / refund, manda Paulo pro dashboard Gumroad (a API pública não expoe
  * disable_license).
  *
- * Layout de cards (nao tabela) pra funcionar bem em qualquer largura.
+ * Layout de cards (não tabela) pra funcionar bem em qualquer largura.
  */
 export default function LudexAdminPanel({ onClose }) {
   const [page, setPage] = useState(1);

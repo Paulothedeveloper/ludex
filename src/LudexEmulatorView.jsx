@@ -64,7 +64,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
   const [frontendCfg, setFrontendCfg] = useState(() => getFrontendConfig(system.id));
   const cfgRef = useRef(frontendCfg);
   useEffect(() => { cfgRef.current = frontendCfg; }, [frontendCfg]);
-  // FF default vem da config (3x / 4x / etc) quando user pressiona o botao
+  // FF default vem da config (3x / 4x / etc) quando user pressiona o botão
   useEffect(() => {
     const ffFromCfg = frontendCfg.ffSpeed || 4;
     ffEffectiveRef.current = ffHold ? Math.max(ffSpeed, ffFromCfg) : ffSpeed;
@@ -102,7 +102,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
           return;
         }
         if (!validRomExtension(game.path)) {
-          setError(`Extensao de arquivo nao suportada: ${game.path}`);
+          setError(`Extensao de arquivo não suportada: ${game.path}`);
           return;
         }
         try { await applySystemOptions(system.id); } catch {}
@@ -168,12 +168,12 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
 
   // v0.9.2: drainer removido — AudioWorklet processa direto na audio thread.
 
-  // Loop de frames — v0.9.2: PACING PELO RELOGIO DE AUDIO (hardware), nao por
+  // Loop de frames — v0.9.2: PACING PELO RELOGIO DE AUDIO (hardware), não por
   // performance.now()/rAF. Esse era o bug raiz do stutter: a emulacao ficava
   // presa ao requestAnimationFrame, entao qualquer jank do main thread (render
   // React, GC, latencia de IPC) atrasava a producao de audio -> o ring buffer
   // do worklet ficava em underrun -> engasgo. Mesmo num PC forte (RTX 4070) o
-  // gargalo nao e CPU, e o agendamento.
+  // gargalo não e CPU, e o agendamento.
   //
   // Agora: AudioContext.currentTime avanca em tempo real, governado pela placa
   // de som. A cada tick calculamos quanto audio ainda esta no buffer
@@ -228,7 +228,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
       try {
         if (ff > 1) {
           // Fast-forward: roda ff frames (capado), MUDO (audio descartado) pra
-          // nao acumular nem dar pitch-bend. Reseta o baseline do clock.
+          // não acumular nem dar pitch-bend. Reseta o baseline do clock.
           const n = Math.min(ff, MAX_FRAMES_PER_TICK);
           if (n > 1) { try { await invoke("libretro_skip_frames", { n: n - 1 }); } catch {} }
           renderVideo(await invoke("libretro_run_frame"));
@@ -242,7 +242,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
             const consumedPerCh = Math.max(0, (actx.currentTime - audioStart) * sampleRate);
             const bufferedSec = (producedPerCh - consumedPerCh) / sampleRate;
             if (bufferedSec >= MAX_LATENCY) {
-              framesToRun = 0; // buffer cheio: espera o proximo tick
+              framesToRun = 0; // buffer cheio: espera o próximo tick
             } else {
               const deficitSec = TARGET_LATENCY - bufferedSec;
               framesToRun = Math.min(
@@ -480,7 +480,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
             invoke("libretro_set_input", { buttonId: libretroId, pressed }).catch(() => {});
           }
         }
-        // v0.9.1: aplica deadzone tambem nos analogicos mandados pro core
+        // v0.9.1: aplica deadzone também nos analogicos mandados pro core
         const lx = Math.round(applyDz(pad.axes[0] || 0) * 32767);
         const ly = Math.round(applyDz(pad.axes[1] || 0) * 32767);
         const rx = Math.round(applyDz(pad.axes[2] || 0) * 32767);
@@ -684,15 +684,15 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
             </div>
           )}
           {/* v0.9.22: helper p/ core libretro faltando — antes a mensagem aparecia
-              vaga (ou ate sumia se o erro era so "core nao encontrado: <path>"),
+              vaga (ou ate sumia se o erro era so "core não encontrado: <path>"),
               dando sensacao de "tela preta" no GC/3DS/DS/etc quando o .dll faltava.
               Agora aponta certinho pro arquivo + abre o guia local. */}
-          {(String(error).toLowerCase().includes("core nao encontrado") ||
+          {(String(error).toLowerCase().includes("core não encontrado") ||
             String(error).toLowerCase().includes("sem core libretro") ||
-            String(error).toLowerCase().includes("nao encontrado")) && (
+            String(error).toLowerCase().includes("não encontrado")) && (
             <div style={{ marginTop: 12, padding: 12, background: "rgba(255,255,255,0.04)", borderRadius: 8, maxWidth: 560 }}>
               <p style={{ margin: "0 0 8px 0", fontSize: 13 }}>
-                <b>Como resolver:</b> o core libretro pra <b>{system.name}</b> nao esta na pasta <code>cores/</code>.
+                <b>Como resolver:</b> o core libretro pra <b>{system.name}</b> não esta na pasta <code>cores/</code>.
                 Baixe o arquivo <code>{system.libretro_core || "(verifique CORES-E-BIOS.md)"}</code> em
                 <code> buildbot.libretro.com/nightly/windows/x86_64/latest/</code> (descompacte o .zip e copie o .dll).
               </p>
@@ -750,7 +750,7 @@ export function ResumePromptModal({ info, onContinue, onFresh, onCancel }) {
           <p className="pb-resume-meta">Slot {info.slot} · salvo {fmt(info.when)}</p>
           <div className="pb-resume-actions">
             <button className="pb-btn pb-btn-primary" autoFocus onClick={onContinue}>Continuar</button>
-            <button className="pb-btn" onClick={onFresh}>Comecar do inicio</button>
+            <button className="pb-btn" onClick={onFresh}>Comecar do início</button>
           </div>
         </div>
       </div>
