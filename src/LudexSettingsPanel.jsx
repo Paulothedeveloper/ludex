@@ -25,6 +25,9 @@ export default function SettingsPanel({
   onSyncCovers, syncStatus, onRescan, rescanBusy,
   onOpenProfiles, activeProfile,
   onSetupSwitchKeys, switchKeysStatus,
+  // v0.9.35: setup auto-import equivalente pra Wii U e PS Vita
+  onSetupWiiuKeys, wiiuKeysStatus,
+  onSetupVitaFirmware, vitaFwStatus,
   onToggleSavesIsolation, savesStatus,
   onToggleMusic, onSetMusicVolume,
   onShowLogs, onShowHealth,
@@ -446,6 +449,40 @@ export default function SettingsPanel({
           )}
           <p className="pb-settings-hint">
             Copia <code>prod.keys</code>, <code>title.keys</code> e firmware NCA da pasta KEYS pra <code>%APPDATA%\yuzu\</code>.
+          </p>
+        </div>
+
+        {/* v0.9.35: equivalente Wii U */}
+        <div className="pb-settings-section">
+          <h3>Wii U — Cemu</h3>
+          <button className="pb-settings-btn" onClick={() => { sfx.click(); onSetupWiiuKeys && onSetupWiiuKeys(); }} disabled={wiiuKeysStatus?.busy}>
+            <RefreshIcon />
+            {wiiuKeysStatus?.busy ? "Copiando..." : "Instalar keys (Cemu)"}
+          </button>
+          {wiiuKeysStatus?.message && (
+            <p className="pb-settings-hint" style={{ color: wiiuKeysStatus.kind === "error" ? "#fca5a5" : "#86efac" }}>
+              {wiiuKeysStatus.message}
+            </p>
+          )}
+          <p className="pb-settings-hint">
+            Copia <code>keys.txt</code> (+ <code>otp.bin</code> / <code>seeprom.bin</code> opcionais) da pasta <code>roms/KEYS/</code> pra <code>emulators/CEMU/Cemu_2.6/</code>.
+          </p>
+        </div>
+
+        {/* v0.9.35: equivalente PS Vita */}
+        <div className="pb-settings-section">
+          <h3>PS Vita — Vita3K</h3>
+          <button className="pb-settings-btn" onClick={() => { sfx.click(); onSetupVitaFirmware && onSetupVitaFirmware(); }} disabled={vitaFwStatus?.busy}>
+            <RefreshIcon />
+            {vitaFwStatus?.busy ? "Copiando..." : "Instalar firmware (Vita3K)"}
+          </button>
+          {vitaFwStatus?.message && (
+            <p className="pb-settings-hint" style={{ color: vitaFwStatus.kind === "error" ? "#fca5a5" : "#86efac" }}>
+              {vitaFwStatus.message}
+            </p>
+          )}
+          <p className="pb-settings-hint">
+            Copia <code>PSVITAUPDAT.PUP</code> da pasta <code>roms/KEYS/</code> pra <code>emulators/VITA/</code>. Depois abra o Vita3K, Welcome wizard, aponte o PUP.
           </p>
         </div>
 

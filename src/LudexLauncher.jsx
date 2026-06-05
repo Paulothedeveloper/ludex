@@ -2027,6 +2027,9 @@ export default function LudexLauncher() {
   // capas". Agora o effect tem [selected, coversRefreshKey] e re-roda.
   const [coversRefreshKey, setCoversRefreshKey] = useState(0);
   const [switchKeysStatus, setSwitchKeysStatus] = useState({ busy: false, message: null, kind: null });
+  // v0.9.35: equivalentes pra Wii U (Cemu) e PS Vita (Vita3K)
+  const [wiiuKeysStatus, setWiiuKeysStatus] = useState({ busy: false, message: null, kind: null });
+  const [vitaFwStatus, setVitaFwStatus] = useState({ busy: false, message: null, kind: null });
   const [savesStatus, setSavesStatus] = useState({ busy: false, enabled: false, message: null, kind: null });
   const time = useClock();
   const activeCardRef = useRef(null);
@@ -2794,6 +2797,32 @@ export default function LudexLauncher() {
       setSwitchKeysStatus({ busy: false, message: msg, kind: "ok" });
     } catch (e) {
       setSwitchKeysStatus({ busy: false, message: String(e), kind: "error" });
+    }
+  }, []);
+
+  // v0.9.35: Wii U (Cemu) — espelha o pattern do Switch.
+  const setupWiiuKeys = useCallback(async () => {
+    setWiiuKeysStatus({ busy: true, message: null, kind: null });
+    try {
+      const res = await invoke("setup_wiiu_keys", { romsRoot });
+      const msg = `OK · keys.txt: ${res.keys_copied ? "copiada" : "nao encontrada"} · extras: ${res.extra_files}\n${res.cemu_dir}`;
+      setWiiuKeysStatus({ busy: false, message: msg, kind: res.keys_copied ? "ok" : "error" });
+    } catch (e) {
+      setWiiuKeysStatus({ busy: false, message: String(e), kind: "error" });
+    }
+  }, []);
+
+  // v0.9.35: Vita (Vita3K) — copia PSVITAUPDAT.PUP de roms/KEYS/ pro pref-path.
+  const setupVitaFirmware = useCallback(async () => {
+    setVitaFwStatus({ busy: true, message: null, kind: null });
+    try {
+      const res = await invoke("setup_vita_firmware", { romsRoot });
+      const msg = res.pup_copied
+        ? `OK · PUP copiado pra:\n${res.pup_path_if_copied}\n\nAgora abra Vita3K, Welcome wizard, aponte esse PUP.`
+        : `Nada copiado: ${res.vita_dir}`;
+      setVitaFwStatus({ busy: false, message: msg, kind: res.pup_copied ? "ok" : "error" });
+    } catch (e) {
+      setVitaFwStatus({ busy: false, message: String(e), kind: "error" });
     }
   }, []);
 
@@ -3776,6 +3805,10 @@ export default function LudexLauncher() {
             activeProfile={activeProfile}
             onSetupSwitchKeys={setupSwitchKeys}
             switchKeysStatus={switchKeysStatus}
+            onSetupWiiuKeys={setupWiiuKeys}
+            wiiuKeysStatus={wiiuKeysStatus}
+            onSetupVitaFirmware={setupVitaFirmware}
+            vitaFwStatus={vitaFwStatus}
             onToggleSavesIsolation={toggleSavesIsolation}
             savesStatus={savesStatus}
             onToggleMusic={toggleMusic}
@@ -4265,6 +4298,10 @@ export default function LudexLauncher() {
           activeProfile={activeProfile}
           onSetupSwitchKeys={setupSwitchKeys}
           switchKeysStatus={switchKeysStatus}
+          onSetupWiiuKeys={setupWiiuKeys}
+          wiiuKeysStatus={wiiuKeysStatus}
+          onSetupVitaFirmware={setupVitaFirmware}
+          vitaFwStatus={vitaFwStatus}
           onToggleSavesIsolation={toggleSavesIsolation}
           savesStatus={savesStatus}
           onToggleMusic={toggleMusic}

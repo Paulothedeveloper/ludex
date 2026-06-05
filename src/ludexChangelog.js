@@ -4,6 +4,10 @@
 
 // Bullets curtos e claros por versao (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "0.9.35": [
+    "Launcher PC: novos botoes nos Ajustes pra Wii U (Cemu) e PS Vita (Vita3K) — copiam keys/firmware da pasta KEYS pro emulador certo automaticamente (igual ja tinha pro Switch).",
+    "Auditoria total dos 28 cores libretro PC + 27 .so embedded Android: TUDO presente, BIOS completas em PC e celular. Doc CORES-E-BIOS.md atualizado pra refletir a realidade.",
+  ],
   "0.9.34": [
     "Tutorial refeito: agora aponta cada feature do app (avatar, busca, mais jogados, continue jogando, sistemas, ajustes, BIOS, tema, controle, pasta) com efeito de vidro fosco em volta e destaque no elemento. Mesmo padrao no celular e no PC.",
     "Botao 'Ver tutorial novamente' nos Ajustes (celular e PC) — refaz o passo a passo a qualquer hora.",

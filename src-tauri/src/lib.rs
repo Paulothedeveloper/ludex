@@ -2678,6 +2678,129 @@ fn setup_switch_keys(roms_root: String) -> Result<YuzuSetupResult, String> {
     })
 }
 
+// ---------- Setup das keys do Wii U (Cemu) ----------
+//
+// v0.9.35: Cemu precisa de keys.txt (AES master keys decrypt das WUD/RPX) E
+// opcionalmente de meta\keys.txt e otp.bin/seeprom.bin pra full coverage.
+// Espelho do setup_switch_keys: procura em roms_root/KEYS/ recursivo, copia
+// case-insensitive pro path do Cemu (geralmente Cemu_2.6/keys.txt + mlc01/).
+//
+// Cemu_2.6 portable em emulators/CEMU/Cemu_2.6/ — keys.txt fica solto na raiz.
+
+#[derive(Debug, Serialize)]
+struct CemuSetupResult {
+    keys_copied: bool,
+    extra_files: u32,
+    cemu_dir: String,
+}
+
+#[tauri::command]
+fn setup_wiiu_keys(roms_root: String) -> Result<CemuSetupResult, String> {
+    let emu_root = current_emulators_root();
+    let cemu_dir = emu_root.join("CEMU").join("Cemu_2.6");
+    if !cemu_dir.is_dir() {
+        return Err(format!(
+            "Cemu nao encontrado em {}. Instale Cemu 2.6 primeiro.",
+            cemu_dir.display()
+        ));
+    }
+
+    let roms_keys = PathBuf::from(&roms_root).join("KEYS");
+    if !roms_keys.is_dir() {
+        return Err("Pasta KEYS nao encontrada em ROMS".into());
+    }
+
+    let mut keys_copied = false;
+    let mut extra = 0u32;
+    for entry in WalkDir::new(&roms_keys).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if !path.is_file() { continue; }
+        let name = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+        let lc = name.to_ascii_lowercase();
+        if lc == "keys.txt" {
+            let dst = cemu_dir.join("keys.txt");
+            std::fs::copy(path, &dst).map_err(|e| format!("copy keys.txt: {}", e))?;
+            keys_copied = true;
+            log::info!("Cemu keys.txt -> {}", dst.display());
+        } else if lc == "otp.bin" || lc == "seeprom.bin" {
+            // otp.bin e seeprom.bin vao em mlc01/sys/title/00050010/1000400a/content/
+            // mas o local mais seguro/portable e direto em Cemu_2.6/ — Cemu lê
+            // de qualquer lugar via Tools > Open Cemu folder.
+            let dst = cemu_dir.join(name);
+            std::fs::copy(path, &dst).map_err(|e| format!("copy {}: {}", name, e))?;
+            extra += 1;
+            log::info!("Cemu extra {} -> {}", name, dst.display());
+        }
+    }
+
+    Ok(CemuSetupResult {
+        keys_copied,
+        extra_files: extra,
+        cemu_dir: cemu_dir.to_string_lossy().to_string(),
+    })
+}
+
+// ---------- Setup do firmware do PS Vita (Vita3K) ----------
+//
+// v0.9.35: Vita3K precisa de PSVITAUPDAT.PUP (firmware Sony oficial)
+// instalado via UI. Esse comando facilita copiando do roms/KEYS/ pro
+// pref-path do Vita3K, e abre o emu pra usuario completar via Welcome wizard.
+//
+// Vita3K portable em emulators/VITA/ — config em data/.
+
+#[derive(Debug, Serialize)]
+struct VitaSetupResult {
+    pup_copied: bool,
+    vita_dir: String,
+    /// Path onde o user precisa apontar manualmente via Vita3K UI (Welcome).
+    pup_path_if_copied: Option<String>,
+}
+
+#[tauri::command]
+fn setup_vita_firmware(roms_root: String) -> Result<VitaSetupResult, String> {
+    let emu_root = current_emulators_root();
+    let vita_dir = emu_root.join("VITA");
+    if !vita_dir.is_dir() {
+        return Err(format!(
+            "Vita3K nao encontrado em {}. Instale Vita3K primeiro.",
+            vita_dir.display()
+        ));
+    }
+
+    let roms_keys = PathBuf::from(&roms_root).join("KEYS");
+    if !roms_keys.is_dir() {
+        return Err("Pasta KEYS nao encontrada em ROMS".into());
+    }
+
+    // Procura PSVITAUPDAT.PUP (case-insensitive)
+    let mut found_pup: Option<PathBuf> = None;
+    for entry in WalkDir::new(&roms_keys).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path().to_path_buf();
+        if !path.is_file() { continue; }
+        let name = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+        if name.to_ascii_uppercase() == "PSVITAUPDAT.PUP" {
+            found_pup = Some(path);
+            break;
+        }
+    }
+
+    let Some(pup_src) = found_pup else {
+        return Err("PSVITAUPDAT.PUP nao encontrado em roms/KEYS/. Baixe do site oficial Sony e coloque la.".into());
+    };
+
+    // Copia pro Vita3K dir (vai ficar visivel pra Welcome wizard apontar)
+    let pup_dst = vita_dir.join("PSVITAUPDAT.PUP");
+    std::fs::copy(&pup_src, &pup_dst)
+        .map_err(|e| format!("copy PUP: {}", e))?;
+    log::info!("Vita3K PUP {} -> {}", pup_src.display(), pup_dst.display());
+
+    Ok(VitaSetupResult {
+        pup_copied: true,
+        vita_dir: vita_dir.to_string_lossy().to_string(),
+        pup_path_if_copied: Some(pup_dst.to_string_lossy().to_string()),
+    })
+}
+
 #[tauri::command]
 fn clear_covers_cache(system_id: Option<String>) -> Result<u32, String> {
     let dir = covers_dir().ok_or("dir covers indisponivel")?;
@@ -6313,6 +6436,8 @@ pub fn run() {
             swap_profile_saves,
             unlink_profile_saves,
             setup_switch_keys,
+            setup_wiiu_keys,
+            setup_vita_firmware,
             set_game_rating,
             set_game_status,
             set_game_notes,
