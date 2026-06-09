@@ -2863,7 +2863,7 @@ fn clear_covers_cache(system_id: Option<String>) -> Result<u32, String> {
             && entry
                 .path()
                 .extension()
-                .map(|e| e.eq_ignore_ascii_case("jpg") || e.eq_ignore_ascii_case("png"))
+                .map(|e| e.eq_ignore_ascii_case("jpg") || e.eq_ignore_ascii_case("png") || e.eq_ignore_ascii_case("miss"))
                 .unwrap_or(false)
         {
             if std::fs::remove_file(entry.path()).is_ok() {
@@ -2884,6 +2884,23 @@ async fn fetch_cover(system_id: String, game_name: String) -> Option<String> {
 
     if cache_file.is_file() {
         return Some(cache_file.to_string_lossy().to_string());
+    }
+
+    // v0.9.37: cache NEGATIVO. Jogos sem capa (homebrew, hacks, nomes que não
+    // casam no IGDB nem na libretro-thumbnails) re-disparavam token + IGDB (várias
+    // variantes) + thumbnails (7 variantes de região) TODA vez que o app abria —
+    // muitos round-trips HTTP por boot. Marca um '.miss' com TTL de 7 dias pra não
+    // re-tentar a cada sessão. "Sincronizar capas" (clear) apaga os '.miss' tb,
+    // então o user ainda força nova busca quando quiser.
+    let miss_file = dir.join(format!("{}.miss", safe));
+    if let Ok(meta) = std::fs::metadata(&miss_file) {
+        if let Ok(modified) = meta.modified() {
+            if let Ok(age) = std::time::SystemTime::now().duration_since(modified) {
+                if age < std::time::Duration::from_secs(7 * 24 * 60 * 60) {
+                    return None;
+                }
+            }
+        }
     }
 
     let client = http_client_builder()
@@ -2950,6 +2967,8 @@ async fn fetch_cover(system_id: String, game_name: String) -> Option<String> {
     }
 
     log::warn!("[cover] sem match (IGDB + libretro-thumb) pra '{}' (plataforma {})", game_name, cfg.igdb_platform);
+    // v0.9.37: grava marcador de miss (TTL 7 dias) pra não re-buscar a cada boot.
+    let _ = std::fs::write(&miss_file, b"");
     None
 }
 
