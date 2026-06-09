@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost https://asset.localhost https: data: blob:; media-src 'self' asset: http://asset.localhost https://asset.localhost https: data: blob:; font-src 'self' data:; frame-src https://www.youtube-nocookie.com https://www.youtube.com; connect-src 'self' ipc: http://ipc.localhost https:; object-src 'none'; base-uri 'self'; form-action 'self'",
       "assetProtocol": {
         "enable": true,
         "scope": ["**"]
