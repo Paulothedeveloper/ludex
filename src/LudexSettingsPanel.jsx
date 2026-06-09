@@ -308,7 +308,7 @@ export default function SettingsPanel({
       <div className={`pb-settings-backdrop ${closing ? "closing" : ""}`} onClick={() => { sfx.back(); onClose(); }} />
       <aside ref={panelRef} className={`pb-settings ${closing ? "closing" : ""}`} onClick={(e) => e.stopPropagation()}>
         <header className="pb-settings-header">
-          <h2>Configuracoes</h2>
+          <h2>Configurações</h2>
           <button className="pb-icon-btn" onClick={() => { sfx.back(); onClose(); }} title="Fechar (Esc)"><CloseIcon /></button>
         </header>
 
@@ -889,10 +889,10 @@ export default function SettingsPanel({
           <dl className="pb-shortcuts">
             <dt>← →</dt><dd>Navegar jogo</dd>
             <dt>↑ ↓</dt><dd>Navegar sistema</dd>
-            <dt>ENTER</dt><dd>Lancar jogo</dd>
+            <dt>ENTER</dt><dd>Lançar jogo</dd>
             <dt>F</dt><dd>Marcar favorito</dd>
             <dt>/</dt><dd>Buscar jogo</dd>
-            <dt>S</dt><dd>Configuracoes</dd>
+            <dt>S</dt><dd>Configurações</dd>
             <dt>P</dt><dd>Trocar perfil</dd>
             <dt>F11</dt><dd>Tela cheia</dd>
             <dt>ESC</dt><dd>Voltar / Fechar painel</dd>

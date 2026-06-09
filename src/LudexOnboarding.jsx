@@ -29,7 +29,7 @@ export const DEFAULT_AVATARS = [
   { id: "av-pink",     label: "Estrela Rosa", svg: buildAvatarSvg({ bg1: "#ec4899", bg2: "#be185d", glyph: "★", glyphSize: 140 }) },
   { id: "av-blue",     label: "Diamante",     svg: buildAvatarSvg({ bg1: "#3b82f6", bg2: "#1d4ed8", glyph: "◆", glyphSize: 140 }) },
   { id: "av-green",    label: "Play",         svg: buildAvatarSvg({ bg1: "#22c55e", bg2: "#15803d", glyph: "▶", glyphSize: 110 }) },
-  { id: "av-red",      label: "Coracao",      svg: buildAvatarSvg({ bg1: "#ef4444", bg2: "#b91c1c", glyph: "♥", glyphSize: 130 }) },
+  { id: "av-red",      label: "Coração",      svg: buildAvatarSvg({ bg1: "#ef4444", bg2: "#b91c1c", glyph: "♥", glyphSize: 130 }) },
   { id: "av-orange",   label: "Alvo",         svg: buildAvatarSvg({ bg1: "#f97316", bg2: "#c2410c", glyph: "◉", glyphSize: 140 }) },
   { id: "av-yellow",   label: "Estrela Ouro", svg: buildAvatarSvg({ bg1: "#eab308", bg2: "#a16207", glyph: "★", glyphSize: 140, glyphColor: "#1a1a1a" }) },
   { id: "av-cyan",     label: "Power",        svg: buildAvatarSvg({ bg1: "#06b6d4", bg2: "#0e7490", glyph: "⏻", glyphSize: 120 }) },
@@ -94,7 +94,7 @@ const TOUR_STEPS = [
   {
     id: "settings",
     selector: '[data-tour="settings"]',
-    title: "Configuracoes (atalho: S)",
+    title: "Configurações (atalho: S)",
     body: "Tema, perfil, música ambiente, wallpaper, RetroAchievements, Discord Rich Presence, auto-update do app, pasta de ROMs, cores libretro, BIOS, atalhos. Tudo aqui.",
     placement: "left",
   },

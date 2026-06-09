@@ -16,7 +16,16 @@ import VirtualKeyboard from "./LudexOSK";
  * Importante: input NAO eh readOnly mesmo com OSK aberto, pra permitir que o
  * user de teclado fisico cole com Ctrl+V. OSK so eh visual auxiliar.
  */
-export default function LudexLicenseGate({ onLicensed }) {
+// v0.9.37: detecta erro de REDE (offline) vs rejeição real da chave, pra nunca
+// mostrar stacktrace crua nem confundir "sem internet" com "chave inválida".
+function isNetworkError(msg) {
+  const low = String(msg || "").toLowerCase();
+  return low.includes("sending request") || low.includes("network") ||
+    low.includes("timeout") || low.includes("dns") || low.includes("connect") ||
+    low.includes("conex") || low.includes("offline") || low.includes("resolve");
+}
+
+export default function LudexLicenseGate({ onLicensed, reason }) {
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -39,7 +48,9 @@ export default function LudexLicenseGate({ onLicensed }) {
         setErr(info?.message || "Chave invalida");
       }
     } catch (e) {
-      setErr(String(e));
+      setErr(isNetworkError(e)
+        ? "Sem conexão com a internet. Reconecte e tente ativar de novo."
+        : "Não consegui validar a chave. Confira se digitou/colou certo.");
     } finally {
       setBusy(false);
     }
@@ -73,6 +84,18 @@ export default function LudexLicenseGate({ onLicensed }) {
         <p className="lx-licgate-sub">Sua biblioteca retro em um lugar só</p>
 
         <div className="lx-licgate-divider" />
+
+        {reason === "offline" && (
+          <p style={{
+            background: "rgba(250,204,21,0.12)", border: "1px solid rgba(250,204,21,0.35)",
+            color: "#fde68a", borderRadius: 10, padding: "10px 12px", fontSize: 13,
+            lineHeight: 1.45, margin: "0 0 14px 0",
+          }}>
+            Você já ativou o Ludex aqui, mas não consegui revalidar a licença (parece
+            que ficou muito tempo sem internet). Reconecte e clique em <b>Ativar</b> com
+            a <b>mesma chave</b> — seus jogos e perfis continuam salvos.
+          </p>
+        )}
 
         <label className="lx-licgate-field">
           <span>Sua license key</span>

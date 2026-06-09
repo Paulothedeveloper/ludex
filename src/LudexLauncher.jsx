@@ -414,8 +414,8 @@ const ACHIEVEMENTS = [
   { id: "fifty_favorites",  name: "Colecionador",       desc: "Marcou 50 favoritos",              check: (p) => (p.favorites || []).length >= 50 },
   // Tempo total
   { id: "marathon",         name: "Maratona",           desc: "1 hora de jogo total",             check: (p) => _totalPlaySec(p) >= 3600 },
-  { id: "ten_hours",        name: "Dedicacao",          desc: "10 horas de jogo total",           check: (p) => _totalPlaySec(p) >= 36000 },
-  { id: "hundred_hours",    name: "Obsessao",           desc: "100 horas de jogo total",          check: (p) => _totalPlaySec(p) >= 360000 },
+  { id: "ten_hours",        name: "Dedicação",          desc: "10 horas de jogo total",           check: (p) => _totalPlaySec(p) >= 36000 },
+  { id: "hundred_hours",    name: "Obsessão",           desc: "100 horas de jogo total",          check: (p) => _totalPlaySec(p) >= 360000 },
   // Sistemas especificos (badges por console)
   { id: "played_ps1",       name: "Fan PlayStation",    desc: "Jogou um jogo de PS1",             check: (p) => _playedSystem(p, "ps1") },
   { id: "played_ps2",       name: "Black Disc",         desc: "Jogou um jogo de PS2",             check: (p) => _playedSystem(p, "ps2") },
@@ -1954,6 +1954,7 @@ export default function LudexLauncher() {
   // License gate — bloqueia o app antes de qualquer outra coisa se sem license valida
   // null = ainda checando; true = licenciado, deixa entrar; false = sem license, mostra gate
   const [licenseStatus, setLicenseStatus] = useState(null);
+  const [licenseReason, setLicenseReason] = useState(null); // 'offline' quando revalidação falha com license local existente
   const [androidDemo, setAndroidDemo] = useState(null);  // { expired, days_left, is_admin_unlocked, ... }
   // First-run onboarding + utilitarios novos do v0.4
   const [firstRunActive, setFirstRunActive] = useState(false);
@@ -1965,7 +1966,7 @@ export default function LudexLauncher() {
   const [controlsTip, setControlsTip] = useState(null); // { system } | null
   const [settingsModal, setSettingsModal] = useState(null); // { systemId } | null — v0.8.37
   // Bottom-bar acessivel por D-pad direito ao final dos sistemas. -1 = inativo,
-  // 0 = botão Configuracoes, 1 = botão Sair. Quando >= 0, focusZone vira "útil".
+  // 0 = botão Configurações, 1 = botão Sair. Quando >= 0, focusZone vira "útil".
   const [utilIdx, setUtilIdx] = useState(-1);
   const [romsRoot, setRomsRoot] = useState("");
   const [emulatorsRoot, setEmulatorsRoot] = useState("");
@@ -2307,8 +2308,11 @@ export default function LudexLauncher() {
           const remote = await invoke("license_validate");
           setLicenseStatus(!!remote?.valid);
         } catch (e) {
-          // grace period esgotou e não conseguiu validar
+          // grace period esgotou e não conseguiu validar. O user JÁ tinha license
+          // local (localInfo existia) — provável que só esteja offline há muito tempo,
+          // não pirata. Marca 'offline' pro gate mostrar mensagem amigável.
           console.warn("license_validate falhou:", e);
+          setLicenseReason("offline");
           setLicenseStatus(false);
         }
       } catch (e) {
@@ -2555,8 +2559,22 @@ export default function LudexLauncher() {
       setTimeout(() => setLaunchMsg(null), 3000);
       // launching fica true ate game-killed event chegar (combo Select+R1 ou Select+Start).
     } catch (e) {
-      setLaunchMsg({ kind: "error", text: String(e) });
-      setTimeout(() => setLaunchMsg(null), 8000);
+      // v0.9.37: erro de launch acionável (paridade com o mobile). Classifica a
+      // causa provável e oferece um botão de auto-fix em vez de só a stacktrace seca.
+      const raw = String(e);
+      const low = raw.toLowerCase();
+      let text = raw, action = null;
+      if (low.includes("bios") || low.includes("required")) {
+        text = "BIOS faltando pra esse sistema — coloque os .bin/.rom certos.";
+        action = { kind: "bios", label: "Procurar BIOS no PC" };
+      } else if (low.includes("core") && (low.includes("encontr") || low.includes("missing") || low.includes(".dll"))) {
+        text = "Core libretro faltando. Ajustes → Cores libretro → Baixar faltando.";
+        action = { kind: "cores", label: "Abrir pasta de cores" };
+      } else if (low.includes("prod.keys") || low.includes("keys.txt") || low.includes(" key")) {
+        text = "Faltam as keys autorais do emulador — coloque em roms/KEYS e reimporte nos Ajustes.";
+      }
+      setLaunchMsg({ kind: "error", text, action });
+      setTimeout(() => setLaunchMsg(null), action ? 12000 : 8000);
       setLaunching(false);
       // Restaura janela porque o emulador falhou ao abrir
       try {
@@ -3522,7 +3540,7 @@ export default function LudexLauncher() {
           setUtilIdx((i) => Math.min(1, i + 1));
         } else if (focusZone === "systems") {
           if (selectedSystemIdx >= displayedSystems.length - 1) {
-            // Passa pra bottom bar (Configuracoes / Sair)
+            // Passa pra bottom bar (Configurações / Sair)
             setFocusZone("útil"); setUtilIdx(0);
           } else {
             setSelectedSystemIdx((i) => i + 1);
@@ -3578,7 +3596,7 @@ export default function LudexLauncher() {
     return <AndroidDemoExpired demo={androidDemo} onUnlock={(newDemo) => { setAndroidDemo(newDemo); setLicenseStatus(true); }} />;
   }
   if (licenseStatus === false) {
-    return <LudexLicenseGate onLicensed={() => setLicenseStatus(true)} />;
+    return <LudexLicenseGate onLicensed={() => { setLicenseReason(null); setLicenseStatus(true); }} reason={licenseReason} />;
   }
 
   // ANDROID: layout mobile dedicado (touch-first, sem hints/topbar desktop).
@@ -3629,7 +3647,7 @@ export default function LudexLauncher() {
           <button
             className="lx-mobile-btn-icon"
             onClick={() => { sfx.confirm(); setSettingsOpen(true); }}
-            aria-label="Configuracoes"
+            aria-label="Configurações"
           >
             <GearIcon />
           </button>
@@ -4025,7 +4043,7 @@ export default function LudexLauncher() {
               <circle cx="16" cy="16" r="1.4" fill="currentColor" />
             </svg>
           </button>
-          <button className="pb-icon-btn" data-tour="settings" onClick={() => { sfx.confirm(); setSettingsOpen(true); }} title="Configuracoes (S)"><GearIcon /></button>
+          <button className="pb-icon-btn" data-tour="settings" onClick={() => { sfx.confirm(); setSettingsOpen(true); }} title="Configurações (S)"><GearIcon /></button>
           {gamepadConnected && <span className="pb-gamepad-indicator" title="Controle conectado"><GamepadIcon /></span>}
           <span className="pb-clock">{time}</span>
         </div>
@@ -4182,7 +4200,30 @@ export default function LudexLauncher() {
         )}
 
         {launchMsg && (
-          <div className={`pb-toast pb-toast-${launchMsg.kind}`}>{launchMsg.text}</div>
+          <div className={`pb-toast pb-toast-${launchMsg.kind}`}
+            style={launchMsg.action ? { display: "flex", alignItems: "center", gap: 12 } : undefined}>
+            <span>{launchMsg.text}</span>
+            {launchMsg.action && (
+              <button
+                style={{ flex: "0 0 auto", padding: "6px 14px", borderRadius: 8, border: "none", background: "#fff", color: "#1a1a1a", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                onClick={async () => {
+                  const act = launchMsg.action;
+                  if (act.kind === "bios") {
+                    setLaunchMsg({ kind: "ok", text: "Procurando BIOS no PC inteiro… (pode demorar até 2 min)" });
+                    try {
+                      const n = await invoke("bios_deep_scan");
+                      setLaunchMsg({ kind: "ok", text: n > 0 ? `Importei ${n} BIOS. Tenta abrir o jogo de novo.` : "Nenhuma BIOS nova encontrada no PC." });
+                    } catch (err) {
+                      setLaunchMsg({ kind: "error", text: `Falha ao procurar BIOS: ${err}` });
+                    }
+                    setTimeout(() => setLaunchMsg(null), 7000);
+                  } else if (act.kind === "cores") {
+                    invoke("open_cores_folder").catch(() => {});
+                  }
+                }}
+              >{launchMsg.action.label}</button>
+            )}
+          </div>
         )}
       </main>
 
@@ -4226,7 +4267,7 @@ export default function LudexLauncher() {
           <button
             className={`pb-sys pb-sys-útil ${focusZone === "útil" && utilIdx === 0 ? "active focused" : ""}`}
             onClick={() => { sfx.open(); setSettingsOpen(true); }}
-            title="Configuracoes (S / Y no controle)"
+            title="Configurações (S / Y no controle)"
           >
             <span className="pb-sys-icon"><GearIcon /></span>
           </button>

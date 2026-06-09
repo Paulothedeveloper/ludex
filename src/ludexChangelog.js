@@ -112,7 +112,7 @@ export const CHANGELOG = {
     "Modo desempenho pra celular fraco (video 30fps, menos travada).",
     "Aceleracao agora e 1x / 1.25x / 1.5x / 2x.",
     "Icones de sistema iguais aos do launcher do PC.",
-    "Configuracoes do emulador refeitas (tela cheia, fontes melhores, sem bugs).",
+    "Configurações do emulador refeitas (tela cheia, fontes melhores, sem bugs).",
     "Layout de telas DS/3DS não duplica mais a tela.",
     "Controle: corrigido travar direcao ao deslizar o dedo.",
     "Tela inicial no modo horizontal com tamanhos ajustados.",

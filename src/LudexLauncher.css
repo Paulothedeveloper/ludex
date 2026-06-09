@@ -6740,3 +6740,16 @@ html[data-android="true"] body {
   text-align: center;
 }
 .lx-pad-remap-btn { padding: 6px 12px; font-size: 11px; }
+
+/* v0.9.37: respeita "reduzir movimento" do sistema (paridade com o mobile).
+   Zera animações/transições/parallax pesados (spotlight do tour, banners
+   liquid-glass, animationDelay dos cards) pra quem tem sensibilidade a movimento. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}

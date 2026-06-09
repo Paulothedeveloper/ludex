@@ -83,9 +83,9 @@ export const ACHIEVEMENTS = [
   { id: "ten_games",       name: "Variedade",             desc: "Jogou em 10 jogos diferentes",                            icon: "M6 4h12l-1 4H7zM5 8h14l1 12H4zM10 12h4M10 16h4" },
   { id: "fifty_games",     name: "Acervo",                desc: "Jogou em 50 jogos diferentes",                            icon: "M4 4h16v16H4zM4 9h16M9 4v16" },
   // Tempo total
-  { id: "first_hour",      name: "Imersao",               desc: "Total de 1 hora de jogo",                                 icon: "M12 8v4l3 2M12 22a10 10 0 100-20 10 10 0 000 20z" },
-  { id: "ten_hours",       name: "Dedicacao",             desc: "Total de 10 horas de jogo",                               icon: "M12 8v4l3 2M12 22a10 10 0 100-20 10 10 0 000 20z" },
-  { id: "hundred_hours",   name: "Obsessao",              desc: "Total de 100 horas de jogo",                              icon: "M12 6v6l4 2M12 22A10 10 0 1112 2a10 10 0 010 20z" },
+  { id: "first_hour",      name: "Imersão",               desc: "Total de 1 hora de jogo",                                 icon: "M12 8v4l3 2M12 22a10 10 0 100-20 10 10 0 000 20z" },
+  { id: "ten_hours",       name: "Dedicação",             desc: "Total de 10 horas de jogo",                               icon: "M12 8v4l3 2M12 22a10 10 0 100-20 10 10 0 000 20z" },
+  { id: "hundred_hours",   name: "Obsessão",              desc: "Total de 100 horas de jogo",                              icon: "M12 6v6l4 2M12 22A10 10 0 1112 2a10 10 0 010 20z" },
   // Sessoes
   { id: "marathon",        name: "Maratonista",           desc: "Sessao unica de 2+ horas",                                icon: "M13 2L3 14h9l-1 8 10-12h-9z" },
   { id: "epic_marathon",   name: "Resistencia Epica",     desc: "Sessao unica de 5+ horas",                                icon: "M13 2L3 14h9l-1 8 10-12h-9zM18 6l3 3" },

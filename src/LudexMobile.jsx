@@ -194,7 +194,7 @@ export default function LudexMobile() {
   const requestFilesAccess = useCallback(async () => {
     try {
       await invoke("android_open_all_files_settings");
-    } catch (e) { mAlert("Nao consegui abrir Configuracoes: " + e); }
+    } catch (e) { mAlert("Nao consegui abrir Configurações: " + e); }
   }, []);
   // Quando user volta de Settings, re-checa
   useEffect(() => {
@@ -590,11 +590,11 @@ export default function LudexMobile() {
         if (!hasAccess) {
           const ok = await mConfirm(
             "O Ludex precisa de permissão para acessar seus arquivos.\n\n" +
-            "Vou abrir Configuracoes -- ative 'Permitir gerenciar todos os arquivos' e volte aqui.\n\nAbrir agora?"
+            "Vou abrir Configurações -- ative 'Permitir gerenciar todos os arquivos' e volte aqui.\n\nAbrir agora?"
           );
           if (ok) {
             try { await invoke("android_open_all_files_settings"); } catch (err) {
-              await mAlert("Nao consegui abrir Configuracoes: " + err);
+              await mAlert("Nao consegui abrir Configurações: " + err);
             }
           }
         } else {
@@ -1328,7 +1328,7 @@ function BiosDeepScanCard() {
     try {
       const n = await invoke("bios_deep_scan");
       if (n > 0) setMsg({ kind: "ok", text: `Importei ${n} BIOS pra Ludex/system/.` });
-      else setMsg({ kind: "warn", text: "Nao achei nenhum .bin com nome de BIOS conhecida. Coloque na pasta Download ou Ludex/system/ manualmente." });
+      else setMsg({ kind: "warn", text: "Não achei nenhum .bin com nome de BIOS conhecida. Coloque na pasta Download ou Ludex/system/ manualmente." });
     } catch (e) {
       setMsg({ kind: "error", text: `Falha: ${e}` });
     } finally {
@@ -2897,7 +2897,7 @@ function MobileEmulatorView({ system, game, onClose }) {
         <div className="lmx-emu-corner lmx-emu-corner-tl" onTouchEnd={cornerTap("tl")} onClick={cornerTap("tl")} aria-label="Tap duplo: save state 0" />
         <div className="lmx-emu-corner lmx-emu-corner-tr" onTouchEnd={cornerTap("tr")} onClick={cornerTap("tr")} aria-label="Tap duplo: load state 0" />
         {/* Watermark "Ludex Desktop" (paywall hint) */}
-        <div className="lmx-emu-watermark">Versao previa - Ludex Desktop tem mais</div>
+        <div className="lmx-emu-watermark">Versão prévia — a versão Desktop tem mais consoles</div>
         {autoPaused && (
           <div className="lmx-emu-autopause">
             <h3>Pausado</h3>
