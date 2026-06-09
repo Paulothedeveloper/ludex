@@ -2472,6 +2472,22 @@ export default function LudexLauncher() {
 
     let cancelled = false;
     const queue = [...selected.games];
+    // v0.9.37: BATCH dos covers. Antes cada cover resolvido fazia um setCovers
+    // próprio -> N atualizações de estado = N re-renders da grade inteira durante
+    // o scan (O(N²) de reconciliação). Agora acumula num buffer e dá flush a cada
+    // ~180ms (e um flush final). Mesmos dados em `covers`, só que em rajadas.
+    let pending = {};
+    let flushTimer = null;
+    const flush = () => {
+      flushTimer = null;
+      if (cancelled) return;
+      const batch = pending; pending = {};
+      if (Object.keys(batch).length > 0) setCovers((prev) => ({ ...prev, ...batch }));
+    };
+    const put = (path, val) => {
+      pending[path] = val;
+      if (flushTimer == null) flushTimer = setTimeout(flush, 180);
+    };
     async function worker() {
       while (queue.length > 0 && !cancelled) {
         const game = queue.shift();
@@ -2479,14 +2495,14 @@ export default function LudexLauncher() {
         try {
           const localPath = await invoke("fetch_cover", { systemId: selected.id, gameName: game.name });
           if (cancelled) return;
-          setCovers((prev) => ({ ...prev, [game.path]: localPath ? convertFileSrc(localPath) : null }));
+          put(game.path, localPath ? convertFileSrc(localPath) : null);
         } catch {
-          setCovers((prev) => ({ ...prev, [game.path]: null }));
+          put(game.path, null);
         }
       }
     }
-    Promise.all(Array.from({ length: 4 }, worker)).catch(() => {});
-    return () => { cancelled = true; };
+    Promise.all(Array.from({ length: 4 }, worker)).then(() => { if (!cancelled) flush(); }).catch(() => {});
+    return () => { cancelled = true; if (flushTimer) clearTimeout(flushTimer); };
   }, [selected, coversRefreshKey]);
 
   const updateActiveProfile = useCallback((updater) => {
