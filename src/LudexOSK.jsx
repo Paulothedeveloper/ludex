@@ -48,40 +48,98 @@ export default function VirtualKeyboard({
   const matrix = LAYOUTS[layout];
   const rootRef = useRef(null);
 
+  // v0.9.37: estado vivo num ref pra o loop de gamepad (deps []) ler sempre o
+  // valor atual sem closures velhas.
+  const stateRef = useRef({});
+  stateRef.current = { row, col, layout, value, matrix };
+
   // Auto-focus pra capturar teclas
   useEffect(() => {
     rootRef.current?.focus();
   }, []);
 
-  function clampPos(r, c) {
-    const safeR = Math.max(0, Math.min(matrix.length - 1, r));
-    const cols = matrix[safeR].length;
+  function clampPos(r, c, m) {
+    const safeR = Math.max(0, Math.min(m.length - 1, r));
+    const cols = m[safeR].length;
     const safeC = Math.max(0, Math.min(cols - 1, c));
     return { r: safeR, c: safeC };
   }
 
   function moveSelection(dr, dc) {
-    const next = clampPos(row + dr, col + dc);
+    const { row: r, col: c, matrix: m } = stateRef.current;
+    const next = clampPos(r + dr, c + dc, m);
     setRow(next.r); setCol(next.c);
   }
 
   function pressKey(key) {
+    const { value: val, layout: lay } = stateRef.current;
     if (key === "BACK") {
-      onChange(value.slice(0, -1));
+      onChange(val.slice(0, -1));
     } else if (key === "SPACE") {
-      if (value.length < maxLength) onChange(value + " ");
+      if (val.length < maxLength) onChange(val + " ");
     } else if (key === "SHIFT") {
-      setLayout(layout === "lower" ? "upper" : "lower");
+      setLayout(lay === "lower" ? "upper" : "lower");
     } else if (key === "SYM") {
-      setLayout(layout === "sym" ? "lower" : "sym");
+      setLayout(lay === "sym" ? "lower" : "sym");
     } else if (key === "CLEAR") {
       onChange("");
     } else if (key === "OK") {
       onSubmit && onSubmit();
     } else {
-      if (value.length < maxLength) onChange(value + key);
+      if (val.length < maxLength) onChange(val + key);
     }
   }
+
+  // v0.9.37: NAVEGAÇÃO POR CONTROLE. Antes só teclado físico/setas mexia o OSK —
+  // as dicas prometiam D-pad/A/B mas não havia polling de gamepad, travando o 1º
+  // uso (licença + criação de perfil) pra quem só tem controle. Loop rAF próprio
+  // (independente do gamepad handler do launcher, já que o OSK é usado em vários
+  // contextos). A=pressiona, B=apaga, X=shift, Y=símbolos, Start=OK, Select=fechar.
+  const actionsRef = useRef({});
+  actionsRef.current = {
+    move: moveSelection,
+    pressCurrent: () => { const { matrix: m, row: r, col: c } = stateRef.current; pressKey(m[r][c]); },
+    press: pressKey,
+    submit: () => onSubmit && onSubmit(),
+    close: () => onClose && onClose(),
+  };
+  useEffect(() => {
+    let raf, navCooldown = 0;
+    const prev = {};
+    const tick = (t) => {
+      const pads = (typeof navigator !== "undefined" && navigator.getGamepads) ? navigator.getGamepads() : [];
+      let gp = null;
+      for (const p of pads) { if (p) { gp = p; break; } }
+      if (gp) {
+        const A = actionsRef.current;
+        const down = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
+        const edge = (i, fn) => { const now = down(i); if (now && !prev[i]) fn(); prev[i] = now; };
+        edge(0, () => A.pressCurrent());   // A
+        edge(1, () => A.press("BACK"));    // B
+        edge(2, () => A.press("SHIFT"));   // X
+        edge(3, () => A.press("SYM"));     // Y
+        edge(9, () => A.submit());          // Start
+        edge(8, () => A.close());           // Select/View
+        const ax = gp.axes || [];
+        const up = down(12) || (ax[1] ?? 0) < -0.5;
+        const dn = down(13) || (ax[1] ?? 0) > 0.5;
+        const lf = down(14) || (ax[0] ?? 0) < -0.5;
+        const rt = down(15) || (ax[0] ?? 0) > 0.5;
+        if (up || dn || lf || rt) {
+          if (t >= navCooldown) {
+            if (up) A.move(-1, 0); else if (dn) A.move(1, 0);
+            else if (lf) A.move(0, -1); else if (rt) A.move(0, 1);
+            navCooldown = t + 140; // repeat ao segurar
+          }
+        } else {
+          navCooldown = 0;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   function onKey(e) {
     const k = e.key;
