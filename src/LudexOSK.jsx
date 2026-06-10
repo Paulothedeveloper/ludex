@@ -27,7 +27,7 @@ const LAYOUT_SYM = [
   ["!","@","#","$","%","^","&","*","(",")"],
   ["-","_","=","+","[","]","{","}","\\","|"],
   ["/","?","<",">","~","`","\"","'",";",":"],
-  ["SHIFT",",",".","-","_"," "," "," ","á","ã"],
+  ["SHIFT","á","é","í","ó","ú","ç","ã","õ","â"],
   ["SYM","SPACE","BACK","CLEAR","OK"],
 ];
 
@@ -218,8 +218,8 @@ export default function VirtualKeyboard({
           <span><b>D-Pad / Setas</b> mover</span>
           <span><b>A / Enter</b> pressionar</span>
           <span><b>B / Backspace</b> apagar</span>
-          <span><b>Tab</b> trocar layout</span>
-          <span><b>Esc</b> fechar</span>
+          <span><b>X/Y</b> trocar layout</span>
+          <span><b>Start</b> OK · <b>Select</b> fechar</span>
         </div>
       </div>
     </div>

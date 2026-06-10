@@ -2585,24 +2585,10 @@ export default function LudexLauncher() {
       setTimeout(() => setLaunchMsg(null), 3000);
       // launching fica true ate game-killed event chegar (combo Select+R1 ou Select+Start).
     } catch (e) {
-      // v0.9.37: erro de launch acionável (paridade com o mobile). Classifica a
-      // causa provável e oferece um botão de auto-fix em vez de só a stacktrace seca.
-      const raw = String(e);
-      const low = raw.toLowerCase();
-      let text = raw, action = null;
-      if (low.includes("bios") || low.includes("required")) {
-        text = "BIOS faltando pra esse sistema — coloque os .bin/.rom certos.";
-        action = { kind: "bios", label: "Procurar BIOS no PC" };
-      } else if (low.includes("core") && (low.includes("encontr") || low.includes("missing") || low.includes(".dll"))) {
-        text = "Core libretro faltando. Ajustes → Cores libretro → Baixar faltando.";
-        action = { kind: "cores", label: "Abrir pasta de cores" };
-      } else if (low.includes("prod.keys") || low.includes("keys.txt") || low.includes(" key")) {
-        text = "Faltam as keys autorais do emulador — coloque em roms/KEYS e reimporte nos Ajustes.";
-      }
-      setLaunchMsg({ kind: "error", text, action });
-      setTimeout(() => setLaunchMsg(null), action ? 12000 : 8000);
+      // v0.9.40: erro de launch acionável via DIÁLOGO navegável por controle
+      // (antes era um toast com botão não-focável por gamepad). Restaura a janela
+      // ANTES de mostrar o diálogo (a janela foi minimizada/escondida pro launch).
       setLaunching(false);
-      // Restaura janela porque o emulador falhou ao abrir
       try {
         const w = getCurrentWindow();
         try { await w.show(); } catch {}
@@ -2610,6 +2596,24 @@ export default function LudexLauncher() {
         try { await w.setFullscreen(true); } catch {}
         try { await w.setFocus(); } catch {}
       } catch {}
+      const raw = String(e);
+      const low = raw.toLowerCase();
+      if (low.includes("bios") || low.includes("required")) {
+        if (await lxConfirm("BIOS faltando pra esse sistema. Quer que eu procure BIOS no PC inteiro agora? (pode demorar até 2 min)", { title: "Não consegui abrir o jogo", okText: "Procurar BIOS" })) {
+          try {
+            const n = await invoke("bios_deep_scan");
+            await lxAlert(n > 0 ? `Importei ${n} BIOS. Tenta abrir o jogo de novo.` : "Nenhuma BIOS nova encontrada no PC.", { title: "Procurar BIOS" });
+          } catch (err) { await lxAlert("Falha ao procurar BIOS: " + err, { title: "Procurar BIOS" }); }
+        }
+      } else if (low.includes("core") && (low.includes("encontr") || low.includes("missing") || low.includes(".dll"))) {
+        if (await lxConfirm("Core libretro faltando pra esse sistema. Abrir a pasta de cores? (ou baixe em Ajustes → Cores libretro)", { title: "Não consegui abrir o jogo", okText: "Abrir pasta de cores" })) {
+          invoke("open_cores_folder").catch(() => {});
+        }
+      } else if (low.includes("prod.keys") || low.includes("keys.txt") || low.includes(" key")) {
+        await lxAlert("Faltam as keys autorais do emulador — coloque em roms/KEYS e reimporte nos Ajustes.", { title: "Não consegui abrir o jogo" });
+      } else {
+        await lxAlert("Não consegui abrir o jogo:\n" + raw, { title: "Não consegui abrir o jogo" });
+      }
     }
   }, [selected, selectedGame, launchSystemId, activeProfile, updateActiveProfile, checkAchievements]);
 
@@ -4165,7 +4169,7 @@ export default function LudexLauncher() {
                         <button
                           ref={i === selectedGameIdx ? activeCardRef : null}
                           className={`pb-card ${i === selectedGameIdx ? (focusZone === "games" ? "active focused" : "active") : ""} ${hasCover ? "has-cover" : ""}`}
-                          style={{ "--card-color": selected.color, animationDelay: `${i * 40}ms` }}
+                          style={{ "--card-color": selected.color, animationDelay: `${Math.min(i, 16) * 40}ms` }}
                           onClick={() => { sfx.click(); setSelectedGameIdx(i); openPreviewPopup(selected, g); }}
                           onDoubleClick={() => { if (previewPopup) closePreviewPopup(); handleLaunch(); }}
                           onContextMenu={(e) => {
@@ -4233,30 +4237,7 @@ export default function LudexLauncher() {
         )}
 
         {launchMsg && (
-          <div className={`pb-toast pb-toast-${launchMsg.kind}`}
-            style={launchMsg.action ? { display: "flex", alignItems: "center", gap: 12 } : undefined}>
-            <span>{launchMsg.text}</span>
-            {launchMsg.action && (
-              <button
-                style={{ flex: "0 0 auto", padding: "6px 14px", borderRadius: 8, border: "none", background: "#fff", color: "#1a1a1a", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-                onClick={async () => {
-                  const act = launchMsg.action;
-                  if (act.kind === "bios") {
-                    setLaunchMsg({ kind: "ok", text: "Procurando BIOS no PC inteiro… (pode demorar até 2 min)" });
-                    try {
-                      const n = await invoke("bios_deep_scan");
-                      setLaunchMsg({ kind: "ok", text: n > 0 ? `Importei ${n} BIOS. Tenta abrir o jogo de novo.` : "Nenhuma BIOS nova encontrada no PC." });
-                    } catch (err) {
-                      setLaunchMsg({ kind: "error", text: `Falha ao procurar BIOS: ${err}` });
-                    }
-                    setTimeout(() => setLaunchMsg(null), 7000);
-                  } else if (act.kind === "cores") {
-                    invoke("open_cores_folder").catch(() => {});
-                  }
-                }}
-              >{launchMsg.action.label}</button>
-            )}
-          </div>
+          <div className={`pb-toast pb-toast-${launchMsg.kind}`}>{launchMsg.text}</div>
         )}
       </main>
 

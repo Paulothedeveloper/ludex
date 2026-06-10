@@ -4888,8 +4888,16 @@ async fn fetch_screenshot(system_id: String, game_name: String) -> Option<String
     if cache_file.is_file() {
         return Some(cache_file.to_string_lossy().to_string());
     }
-    if miss_marker.is_file() {
-        return None;
+    // v0.9.40: cache negativo do screenshot agora com TTL (14 dias) — antes era
+    // permanente (só "Sincronizar" limpava). Consistente com o .miss das capas.
+    if let Ok(meta) = std::fs::metadata(&miss_marker) {
+        if let Ok(modified) = meta.modified() {
+            if let Ok(age) = std::time::SystemTime::now().duration_since(modified) {
+                if age < std::time::Duration::from_secs(14 * 24 * 60 * 60) {
+                    return None;
+                }
+            }
+        }
     }
 
     let client = http_client_builder()
