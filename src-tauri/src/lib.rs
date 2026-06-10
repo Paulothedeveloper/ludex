@@ -5694,17 +5694,16 @@ fn license_locally_valid() -> bool {
     if cfg.license_key.is_none() {
         return false;
     }
-    let (consensus_va, _uses, stored_fp) = read_state_consensus(&cfg);
+    // Usa o consensus config+registry (anti-tamper: MIN dos validated_at — forjar
+    // só o config.json não basta, precisa forjar o registro HKCU também).
+    let (consensus_va, _uses, _fp) = read_state_consensus(&cfg);
     let age_days = now_secs().saturating_sub(consensus_va) / 86400;
-    let mut valid = consensus_va > 0 && age_days < LICENSE_OFFLINE_GRACE_DAYS;
-    if valid {
-        if let Some(fp) = &stored_fp {
-            if *fp != machine_fingerprint() {
-                valid = false;
-            }
-        }
-    }
-    valid
+    // PROPOSITAL: NÃO checa fingerprint aqui. O fingerprint (MAC/adapter) é volátil
+    // e bloquearia usuário legítimo no momento de abrir o jogo, durante a janela de
+    // revalidação online que reescreve o fp. O anti-share por fingerprint continua
+    // no frontend + license_validate (online). Este gate só precisa derrotar o crack
+    // de "editar o JS" — que não deixa license_key + validated_at no config+registro.
+    consensus_va > 0 && age_days < LICENSE_OFFLINE_GRACE_DAYS
 }
 
 /// Pode abrir jogo? Exceções: build de DEV (secrets PLACEHOLDER — senão não roda
