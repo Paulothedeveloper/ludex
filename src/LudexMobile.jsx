@@ -347,6 +347,11 @@ export default function LudexMobile() {
     let cancelled = false;
     const queue = [...openSystem.games].filter((g) => covers[g.path] === undefined);
     if (queue.length === 0) return;
+    // v0.9.39: batch dos setCovers (paridade com o PC) — evita N re-renders da
+    // grade no scan. Acumula e dá flush a cada 180ms + flush final.
+    let pending = {}, flushTimer = null;
+    const flush = () => { flushTimer = null; if (cancelled) return; const b = pending; pending = {}; if (Object.keys(b).length) setCovers((prev) => ({ ...prev, ...b })); };
+    const put = (path, val) => { pending[path] = val; if (flushTimer == null) flushTimer = setTimeout(flush, 180); };
     async function worker() {
       while (queue.length > 0 && !cancelled) {
         const game = queue.shift();
@@ -354,14 +359,14 @@ export default function LudexMobile() {
         try {
           const localPath = await invoke("fetch_cover", { systemId: openSystem.id, gameName: game.name });
           if (cancelled) return;
-          setCovers((prev) => ({ ...prev, [game.path]: localPath ? convertFileSrc(localPath) : null }));
+          put(game.path, localPath ? convertFileSrc(localPath) : null);
         } catch {
-          setCovers((prev) => ({ ...prev, [game.path]: null }));
+          put(game.path, null);
         }
       }
     }
-    Promise.all(Array.from({ length: 4 }, worker)).catch(() => {});
-    return () => { cancelled = true; };
+    Promise.all(Array.from({ length: 4 }, worker)).then(() => { if (!cancelled) flush(); }).catch(() => {});
+    return () => { cancelled = true; if (flushTimer) clearTimeout(flushTimer); };
   }, [openSystem]);
 
   // ============ FETCH COVERS PRA HOME (top sistemas) ============
@@ -380,6 +385,10 @@ export default function LudexMobile() {
       }
     }
     if (queue.length === 0) return;
+    // v0.9.39: batch dos setCovers (paridade com o PC).
+    let pending = {}, flushTimer = null;
+    const flush = () => { flushTimer = null; if (cancelled) return; const b = pending; pending = {}; if (Object.keys(b).length) setCovers((prev) => ({ ...prev, ...b })); };
+    const put = (path, val) => { pending[path] = val; if (flushTimer == null) flushTimer = setTimeout(flush, 180); };
     async function worker() {
       while (queue.length > 0 && !cancelled) {
         const { sysId, game } = queue.shift();
@@ -387,16 +396,16 @@ export default function LudexMobile() {
         try {
           const localPath = await invoke("fetch_cover", { systemId: sysId, gameName: game.name });
           if (cancelled) return;
-          setCovers((prev) => ({ ...prev, [game.path]: localPath ? convertFileSrc(localPath) : null }));
+          put(game.path, localPath ? convertFileSrc(localPath) : null);
         } catch {
-          setCovers((prev) => ({ ...prev, [game.path]: null }));
+          put(game.path, null);
         }
       }
     }
     // v0.9.33: 2 -> 4 workers (paridade com PC). S25 Ultra aguenta com sobra,
     // capas carregam ~2x mais rapido no scroll inicial.
-    Promise.all(Array.from({ length: 4 }, worker)).catch(() => {});
-    return () => { cancelled = true; };
+    Promise.all(Array.from({ length: 4 }, worker)).then(() => { if (!cancelled) flush(); }).catch(() => {});
+    return () => { cancelled = true; if (flushTimer) clearTimeout(flushTimer); };
   }, [systems, recents]);
 
   // v0.9.20: refresh do home REAL — antes so esvaziava o cache e o state, mas

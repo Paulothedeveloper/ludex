@@ -508,7 +508,12 @@ function LicenseSettingsSection() {
       setInfo(remote);
       setMsg({ kind: "ok", text: "Licença revalidada com sucesso" });
     } catch (e) {
-      setMsg({ kind: "error", text: String(e) });
+      // v0.9.39: distingue rede de outros erros; não mostra erro técnico cru.
+      const low = String(e).toLowerCase();
+      const net = /sending request|conex|timeout|connect|offline|dns|resolve/.test(low);
+      setMsg({ kind: "error", text: net
+        ? "Sem internet — não consegui revalidar agora. Reconecte e tente de novo."
+        : "Não consegui revalidar a licença. Tente de novo em alguns minutos." });
     } finally { setBusy(false); }
   }
 
@@ -520,7 +525,11 @@ function LicenseSettingsSection() {
       setMsg({ kind: "ok", text: "PC desativado. Recarregando..." });
       setTimeout(() => window.location.reload(), 1000);
     } catch (e) {
-      setMsg({ kind: "error", text: String(e) });
+      const low = String(e).toLowerCase();
+      const net = /sending request|conex|timeout|connect|offline|dns|resolve/.test(low);
+      setMsg({ kind: "error", text: net
+        ? "Sem internet — não consegui desativar agora. Reconecte e tente de novo."
+        : (low.includes("limite") ? String(e) : "Não consegui desativar este PC. Tente de novo em alguns minutos.") });
     } finally { setBusy(false); }
   }
 
