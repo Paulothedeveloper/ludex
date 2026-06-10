@@ -1594,6 +1594,9 @@ fn install_rpcs3_pkg(rpcs3_exe: &Path, pkg: &Path) -> Result<PathBuf, String> {
 
 #[tauri::command]
 fn launch_game(system_id: String, rom_path: String) -> Result<(), String> {
+    if !license_gate_ok() {
+        return Err("Licença necessária para abrir jogos. Ative o Ludex nos Ajustes.".into());
+    }
     let cfg = EMULATORS
         .iter()
         .find(|c| c.id == system_id)
@@ -3598,6 +3601,9 @@ where F: FnOnce() -> Result<R, String> {
 
 #[tauri::command]
 fn libretro_load_game(core_filename: String, rom_path: String) -> Result<LibretroLoadResult, String> {
+    if !license_gate_ok() {
+        return Err("Licença necessária para abrir jogos. Ative o Ludex nos Ajustes.".into());
+    }
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         libretro_load_game_inner(core_filename, rom_path)
     }));
@@ -5676,6 +5682,46 @@ fn license_get_local_info() -> Option<LicenseInfo> {
         purchase_url: license_purchase_url(),
         is_admin: false, // is_admin so eh sabido apos chamar Gumroad
     })
+}
+
+/// v0.9.38 (anti-crack Tier 1): validade da license NO BACKEND. Mesma lógica do
+/// license_get_local_info, mas usada pra GATEAR o ponto de valor (abrir jogo).
+/// O gate do frontend (React) sozinho é burlável editando o JS; replicar a
+/// checagem em Rust faz o crack exigir patch do binário (símbolos stripados).
+#[cfg(not(target_os = "android"))]
+fn license_locally_valid() -> bool {
+    let cfg = load_config();
+    if cfg.license_key.is_none() {
+        return false;
+    }
+    let (consensus_va, _uses, stored_fp) = read_state_consensus(&cfg);
+    let age_days = now_secs().saturating_sub(consensus_va) / 86400;
+    let mut valid = consensus_va > 0 && age_days < LICENSE_OFFLINE_GRACE_DAYS;
+    if valid {
+        if let Some(fp) = &stored_fp {
+            if *fp != machine_fingerprint() {
+                valid = false;
+            }
+        }
+    }
+    valid
+}
+
+/// Pode abrir jogo? Exceções: build de DEV (secrets PLACEHOLDER — senão não roda
+/// em dev; release é garantido pelo build.rs) e ANDROID (modelo é demo de 7 dias
+/// no frontend, não license Gumroad) passam direto. Desktop release = checa license.
+fn license_gate_ok() -> bool {
+    if GUMROAD_ACCESS_TOKEN == "PLACEHOLDER_ACCESS_TOKEN" {
+        return true;
+    }
+    #[cfg(target_os = "android")]
+    {
+        true
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        license_locally_valid()
+    }
 }
 
 #[tauri::command]

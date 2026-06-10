@@ -55,3 +55,12 @@ ndk-context = "0.1"
 # v0.9.17: contexto EGL + GLES3 offscreen pra hw_render (Dolphin/Citra/Flycast/PPSSPP/N64).
 khronos-egl = { version = "6", features = ["dynamic"] }
 gl = "0.14"
+
+# v0.9.38 (anti-crack Tier 1): release endurecido.
+# - strip: remove os nomes de função do binário (ex.: license_gate_ok, license_*),
+#   dificultando engenharia reversa + binário menor.
+# - lto "thin": inlining cross-crate (some os limites de função), mais rápido que lto=true.
+# NÃO usar panic="abort": quebraria o catch_unwind que protege contra panic dos cores libretro.
+[profile.release]
+strip = true
+lto = "thin"
