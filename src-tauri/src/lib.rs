@@ -4851,7 +4851,9 @@ fn set_custom_cover(system_id: String, game_name: String, source_path: String) -
 fn clear_single_cover(system_id: String, game_name: String) -> Result<(), String> {
     let dir = covers_dir().ok_or("dir covers indisponivel")?.join(&system_id);
     let safe = sanitize_filename(&game_name);
-    for ext in ["jpg", "png"] {
+    // v0.9.37 fix: inclui ".miss" — senão o cache negativo (TTL 7d) faz o re-sync
+    // INDIVIDUAL de capa não re-buscar por até 7 dias pra jogos que já deram miss.
+    for ext in ["jpg", "png", "miss"] {
         let f = dir.join(format!("{}.{}", safe, ext));
         if f.is_file() {
             std::fs::remove_file(&f).map_err(|e| e.to_string())?;

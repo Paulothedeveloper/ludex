@@ -3182,6 +3182,7 @@ export default function LudexLauncher() {
     padCtxRef.current.closeSystemSettings = () => setSettingsModal(null); // v0.8.39
     padCtxRef.current.selectedCategoryId = selectedCategoryId; // v0.8.41
     padCtxRef.current.setSelectedCategoryId = setSelectedCategoryId; // v0.8.41
+    padCtxRef.current.firstRunActive = firstRunActive; // v0.9.37: gate do loop durante onboarding/OSK
   });
 
   useEffect(() => {
@@ -3290,7 +3291,10 @@ export default function LudexLauncher() {
         // Modal handler retorna true se consumiu o input.
         // v0.8.39: inclui systemSettingsOpen — sem isso o gamepad navegava o
         // launcher por tras do modal de Opcoes do emulador, dando bug visual.
-        const modalActive = ctx.settingsOpen || ctx.profilesOpen || ctx.searchOpen || ctx.previewOpen || ctx.systemSettingsOpen;
+        // v0.9.37: firstRunActive incluso pra o loop principal NÃO agir durante o
+        // onboarding/criação de perfil — senão o D-pad navega a home e A dá launch
+        // num jogo atrás, em paralelo com o OSK (que agora tem polling próprio).
+        const modalActive = ctx.settingsOpen || ctx.profilesOpen || ctx.searchOpen || ctx.previewOpen || ctx.systemSettingsOpen || ctx.firstRunActive;
         if (modalActive) {
           const isStandardM = pad.mapping === "standard";
           const ax = pad.axes[0] || 0;
@@ -3507,6 +3511,9 @@ export default function LudexLauncher() {
       if (!splashDone) return;
       if (e.key === "F11") { e.preventDefault(); toggleFullscreen(); return; }
       if (e.key === "F2") { e.preventDefault(); setGamepadDebug((v) => !v); return; }
+      // v0.9.37: durante o onboarding/criação de perfil, não deixa as teclas
+      // vazarem pros atalhos do launcher (digitar "s"/"p"/"/" abria Settings/etc).
+      if (firstRunActive) return;
 
       // Cancelar tela "Iniciando..." se travada (emulador externo bugou)
       if (launching && (e.key === "Escape" || e.key === "Backspace")) {
@@ -3600,7 +3607,7 @@ export default function LudexLauncher() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [splashDone, settingsOpen, profilesOpen, searchOpen, loading, displayedSystems, selected, selectedGame, handleLaunch, toggleFullscreen, toggleFavorite, launching, focusZone, visibleGames.length]);
+  }, [splashDone, settingsOpen, profilesOpen, searchOpen, loading, displayedSystems, selected, selectedGame, handleLaunch, toggleFullscreen, toggleFavorite, launching, focusZone, visibleGames.length, firstRunActive]);
 
   // License gate: bloqueia o app antes de qualquer outra coisa
   if (licenseStatus === null) {
