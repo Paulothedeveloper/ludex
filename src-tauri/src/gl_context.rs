@@ -157,7 +157,12 @@ pub fn read_pixels(width: u32, height: u32) -> Option<Vec<u8>> {
         let mapped = gl::MapBuffer(gl::PIXEL_PACK_BUFFER, gl::READ_ONLY);
         let buf = if !mapped.is_null() {
             let slice = std::slice::from_raw_parts(mapped as *const u8, bytes);
-            let mut out = vec![0u8; bytes];
+            // v0.9.40: buffer SEM zero-init (era vec![0u8; bytes] = aloca + memset).
+            // O loop de flip abaixo escreve TODOS os `bytes` (height linhas × row =
+            // bytes exato, copy_from_slice + alpha), então set_len é seguro e evita
+            // o memset de ~8MB/frame.
+            let mut out: Vec<u8> = Vec::with_capacity(bytes);
+            out.set_len(bytes);
             // Flipa vertical (GL bottom-left origin, canvas top-left)
             // v0.8.36: FORCA alpha=255. PCSX2/Dolphin/etc renderizam com alpha
             //   garbage no FBO — canvas trata como transparente -> tela preta.

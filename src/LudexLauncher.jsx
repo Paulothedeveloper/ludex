@@ -1932,6 +1932,42 @@ function AndroidDemoExpired({ demo, onUnlock }) {
   );
 }
 
+// v0.9.40: conteúdo visual interno do card de jogo, MEMOIZADO. Ao navegar a grade
+// (muda selectedGameIdx/focusZone) o <button> externo re-renderiza pra atualizar a
+// classe 'active', mas este subtree (capa/ícone/badges) é pulado pros cards não
+// afetados — corta o custo de reconciliação do conteúdo a cada navegação. A lógica
+// interativa (handlers/ref/active) fica no <button> inline, intacta.
+const GameCardInner = React.memo(function GameCardInner({ hasCover, cover, name, systemId, isFav, discsLen, metaStatus, metaRating, playSec }) {
+  return (
+    <>
+      {hasCover ? (
+        <img className="pb-card-cover" src={cover} alt={name} loading="lazy" />
+      ) : (
+        <>
+          <div className="pb-card-bg" />
+          <div className="pb-card-icon"><SystemIcon id={systemId} /></div>
+          <div className="pb-card-title">{name}</div>
+        </>
+      )}
+      {isFav && <span className="pb-card-fav"><StarIcon filled /></span>}
+      {discsLen > 1 && (
+        <span className="pb-card-discs" title={`${discsLen} discos`}>💿×{discsLen}</span>
+      )}
+      {metaStatus && (
+        <span className={`pb-card-status pb-card-status-${metaStatus}`} title={GAME_STATUS_LABELS[metaStatus]}>
+          {GAME_STATUS_EMOJI[metaStatus]}
+        </span>
+      )}
+      {metaRating > 0 && (
+        <span className="pb-card-rating" title={`${metaRating}/5 estrelas`}>{"★".repeat(metaRating)}</span>
+      )}
+      {playSec > 0 && (
+        <div className="pb-card-stats"><span className="pb-card-stat-time">{formatPlayTime(playSec)}</span></div>
+      )}
+    </>
+  );
+});
+
 export default function LudexLauncher() {
   const [systems, setSystems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -4179,34 +4215,17 @@ export default function LudexLauncher() {
                             setCtxMenu({ x: e.clientX, y: e.clientY, system: selected, game: g });
                           }}
                         >
-                          {hasCover ? (
-                            <img className="pb-card-cover" src={cover} alt={g.name} loading="lazy" />
-                          ) : (
-                            <>
-                              <div className="pb-card-bg" />
-                              <div className="pb-card-icon"><SystemIcon id={selected.id} /></div>
-                              <div className="pb-card-title">{g.name}</div>
-                            </>
-                          )}
-                          {isFav && <span className="pb-card-fav"><StarIcon filled /></span>}
-                          {g.discs && g.discs.length > 1 && (
-                            <span className="pb-card-discs" title={`${g.discs.length} discos`}>💿×{g.discs.length}</span>
-                          )}
-                          {metaStatus && (
-                            <span className={`pb-card-status pb-card-status-${metaStatus}`} title={GAME_STATUS_LABELS[metaStatus]}>
-                              {GAME_STATUS_EMOJI[metaStatus]}
-                            </span>
-                          )}
-                          {metaRating > 0 && (
-                            <span className="pb-card-rating" title={`${metaRating}/5 estrelas`}>
-                              {"★".repeat(metaRating)}
-                            </span>
-                          )}
-                          {playSec > 0 && (
-                            <div className="pb-card-stats">
-                              <span className="pb-card-stat-time">{formatPlayTime(playSec)}</span>
-                            </div>
-                          )}
+                          <GameCardInner
+                            hasCover={hasCover}
+                            cover={cover}
+                            name={g.name}
+                            systemId={selected.id}
+                            isFav={isFav}
+                            discsLen={g.discs ? g.discs.length : 0}
+                            metaStatus={metaStatus}
+                            metaRating={metaRating}
+                            playSec={playSec}
+                          />
                         </button>
                         <button
                           className="pb-card-resync"

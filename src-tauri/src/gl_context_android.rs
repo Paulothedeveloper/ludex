@@ -145,7 +145,9 @@ pub fn read_pixels(width: u32, height: u32) -> Option<Vec<u8>> {
                 gl::UnmapBuffer(gl::PIXEL_PACK_BUFFER);
                 // Flip vertical + alpha=255
                 let row = (width * 4) as usize;
-                let mut out = vec![0u8; bytes];
+                // v0.9.40: sem zero-init (o loop escreve todos os bytes).
+                let mut out: Vec<u8> = Vec::with_capacity(bytes);
+                out.set_len(bytes);
                 for y in 0..height as usize {
                     let src = (height as usize - 1 - y) * row;
                     let dst = y * row;

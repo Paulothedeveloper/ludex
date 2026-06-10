@@ -223,6 +223,25 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
       }
     }
 
+    // v0.9.40: 1 IPC por frame (video+audio juntos) em vez de 2-3 (run_frame +
+    // take_audio [+ skip_frames]). O backend ja tinha o libretro_run_frame_av (so
+    // o mobile usava). Formato: [vlen u32 LE][video: w u32,h u32,rgba][audio i16].
+    // keepAudio=false no fast-forward (renderiza video, descarta audio — o backend
+    // ja drenou o buffer, sem acumulo).
+    function applyAV(buf, keepAudio = true) {
+      if (!buf || buf.byteLength < 4) return;
+      const ab = buf.buffer ? buf.buffer : buf;
+      const base = buf.byteOffset || 0;
+      const view = new DataView(ab, base, buf.byteLength);
+      const videoLen = view.getUint32(0, true);
+      if (videoLen >= 8) renderVideo(new Uint8Array(ab, base + 4, videoLen));
+      if (keepAudio) {
+        const audioOff = base + 4 + videoLen;
+        const audioLen = buf.byteLength - 4 - videoLen;
+        if (audioLen >= 2) postAudio(new Uint8Array(ab, audioOff, audioLen));
+      }
+    }
+
     async function tick() {
       const actx = audioCtxRef.current;
       const ff = Math.max(1, ffEffectiveRef.current || 1);
@@ -232,8 +251,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
           // não acumular nem dar pitch-bend. Reseta o baseline do clock.
           const n = Math.min(ff, MAX_FRAMES_PER_TICK);
           if (n > 1) { try { await invoke("libretro_skip_frames", { n: n - 1 }); } catch {} }
-          renderVideo(await invoke("libretro_run_frame"));
-          try { await invoke("libretro_take_audio"); } catch {} // drena e descarta
+          applyAV(await invoke("libretro_run_frame_av", { wantVideo: true }), false); // descarta audio no FF
           audioStart = null; producedPerCh = 0; lastFf = ff;
         } else {
           if (lastFf !== 1) { audioStart = null; producedPerCh = 0; lastFf = 1; }
@@ -254,8 +272,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
           }
           if (framesToRun > 0) {
             if (framesToRun > 1) { try { await invoke("libretro_skip_frames", { n: framesToRun - 1 }); } catch {} }
-            renderVideo(await invoke("libretro_run_frame"));
-            postAudio(await invoke("libretro_take_audio"));
+            applyAV(await invoke("libretro_run_frame_av", { wantVideo: true }));
           }
         }
       } catch (e) {
