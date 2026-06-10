@@ -12,6 +12,7 @@ import { hasOptionsForSystem, applySystemOptions, effectivePadMap, getFrontendCo
 import { validRomExtension, invokeTimeout } from "./ludexUtils";
 import { CheatsModal } from "./LudexCheatsModal";
 import { loadCheats, applyCheats } from "./ludexCheats";
+import { lxAlert } from "./LudexDialog";
 
 export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
   const canvasRef = useRef(null);
@@ -667,19 +668,19 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
             <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", justifyContent: "center" }}>
               <button className="pb-btn pb-btn-primary" onClick={async () => {
                 try { await invoke("open_system_folder"); }
-                catch (e) { alert("Falha ao abrir pasta: " + e); }
+                catch (e) { lxAlert("Falha ao abrir pasta: " + e); }
               }}>Abrir pasta system\</button>
               <button className="pb-btn" onClick={async () => {
                 try {
                   const n = await invoke("bios_try_auto_import");
                   if (n > 0) {
-                    alert(`Importei ${n} BIOS — tentando de novo...`);
+                    lxAlert(`Importei ${n} BIOS — tentando de novo...`);
                     setError(null);
                     autoLoadDoneRef.current = false;
                   } else {
-                    alert("Nenhuma BIOS encontrada em PCSX2/bios, RetroArch/system, Documents, Downloads. Cola o .bin manualmente na pasta system\\");
+                    lxAlert("Nenhuma BIOS encontrada em PCSX2/bios, RetroArch/system, Documents, Downloads. Cola o .bin manualmente na pasta system\\");
                   }
-                } catch (e) { alert("Falha: " + e); }
+                } catch (e) { lxAlert("Falha: " + e); }
               }}>Auto-import BIOS</button>
             </div>
           )}
@@ -699,12 +700,12 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
                 <button className="pb-btn" onClick={async () => {
                   try { await invoke("open_cores_folder"); } catch (e) {
-                    alert("Falha ao abrir pasta cores: " + e);
+                    lxAlert("Falha ao abrir pasta cores: " + e);
                   }
                 }}>Abrir pasta cores/</button>
                 <button className="pb-btn" onClick={() => {
                   navigator.clipboard?.writeText(`https://buildbot.libretro.com/nightly/windows/x86_64/latest/${system.libretro_core || ""}.zip`).catch(() => {});
-                  alert("URL copiada pro clipboard.");
+                  lxAlert("URL copiada pro clipboard.");
                 }}>Copiar URL do core</button>
               </div>
             </div>

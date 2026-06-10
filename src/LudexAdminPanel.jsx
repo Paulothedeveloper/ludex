@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { lxConfirm } from "./LudexDialog";
 
 /**
  * Painel admin (modal fullscreen) que so abre se a license atual eh marcada
@@ -37,7 +38,7 @@ export default function LudexAdminPanel({ onClose }) {
   useEffect(() => { load(page); }, [page]);
 
   async function forceDeactivate(licenseKey, email) {
-    if (!confirm(`Liberar 1 slot da license de ${email || licenseKey}?\n\nIsso decrementa o uses_count no Gumroad. O cliente vai poder ativar em outro PC.`)) return;
+    if (!await lxConfirm(`Liberar 1 slot da license de ${email || licenseKey}?\n\nIsso decrementa o uses_count no Gumroad. O cliente vai poder ativar em outro PC.`, { title: "Liberar slot", okText: "Liberar" })) return;
     setActioning(licenseKey);
     setActionMsg(null);
     try {

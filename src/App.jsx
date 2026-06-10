@@ -2,6 +2,7 @@ import React from "react";
 import { invoke } from "@tauri-apps/api/core";
 import LudexLauncher from "./LudexLauncher";
 import LudexMobile from "./LudexMobile";
+import { LxDialogHost } from "./LudexDialog";
 import "./LudexMobile.css";
 
 // Detecta Android: renderiza app mobile dedicado (LudexMobile).
@@ -68,6 +69,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       {IS_ANDROID ? <LudexMobile /> : <LudexLauncher />}
+      <LxDialogHost />
     </ErrorBoundary>
   );
 }

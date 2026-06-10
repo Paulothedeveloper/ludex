@@ -11,6 +11,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import "./LudexLauncher.css";
 import LudexOnboarding, { DEFAULT_AVATARS, avatarUrl, getProfileAvatarUrl } from "./LudexOnboarding";
 import LudexLicenseGate from "./LudexLicenseGate";
+import { lxConfirm, lxAlert } from "./LudexDialog";
 import LudexAdminPanel from "./LudexAdminPanel";
 import {
   EmptyStateSystem, SuggestionsModal, ControlsTipModal,
@@ -518,7 +519,7 @@ function LicenseSettingsSection() {
   }
 
   async function deactivate() {
-    if (!confirm("Desativar este PC libera 1 slot da sua license. Você precisará colar a key de novo se quiser usar o Ludex aqui. Confirmar?")) return;
+    if (!await lxConfirm("Desativar este PC libera 1 slot da sua license. Você precisará colar a key de novo se quiser usar o Ludex aqui. Confirmar?", { title: "Desativar este PC", okText: "Desativar", danger: true })) return;
     setBusy(true); setMsg(null);
     try {
       await invoke("license_deactivate");
@@ -1229,7 +1230,7 @@ function LogsViewerModal({ onClose }) {
   }, []);
 
   const clearLogs = useCallback(async () => {
-    if (!confirm("Apagar todos os arquivos de log?")) return;
+    if (!await lxConfirm("Apagar todos os arquivos de log?", { title: "Apagar logs", okText: "Apagar", danger: true })) return;
     try {
       await invoke("clear_app_logs");
       load();
@@ -3946,7 +3947,7 @@ export default function LudexLauncher() {
                 }
               });
               await relaunch();
-            } catch (e) { alert("Falha update: " + e); setUpdateInstalling(false); }
+            } catch (e) { lxAlert("Falha ao atualizar: " + e, { title: "Atualização" }); setUpdateInstalling(false); }
           }}>Atualizar</button>
           <button className="pb-btn" onClick={() => setUpdateBanner(null)}>Depois</button>
         </div>

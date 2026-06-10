@@ -17,6 +17,7 @@ import {
 import { applyAllSavedOptions } from "./ludexSystemOptions";
 import { formatPlayTime } from "./ludexUtils";
 import { getProfileAvatarUrl } from "./LudexOnboarding";
+import { lxConfirm, lxAlert } from "./LudexDialog";
 
 export default function SettingsPanel({
   closing, onClose, systems, romsRoot, emulatorsRoot,
@@ -672,10 +673,10 @@ export default function SettingsPanel({
                 sfx.click();
                 try {
                   const n = await invoke("bios_try_auto_import");
-                  if (n > 0) alert(`Importei ${n} BIOS de PCSX2/bios, RetroArch/system, Documents, Downloads etc.`);
-                  else alert("Nada novo. Pra importar automático, cola os .bin em D:\\BIOS, C:\\BIOS, Documents\\PCSX2\\bios, emulators\\PCSX2\\bios ou Downloads\\.");
+                  if (n > 0) lxAlert(`Importei ${n} BIOS de PCSX2/bios, RetroArch/system, Documents, Downloads etc.`);
+                  else lxAlert("Nada novo. Pra importar automático, cola os .bin em D:\\BIOS, C:\\BIOS, Documents\\PCSX2\\bios, emulators\\PCSX2\\bios ou Downloads\\.");
                   await refreshBiosStatus();
-                } catch (e) { alert("Falha: " + e); }
+                } catch (e) { lxAlert("Falha: " + e); }
               }}
             >
               Tentar auto-import
@@ -684,13 +685,13 @@ export default function SettingsPanel({
               className="pb-settings-btn"
               onClick={async () => {
                 sfx.click();
-                if (!confirm("Vou varrer D:\\, E:\\, F:\\, G:\\ e sua pasta de usuário inteira atras de arquivos com nome de BIOS (scph5500.bin, dc_boot.bin, sega_101.bin etc). Pode demorar 30s-2min. Continuar?")) return;
+                if (!await lxConfirm("Vou varrer D:\\, E:\\, F:\\, G:\\ e sua pasta de usuário inteira atras de arquivos com nome de BIOS (scph5500.bin, dc_boot.bin, sega_101.bin etc). Pode demorar 30s-2min. Continuar?", { title: "Procurar BIOS no PC inteiro", okText: "Procurar" })) return;
                 try {
                   const n = await invoke("bios_deep_scan");
-                  if (n > 0) alert(`Deep-scan importou ${n} BIOS pra system\\.`);
-                  else alert("Deep-scan não achou nenhum arquivo com nome de BIOS conhecida. Voce precisa baixar manualmente (BIOS sao copyright).");
+                  if (n > 0) lxAlert(`Deep-scan importou ${n} BIOS pra system\\.`);
+                  else lxAlert("Deep-scan não achou nenhum arquivo com nome de BIOS conhecida. Voce precisa baixar manualmente (BIOS sao copyright).");
                   await refreshBiosStatus();
-                } catch (e) { alert("Falha: " + e); }
+                } catch (e) { lxAlert("Falha: " + e); }
               }}
               title="Varre D:\\, outras unidades e a home do usuário atras de BIOS no PC inteiro"
             >
@@ -978,8 +979,14 @@ function DesktopBackupRestoreSection({ sfx }) {
   };
 
   const doImport = async () => {
-    const json = window.prompt("Cola aqui o JSON da config exportada (do celular ou de outro PC):");
-    if (!json) return;
+    // v0.9.39: lê do clipboard em vez de window.prompt (impraticável no controle).
+    let json = "";
+    try { json = await navigator.clipboard.readText(); } catch {}
+    if (!json || !json.trim().startsWith("{")) {
+      await lxAlert("Copie o JSON da config exportada (do outro PC ou do celular) e clique em Importar de novo — eu leio direto do clipboard.", { title: "Importar config" });
+      return;
+    }
+    if (!await lxConfirm("Importar a config do clipboard? Isso substitui os perfis/conquistas atuais deste PC.", { title: "Importar config", okText: "Importar", danger: true })) return;
     try {
       const cfg = JSON.parse(json);
       if (!cfg.profiles || !Array.isArray(cfg.profiles)) {
