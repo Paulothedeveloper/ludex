@@ -63,6 +63,43 @@ export function getProfileAvatarUrl(profile, convertFileSrc) {
   return null;
 }
 
+// v0.9.39: navegação por CONTROLE no onboarding (tour + criação de perfil).
+// Loop rAF próprio (igual o OSK) — lê o 1º gamepad e chama handlerRef.current(btn)
+// na borda de subida de cada botão. O handler (redefinido a cada render, guardado
+// num ref) decide o que fazer com o estado atual. D-pad/stick têm repeat ~160ms.
+function useGamepadButtons(handlerRef) {
+  useEffect(() => {
+    let raf, navCd = 0;
+    const prev = {};
+    const map = { 0: "a", 1: "b", 2: "x", 3: "y", 9: "start", 8: "select", 4: "lb", 5: "rb" };
+    const tick = (t) => {
+      const pads = (typeof navigator !== "undefined" && navigator.getGamepads) ? navigator.getGamepads() : [];
+      let gp = null;
+      for (const p of pads) { if (p) { gp = p; break; } }
+      if (gp) {
+        const fn = handlerRef.current;
+        const down = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
+        for (const i of [0, 1, 2, 3, 9, 8, 4, 5]) {
+          const n = down(i);
+          if (n && !prev[i]) fn && fn(map[i]);
+          prev[i] = n;
+        }
+        const ax = gp.axes || [];
+        const up = down(12) || (ax[1] ?? 0) < -0.5;
+        const dn = down(13) || (ax[1] ?? 0) > 0.5;
+        const lf = down(14) || (ax[0] ?? 0) < -0.5;
+        const rt = down(15) || (ax[0] ?? 0) > 0.5;
+        if (up || dn || lf || rt) {
+          if (t >= navCd) { fn && fn(up ? "up" : dn ? "down" : lf ? "left" : "right"); navCd = t + 160; }
+        } else { navCd = 0; }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+}
+
 // Steps do tour. Cada step tem um seletor (data-tour) que aponta pro elemento
 // na home — o spotlight overlay mede getBoundingClientRect e abre uma janela
 // na máscara. Banner liquid glass aparece numa posição relativa ao alvo.
@@ -234,6 +271,9 @@ function TourBanner({ step, rect, idx, total, onNext, onPrev, onSkip }) {
           </button>
         </div>
       </div>
+      <div className="lx-tour-banner-step" style={{ marginTop: 10, opacity: 0.75 }}>
+        🎮 <b>A</b> próximo · <b>B</b> anterior · <b>Start</b> pular
+      </div>
     </div>
   );
 }
@@ -272,6 +312,29 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
       customPhotoPath,
     });
   }
+
+  function cycleAvatar(dir) {
+    setCustomPhotoPath(null);
+    setAvatarId((cur) => {
+      const i = DEFAULT_AVATARS.findIndex(a => a.id === cur);
+      const n = (i + dir + DEFAULT_AVATARS.length) % DEFAULT_AVATARS.length;
+      return DEFAULT_AVATARS[n].id;
+    });
+  }
+
+  // v0.9.39: controle no perfil. Enquanto o OSK está aberto, ele tem o loop
+  // próprio (não agimos aqui). Fechado: A abre o teclado (ou Entra se nome ok),
+  // X/Y abre teclado pra editar, D-pad/LB/RB troca avatar, Start = Entrar.
+  const gpRef = useRef(null);
+  gpRef.current = (btn) => {
+    if (oskOpen) return;
+    if (btn === "a") { if (canContinue) handleCreate(); else setOskOpen(true); }
+    else if (btn === "x" || btn === "y") setOskOpen(true);
+    else if (btn === "start") { if (canContinue) handleCreate(); }
+    else if (btn === "left" || btn === "lb") cycleAvatar(-1);
+    else if (btn === "right" || btn === "rb") cycleAvatar(1);
+  };
+  useGamepadButtons(gpRef);
 
   return (
     <div className="lx-firstrun-card">
@@ -355,6 +418,7 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
       {!canContinue && (
         <p className="lx-firstrun-hint">Digite pelo menos 2 letras pra continuar.</p>
       )}
+      <p className="lx-firstrun-hint">🎮 No controle: <b>A</b> digitar nome / Entrar · <b>←/→</b> trocar avatar · <b>Start</b> Entrar</p>
     </div>
   );
 }
@@ -410,6 +474,21 @@ export default function LudexOnboarding({ onComplete, tourOnly = false }) {
     }
   }
 
+  // v0.9.39: controle no intro + tour. (O perfil tem o handler próprio no
+  // ProfileForm.) A/→ avança, B/← volta, Start/Select/Y pula, Y no intro abre tour.
+  const gpRef = useRef(null);
+  gpRef.current = (btn) => {
+    if (phase === "intro") {
+      if (btn === "a") setPhase("profile");
+      else if (btn === "y") setPhase("tour");
+    } else if (phase === "tour") {
+      if (btn === "a" || btn === "right") nextStep();
+      else if (btn === "b" || btn === "left") prevStep();
+      else if (btn === "start" || btn === "select" || btn === "y") skipTour();
+    }
+  };
+  useGamepadButtons(gpRef);
+
   if (phase === "intro") {
     return (
       <div className="lx-firstrun-root">
@@ -427,6 +506,7 @@ export default function LudexOnboarding({ onComplete, tourOnly = false }) {
               Ver tour guiado (opcional)
             </button>
           </div>
+          <p className="lx-firstrun-hint" style={{ marginTop: 16 }}>🎮 No controle: <b>A</b> continuar · <b>Y</b> ver tour</p>
         </div>
       </div>
     );
