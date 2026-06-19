@@ -2014,8 +2014,15 @@
   left: 24px;
   right: 24px;
 }
+/* v0.9.40: com analogico (PS1/PS2/N64/PSP/DC/Wii) a pilha analog+dpad+shoulders
+   nao cabe na altura curta do landscape e os L/R subiam colados no Voltar
+   (esq) e FF/engrenagem (dir). Solucao: L1/L2 e R1/R2 vao pro TOPO, mas com
+   recuo lateral que LIMPA os botoes de canto (Voltar ~52px, FF+engrenagem ~96px). */
 .lmx-emu-root[data-orient="landscape"] .lmx-emu-controls[data-has-analog] .lmx-emu-shoulders {
-  bottom: calc(max(env(safe-area-inset-bottom, 20px), 30px) + 268px);
+  top: max(env(safe-area-inset-top, 10px), 10px);
+  bottom: auto;
+  left: 72px;
+  right: 104px;
 }
 .lmx-emu-root[data-orient="landscape"] .lmx-emu-back {
   width: 38px;
