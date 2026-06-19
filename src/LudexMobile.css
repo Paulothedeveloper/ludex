@@ -1892,7 +1892,10 @@
 }
 /* Quando ha analogico, o container e mais alto e o D-pad sobe + encolhe pra o
    stick ocupar a zona confortavel do polegar esquerdo SEM colidir com o dpad. */
-.lmx-emu-controls[data-has-analog] { height: 280px; }
+/* v0.9.40: 280 -> 320 em portrait. Com analogico o dpad sobe pra bottom:156 e o
+   topo dele batia na barra de cima (shoulders/select) -> "L1 ▲ L2 SELECT" colados.
+   Mais 40px de altura dá o respiro. (Em landscape isso nao importa: overlay full.) */
+.lmx-emu-controls[data-has-analog] { height: 320px; }
 .lmx-emu-controls[data-has-analog] .lmx-emu-dpad {
   bottom: 156px;
   left: 30px;
@@ -1955,74 +1958,70 @@
   font-size: 12px;
 }
 
-/* ===== EMULADOR LANDSCAPE: controles laterais, canvas centro ===== */
-@media (orientation: landscape) {
-  .lmx-emu-root {
-    flex-direction: column;
-  }
-  .lmx-emu-canvas-wrap {
-    /* Canvas ocupa tela inteira; controles ficam absolutos por cima nas laterais */
-    flex: 1;
-    padding: 8px;
-    min-height: 0;
-  }
-  .lmx-emu-controls {
-    /* Controles overlay nas laterais — canvas fica no centro full size */
-    position: absolute;
-    inset: 0;
-    height: auto;
-    padding: 0;
-    pointer-events: none;
-  }
-  .lmx-emu-controls > * { pointer-events: auto; }
-  .lmx-emu-dpad {
-    bottom: max(env(safe-area-inset-bottom, 20px), 30px);
-    left: 24px;
-  }
-  /* v0.9.19: era ".lmx-emu-abxy" (classe que NAO existe) — por isso os botoes de
-     acao nao reposicionavam no landscape e o layout "bugava". A classe real e
-     .lmx-emu-face. Agora vai pro canto inferior-direito como deve. */
-  .lmx-emu-face {
-    bottom: max(env(safe-area-inset-bottom, 20px), 30px);
-    right: 24px;
-    left: auto;
-    top: auto;
-  }
-  /* Analogico no canto inferior-esquerdo; com analogico o dpad e os L/R sobem
-     pra empilhar sem colidir (stick embaixo, dpad no meio, L/R em cima). */
-  .lmx-emu-analog {
-    bottom: max(env(safe-area-inset-bottom, 20px), 30px);
-    left: 24px;
-  }
-  .lmx-emu-controls[data-has-analog] .lmx-emu-dpad {
-    bottom: calc(max(env(safe-area-inset-bottom, 20px), 30px) + 140px);
-    left: 30px;
-  }
-  .lmx-emu-system {
-    top: auto;
-    bottom: 20px;
-    left: 50%;
-  }
-  .lmx-emu-shoulders {
-    /* v0.9.10: L/R ficam ACIMA do dpad/face (como num controle de verdade), longe
-       da barra de cima (Voltar / FF / engrenagem). Antes ficavam em top:16px e o L
-       caia em cima do Voltar e o R em cima da engrenagem — alem de a barra de cima
-       (z-index 10) interceptar o toque, impedindo arrastar no modo editar. */
-    top: auto;
-    bottom: calc(max(env(safe-area-inset-bottom, 20px), 30px) + 156px);
-    left: 24px;
-    right: 24px;
-  }
-  .lmx-emu-controls[data-has-analog] .lmx-emu-shoulders {
-    bottom: calc(max(env(safe-area-inset-bottom, 20px), 30px) + 268px);
-  }
-  .lmx-emu-back {
-    /* Em landscape o back fica menor */
-    width: 38px;
-    height: 38px;
-    top: max(env(safe-area-inset-top, 10px), 10px);
-    left: 14px;
-  }
+/* ===== EMULADOR LANDSCAPE: controles laterais, canvas centro =====
+   v0.9.40: dirigido por [data-orient="landscape"] (detectado por JS) em vez de
+   @media (orientation: landscape). O @media NAO casava quando o app força
+   screen.orientation.lock('landscape') no S25 -> a CSS de portrait era usada e
+   TODOS os controles iam pro topo, sobrepostos. data-orient resolve de vez. */
+.lmx-emu-root[data-orient="landscape"] {
+  flex-direction: column;
+}
+.lmx-emu-root[data-orient="landscape"] .lmx-emu-canvas-wrap {
+  flex: 1;
+  padding: 8px;
+  min-height: 0;
+}
+.lmx-emu-root[data-orient="landscape"] .lmx-emu-controls {
+  /* Overlay full-screen; canvas no centro, controles nas laterais/cantos */
+  position: absolute;
+  inset: 0;
+  height: auto;
+  padding: 0;
+  pointer-events: none;
+}
+.lmx-emu-root[data-orient="landscape"] .lmx-emu-controls > * { pointer-events: auto; }
+.lmx-emu-root[data-orient="landscape"] .lmx-emu-dpad {
+  top: auto;
+  bottom: max(env(safe-area-inset-bottom, 20px), 30px);
+  left: 24px;
+}
+.lmx-emu-root[data-orient="landscape"] .lmx-emu-face {
+  top: auto;
+  bottom: max(env(safe-area-inset-bottom, 20px), 30px);
+  right: 24px;
+  left: auto;
+}
+.lmx-emu-root[data-orient="landscape"] .lmx-emu-analog {
+  top: auto;
+  bottom: max(env(safe-area-inset-bottom, 20px), 30px);
+  left: 24px;
+}
+.lmx-emu-root[data-orient="landscape"] .lmx-emu-controls[data-has-analog] .lmx-emu-dpad {
+  bottom: calc(max(env(safe-area-inset-bottom, 20px), 30px) + 140px);
+  left: 30px;
+}
+/* Select/Start no centro-baixo, CENTRALIZADO de verdade (translateX -50%) */
+.lmx-emu-root[data-orient="landscape"] .lmx-emu-system {
+  top: auto;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+/* L/R ACIMA do dpad/face (como num controle real), longe da barra de cima */
+.lmx-emu-root[data-orient="landscape"] .lmx-emu-shoulders {
+  top: auto;
+  bottom: calc(max(env(safe-area-inset-bottom, 20px), 30px) + 156px);
+  left: 24px;
+  right: 24px;
+}
+.lmx-emu-root[data-orient="landscape"] .lmx-emu-controls[data-has-analog] .lmx-emu-shoulders {
+  bottom: calc(max(env(safe-area-inset-bottom, 20px), 30px) + 268px);
+}
+.lmx-emu-root[data-orient="landscape"] .lmx-emu-back {
+  width: 38px;
+  height: 38px;
+  top: max(env(safe-area-inset-top, 10px), 10px);
+  left: 14px;
 }
 
 /* ===== EMULADOR: menu in-game ===== */

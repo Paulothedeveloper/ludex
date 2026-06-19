@@ -2339,6 +2339,27 @@ function MobileEmulatorView({ system, game, onClose }) {
       window.removeEventListener("mouseup", endDrag);
     };
   }, [editMode, moveDrag, endDrag]);
+
+  // v0.9.40 FIX dos controles: orientação detectada por JS (innerWidth vs height).
+  // O @media (orientation: landscape) NÃO casa de forma confiável quando o app
+  // força screen.orientation.lock('landscape') no S25 — então a CSS de portrait
+  // era usada em landscape e os controles iam tudo pro topo, sobrepostos. Um
+  // data-orient no root dirige a CSS de forma confiável.
+  const [orient, setOrient] = useState(() =>
+    (typeof window !== "undefined" && window.innerWidth >= window.innerHeight) ? "landscape" : "portrait");
+  useEffect(() => {
+    const update = () => setOrient(window.innerWidth >= window.innerHeight ? "landscape" : "portrait");
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    const id = setInterval(update, 600); // alguns devices não disparam resize no lock forçado
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+      clearInterval(id);
+    };
+  }, []);
+
   const groupStyle = useCallback((key) => {
     const o = offsets[key] || { x: 0, y: 0 };
     const sc = (ctrlPrefs.scale || 1) * (ctrlPrefs.groupScale?.[key] || 1);
@@ -2347,13 +2368,11 @@ function MobileEmulatorView({ system, game, onClose }) {
     // pra fora da tela visível (causa do "ordem enlouquece" + botões PS1/PS2
     // sem resposta — eles estavam invisíveis fora da viewport). Em landscape
     // ignoramos os offsets manuais e usamos só o scale.
-    const isLandscape = typeof window !== "undefined"
-      && window.matchMedia
-      && window.matchMedia("(orientation: landscape)").matches;
+    const isLandscape = orient === "landscape";
     const moved = !isLandscape && (o.x || o.y);
     if (!moved && sc === 1) return undefined;
     return { transform: `translate(${moved ? o.x : 0}px, ${moved ? o.y : 0}px) scale(${sc})` };
-  }, [offsets, ctrlPrefs]);
+  }, [offsets, ctrlPrefs, orient]);
   const resetLayout = useCallback(() => {
     setOffsets({});
     saveCustomLayout(system.id, {});
@@ -2886,7 +2905,7 @@ function MobileEmulatorView({ system, game, onClose }) {
   }
 
   return (
-    <div className="lmx-emu-root">
+    <div className="lmx-emu-root" data-orient={orient}>
       <button className="lmx-emu-back" onClick={onClose} aria-label="Voltar"><IconArrowLeft /></button>
       <button className="lmx-emu-menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
