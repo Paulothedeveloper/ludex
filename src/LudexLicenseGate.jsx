@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import VirtualKeyboard from "./LudexOSK";
+import { t } from "./ludexI18n";
 
 /**
  * Tela bloqueante mostrada antes de qualquer outra coisa quando o app não
@@ -49,8 +50,8 @@ export default function LudexLicenseGate({ onLicensed, reason }) {
       }
     } catch (e) {
       setErr(isNetworkError(e)
-        ? "Sem conexão com a internet. Reconecte e tente ativar de novo."
-        : "Não consegui validar a chave. Confira se digitou/colou certo.");
+        ? t("Sem conexão com a internet. Reconecte e tente ativar de novo.")
+        : t("Não consegui validar a chave. Confira se digitou/colou certo."));
     } finally {
       setBusy(false);
     }
@@ -81,7 +82,7 @@ export default function LudexLicenseGate({ onLicensed, reason }) {
 
       <div className="lx-licgate-card">
         <div className="lx-licgate-logo">L U D E X</div>
-        <p className="lx-licgate-sub">Sua biblioteca retro em um lugar só</p>
+        <p className="lx-licgate-sub">{t("Sua biblioteca retro em um lugar só")}</p>
 
         <div className="lx-licgate-divider" />
 
@@ -98,7 +99,7 @@ export default function LudexLicenseGate({ onLicensed, reason }) {
         )}
 
         <label className="lx-licgate-field">
-          <span>Sua license key</span>
+          <span>{t("Sua license key")}</span>
           <input
             type="text"
             placeholder="XXXX-XXXX-XXXX-XXXX"
@@ -119,7 +120,7 @@ export default function LudexLicenseGate({ onLicensed, reason }) {
             type="button"
             style={{ flex: "0 0 auto", minWidth: 96 }}
           >
-            Colar
+            {t("Colar")}
           </button>
           <button
             className="lx-licgate-btn lx-licgate-btn-primary"
@@ -127,23 +128,23 @@ export default function LudexLicenseGate({ onLicensed, reason }) {
             disabled={busy || !key.trim()}
             style={{ flex: 1 }}
           >
-            {busy ? "Validando..." : "Ativar Ludex"}
+            {busy ? t("Validando...") : t("Ativar Ludex")}
           </button>
         </div>
 
         <div className="lx-licgate-divider" />
 
-        <p className="lx-licgate-help">Não tem uma license ainda?</p>
+        <p className="lx-licgate-help">{t("Não tem uma license ainda?")}</p>
         <button
           className="lx-licgate-btn lx-licgate-btn-ghost"
           onClick={buyNow}
           disabled={!purchaseUrl}
         >
-          Comprar agora →
+          {t("Comprar agora →")}
         </button>
 
         <p className="lx-licgate-foot">
-          Funciona em até 2 PCs · Acesso vitalício · Sem assinatura
+          {t("Funciona em até 2 PCs · Acesso vitalício · Sem assinatura")}
         </p>
       </div>
 
