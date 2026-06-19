@@ -12,6 +12,7 @@ import "./LudexLauncher.css";
 import LudexOnboarding, { DEFAULT_AVATARS, avatarUrl, getProfileAvatarUrl } from "./LudexOnboarding";
 import LudexLicenseGate from "./LudexLicenseGate";
 import { lxConfirm, lxAlert } from "./LudexDialog";
+import { t } from "./ludexI18n";
 import LudexAdminPanel from "./LudexAdminPanel";
 import {
   EmptyStateSystem, SuggestionsModal, ControlsTipModal,
@@ -4181,7 +4182,7 @@ export default function LudexLauncher() {
                       key={opt.id}
                       className={`pb-sort-pill ${sortMode === opt.id ? "active" : ""}`}
                       onClick={() => { sfx.click(); setSortMode(opt.id); }}
-                    >{opt.label}</button>
+                    >{t(opt.label)}</button>
                   ))}
                 </div>
               )}

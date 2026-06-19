@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import LudexLauncher from "./LudexLauncher";
 import LudexMobile from "./LudexMobile";
 import { LxDialogHost } from "./LudexDialog";
+import { subscribeLanguage } from "./ludexI18n";
 import "./LudexMobile.css";
 
 // Detecta Android: renderiza app mobile dedicado (LudexMobile).
@@ -66,6 +67,10 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function App() {
+  // v0.9.40: re-renderiza a árvore inteira quando o idioma muda (sem reload),
+  // pra todas as chamadas t() re-resolverem na hora.
+  const [, setLangTick] = React.useState(0);
+  React.useEffect(() => subscribeLanguage(() => setLangTick((n) => n + 1)), []);
   return (
     <ErrorBoundary>
       {IS_ANDROID ? <LudexMobile /> : <LudexLauncher />}

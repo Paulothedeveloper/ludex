@@ -86,7 +86,7 @@ export default function LudexLicenseGate({ onLicensed, reason }) {
           {LANGUAGES.map((lng) => (
             <button key={lng.code} type="button"
               title={lng.label}
-              onClick={() => { if (getLanguage() !== lng.code) { setLanguage(lng.code); window.location.reload(); } }}
+              onClick={() => setLanguage(lng.code)}
               style={{
                 background: getLanguage() === lng.code ? "rgba(124,92,255,0.35)" : "rgba(255,255,255,0.06)",
                 border: getLanguage() === lng.code ? "1px solid rgba(124,92,255,0.8)" : "1px solid rgba(255,255,255,0.14)",

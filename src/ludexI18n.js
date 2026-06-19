@@ -41,10 +41,18 @@ export function getLanguage() { return _lang; }
 export function hasLanguagePref() {
   try { return CODES.includes(localStorage.getItem(STORAGE_KEY)); } catch { return false; }
 }
-/** Troca idioma e persiste. Caller deve dar reload pra re-renderizar tudo. */
+
+// v0.9.40: troca de idioma REATIVA (sem reload). Os componentes assinam via
+// useLanguage() e re-renderizam na hora — t() re-resolve. Reload era frágil
+// (dependia do localStorage persistir + re-init) e o usuário não via mudar.
+const _listeners = new Set();
+export function subscribeLanguage(fn) { _listeners.add(fn); return () => _listeners.delete(fn); }
+
+/** Troca idioma, persiste e NOTIFICA (re-render imediato, sem reload). */
 export function setLanguage(l) {
   _lang = CODES.includes(l) ? l : "en";
   try { localStorage.setItem(STORAGE_KEY, _lang); } catch {}
+  _listeners.forEach((fn) => { try { fn(_lang); } catch {} });
 }
 
 // Dicionário: { "string PT": { en, es, fr, zh, ru } }. PT é a própria chave.
@@ -103,6 +111,13 @@ const DICT = {
 
   // ---- Tela de seleção de idioma (entrada) ----
   "Escolha seu idioma": { en: "Choose your language", es: "Elige tu idioma", fr: "Choisissez votre langue", zh: "选择您的语言", ru: "Выберите язык" },
+
+  // ---- Home / ordenação ----
+  "Padrão":        { en: "Default", es: "Predeterminado", fr: "Par défaut", zh: "默认", ru: "По умолчанию" },
+  "A-Z":           { en: "A-Z", es: "A-Z", fr: "A-Z", zh: "A-Z", ru: "А-Я" },
+  "Recentes":      { en: "Recent", es: "Recientes", fr: "Récents", zh: "最近", ru: "Недавние" },
+  "Mais jogados":  { en: "Most played", es: "Más jugados", fr: "Plus joués", zh: "最常玩", ru: "Часто играемые" },
+  "★ Favoritos":   { en: "★ Favorites", es: "★ Favoritos", fr: "★ Favoris", zh: "★ 收藏", ru: "★ Избранное" },
 };
 
 /** Traduz `s` pro idioma atual. Cadeia: idioma -> inglês -> PT (a própria chave). */

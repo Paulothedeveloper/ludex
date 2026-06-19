@@ -320,7 +320,7 @@ export default function SettingsPanel({
             {LANGUAGES.map((lng) => (
               <button key={lng.code}
                 className={`pb-settings-btn ${getLanguage() === lng.code ? "active" : ""}`}
-                onClick={() => { if (getLanguage() !== lng.code) { setLanguage(lng.code); window.location.reload(); } }}>
+                onClick={() => setLanguage(lng.code)}>
                 {lng.flag} {lng.label}
               </button>
             ))}
