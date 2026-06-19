@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import VirtualKeyboard from "./LudexOSK";
-import { t } from "./ludexI18n";
+import { t, LANGUAGES, getLanguage, setLanguage } from "./ludexI18n";
 
 /**
  * Tela bloqueante mostrada antes de qualquer outra coisa quando o app não
@@ -81,6 +81,19 @@ export default function LudexLicenseGate({ onLicensed, reason }) {
       <div className="lx-licgate-bg" />
 
       <div className="lx-licgate-card">
+        {/* v0.9.40: seletor de idioma na tela de entrada (issue #1) */}
+        <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginBottom: 14 }}>
+          {LANGUAGES.map((lng) => (
+            <button key={lng.code} type="button"
+              title={lng.label}
+              onClick={() => { if (getLanguage() !== lng.code) { setLanguage(lng.code); window.location.reload(); } }}
+              style={{
+                background: getLanguage() === lng.code ? "rgba(124,92,255,0.35)" : "rgba(255,255,255,0.06)",
+                border: getLanguage() === lng.code ? "1px solid rgba(124,92,255,0.8)" : "1px solid rgba(255,255,255,0.14)",
+                borderRadius: 8, padding: "5px 9px", cursor: "pointer", fontSize: 16, lineHeight: 1,
+              }}>{lng.flag}</button>
+          ))}
+        </div>
         <div className="lx-licgate-logo">L U D E X</div>
         <p className="lx-licgate-sub">{t("Sua biblioteca retro em um lugar só")}</p>
 

@@ -18,7 +18,7 @@ import { applyAllSavedOptions } from "./ludexSystemOptions";
 import { formatPlayTime } from "./ludexUtils";
 import { getProfileAvatarUrl } from "./LudexOnboarding";
 import { lxConfirm, lxAlert } from "./LudexDialog";
-import { t, getLanguage, setLanguage } from "./ludexI18n";
+import { t, getLanguage, setLanguage, LANGUAGES } from "./ludexI18n";
 
 export default function SettingsPanel({
   closing, onClose, systems, romsRoot, emulatorsRoot,
@@ -316,11 +316,14 @@ export default function SettingsPanel({
 
         <div className="pb-settings-section">
           <h3>{t("Idioma")}</h3>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className={`pb-settings-btn ${getLanguage() === "pt" ? "active" : ""}`}
-              onClick={() => { if (getLanguage() !== "pt") { setLanguage("pt"); window.location.reload(); } }}>Português</button>
-            <button className={`pb-settings-btn ${getLanguage() === "en" ? "active" : ""}`}
-              onClick={() => { if (getLanguage() !== "en") { setLanguage("en"); window.location.reload(); } }}>English</button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {LANGUAGES.map((lng) => (
+              <button key={lng.code}
+                className={`pb-settings-btn ${getLanguage() === lng.code ? "active" : ""}`}
+                onClick={() => { if (getLanguage() !== lng.code) { setLanguage(lng.code); window.location.reload(); } }}>
+                {lng.flag} {lng.label}
+              </button>
+            ))}
           </div>
           <p className="pb-settings-hint">{t("Trocar o idioma recarrega o app.")}</p>
         </div>
