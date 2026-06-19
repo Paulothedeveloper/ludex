@@ -100,6 +100,12 @@ const EN = {
   // ---- Diálogos comuns ----
   "Não consegui abrir o jogo": "Couldn't open the game",
   "Licença necessária para abrir jogos. Ative o Ludex nos Ajustes.": "License required to open games. Activate Ludex in Settings.",
+
+  // ---- Settings ----
+  "Configurações": "Settings",
+  "Trocar o idioma recarrega o app.": "Changing the language reloads the app.",
+  "Trocar": "Switch",
+  "Perfil ativo": "Active profile",
 };
 
 /** Traduz `s` pro idioma atual (fallback: a própria string PT). */

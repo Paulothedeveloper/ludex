@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import VirtualKeyboard from "./LudexOSK";
+import { t } from "./ludexI18n";
 
 // 10 avatares SVG procedurais (data URI) — sem assets externos.
 // Cada um tem cor/glyph diferente. Inicial do nome do user é desenhada por cima
@@ -258,16 +259,16 @@ function TourBanner({ step, rect, idx, total, onNext, onPrev, onSkip }) {
       <p className="lx-tour-banner-body">{step.body}</p>
       <div className="lx-tour-banner-actions">
         <button className="lx-tour-btn lx-tour-btn-ghost" onClick={onSkip}>
-          Pular tour
+          {t("Pular tour")}
         </button>
         <div className="lx-tour-banner-nav">
           {idx > 0 && (
             <button className="lx-tour-btn lx-tour-btn-ghost" onClick={onPrev}>
-              Anterior
+              {t("Anterior")}
             </button>
           )}
           <button className="lx-tour-btn lx-tour-btn-primary" onClick={onNext}>
-            {idx === total - 1 ? "Concluir tour" : "Próximo"}
+            {idx === total - 1 ? t("Concluir tour") : t("Próximo")}
           </button>
         </div>
       </div>
@@ -338,13 +339,13 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
 
   return (
     <div className="lx-firstrun-card">
-      <h2 className="lx-firstrun-title">Crie seu perfil</h2>
+      <h2 className="lx-firstrun-title">{t("Crie seu perfil")}</h2>
       <p className="lx-firstrun-sub">
-        Seu perfil guarda saves, favoritos, tempo jogado e nota dos jogos. Pode trocar tudo depois nos Ajustes.
+        {t("Seu perfil guarda saves, favoritos, tempo jogado e nota dos jogos. Pode trocar tudo depois nos Ajustes.")}
       </p>
 
       <label className="lx-firstrun-field">
-        <span>Como você quer ser chamado?</span>
+        <span>{t("Como você quer ser chamado?")}</span>
         <input
           autoFocus
           type="text"
@@ -352,16 +353,16 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           onFocus={() => setOskOpen(true)}
-          placeholder="Seu nome ou apelido (clique pra digitar com controle)"
+          placeholder={t("Seu nome ou apelido (clique pra digitar com controle)")}
           readOnly={oskOpen}
         />
       </label>
       {oskOpen && (
         <VirtualKeyboard
-          label="Seu nome ou apelido"
+          label={t("Seu nome ou apelido")}
           value={name}
           maxLength={28}
-          placeholder="Digite com controle ou teclado"
+          placeholder={t("Digite com controle ou teclado")}
           onChange={setName}
           onSubmit={() => setOskOpen(false)}
           onClose={() => setOskOpen(false)}
@@ -369,7 +370,7 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
       )}
 
       <div className="lx-firstrun-field">
-        <span>Escolha um avatar</span>
+        <span>{t("Escolha um avatar")}</span>
         <div className="lx-avatar-grid">
           {DEFAULT_AVATARS.map((av) => {
             const selected = !customPhotoPath && av.id === avatarId;
@@ -404,7 +405,7 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
       <div className="lx-firstrun-actions">
         {onBack && (
           <button className="lx-tour-btn lx-tour-btn-ghost" onClick={onBack}>
-            Ver tour de novo
+            {t("Ver tour de novo")}
           </button>
         )}
         <button
@@ -412,11 +413,11 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
           onClick={handleCreate}
           disabled={!canContinue}
         >
-          Entrar no Ludex
+          {t("Entrar no Ludex")}
         </button>
       </div>
       {!canContinue && (
-        <p className="lx-firstrun-hint">Digite pelo menos 2 letras pra continuar.</p>
+        <p className="lx-firstrun-hint">{t("Digite pelo menos 2 letras pra continuar.")}</p>
       )}
       <p className="lx-firstrun-hint">🎮 No controle: <b>A</b> digitar nome / Entrar · <b>←/→</b> trocar avatar · <b>Start</b> Entrar</p>
     </div>
@@ -496,14 +497,14 @@ export default function LudexOnboarding({ onComplete, tourOnly = false }) {
         <div className="lx-firstrun-card lx-firstrun-card-intro">
           <div className="lx-firstrun-logo">L U D E X</div>
           <p className="lx-firstrun-sub">
-            Sua biblioteca retro em um lugar só — 27+ sistemas embedded, controle nativo, save states, RetroAchievements e Discord Rich Presence.
+            {t("Sua biblioteca retro em um lugar só — 27+ sistemas embedded, controle nativo, save states, RetroAchievements e Discord Rich Presence.")}
           </p>
           <div className="lx-firstrun-actions" style={{ justifyContent: "center", marginTop: 22, flexWrap: "wrap" }}>
             <button className="lx-tour-btn lx-tour-btn-primary" onClick={() => setPhase("profile")}>
-              Continuar
+              {t("Continuar")}
             </button>
             <button className="lx-tour-btn lx-tour-btn-ghost" onClick={() => setPhase("tour")}>
-              Ver tour guiado (opcional)
+              {t("Ver tour guiado (opcional)")}
             </button>
           </div>
           <p className="lx-firstrun-hint" style={{ marginTop: 16 }}>🎮 No controle: <b>A</b> continuar · <b>Y</b> ver tour</p>

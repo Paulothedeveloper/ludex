@@ -18,6 +18,7 @@ import { applyAllSavedOptions } from "./ludexSystemOptions";
 import { formatPlayTime } from "./ludexUtils";
 import { getProfileAvatarUrl } from "./LudexOnboarding";
 import { lxConfirm, lxAlert } from "./LudexDialog";
+import { t, getLanguage, setLanguage } from "./ludexI18n";
 
 export default function SettingsPanel({
   closing, onClose, systems, romsRoot, emulatorsRoot,
@@ -309,12 +310,23 @@ export default function SettingsPanel({
       <div className={`pb-settings-backdrop ${closing ? "closing" : ""}`} onClick={() => { sfx.back(); onClose(); }} />
       <aside ref={panelRef} className={`pb-settings ${closing ? "closing" : ""}`} onClick={(e) => e.stopPropagation()}>
         <header className="pb-settings-header">
-          <h2>Configurações</h2>
+          <h2>{t("Configurações")}</h2>
           <button className="pb-icon-btn" onClick={() => { sfx.back(); onClose(); }} title="Fechar (Esc)"><CloseIcon /></button>
         </header>
 
         <div className="pb-settings-section">
-          <h3>Perfil ativo</h3>
+          <h3>{t("Idioma")}</h3>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className={`pb-settings-btn ${getLanguage() === "pt" ? "active" : ""}`}
+              onClick={() => { if (getLanguage() !== "pt") { setLanguage("pt"); window.location.reload(); } }}>Português</button>
+            <button className={`pb-settings-btn ${getLanguage() === "en" ? "active" : ""}`}
+              onClick={() => { if (getLanguage() !== "en") { setLanguage("en"); window.location.reload(); } }}>English</button>
+          </div>
+          <p className="pb-settings-hint">{t("Trocar o idioma recarrega o app.")}</p>
+        </div>
+
+        <div className="pb-settings-section">
+          <h3>{t("Perfil ativo")}</h3>
           {activeProfile ? (
             <button className="pb-active-profile" onClick={() => { sfx.open(); onOpenProfiles(); }}>
               <div className="pb-profile-avatar pb-profile-avatar-sm">
@@ -324,7 +336,7 @@ export default function SettingsPanel({
                 })()}
               </div>
               <span>{activeProfile.name}</span>
-              <span className="pb-active-profile-action">Trocar</span>
+              <span className="pb-active-profile-action">{t("Trocar")}</span>
             </button>
           ) : (
             <button className="pb-settings-btn" onClick={() => { sfx.open(); onOpenProfiles(); }}>
