@@ -59,3 +59,6 @@ src-tauri/playbox-update.key
 # Cores libretro — bundled em build mas alguns >100MB (mame=360MB) excedem limite GitHub.
 # Download separado do buildbot oficial: https://buildbot.libretro.com/nightly/
 cores/
+
+# v0.9.40: vault Obsidian = NOTAS INTERNAS, NUNCA no repo publico (tinha credenciais).
+PlayBox - Vault/
