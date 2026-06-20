@@ -286,7 +286,7 @@ export function ControlsTipModal({ open, onClose, system }) {
               <div className="lx-controls-section">
                 <h4>{t("Controles testados")}</h4>
                 <div className="lx-controls-pads">
-                  {tip.pads.map((p) => <span key={p} className="lx-controls-pad-pill">{p}</span>)}
+                  {tip.pads.map((p) => <span key={p} className="lx-controls-pad-pill">{t(p)}</span>)}
                 </div>
               </div>
               <div className="lx-controls-section">

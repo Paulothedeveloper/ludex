@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { t } from "./ludexI18n";
 
 /**
  * v0.9.39: diálogos in-app navegáveis por CONTROLE (substituem alert/confirm/prompt
@@ -29,12 +30,12 @@ function request(opts) {
   });
 }
 
-export function lxConfirm(message, { title = "Confirmar", okText = "Confirmar", cancelText = "Cancelar", danger = false } = {}) {
-  return request({ kind: "confirm", title, message, okText, cancelText, danger });
+export function lxConfirm(message, { title, okText, cancelText, danger = false } = {}) {
+  return request({ kind: "confirm", title: title ?? t("Confirmar"), message, okText: okText ?? t("Confirmar"), cancelText: cancelText ?? t("Cancelar"), danger });
 }
 
-export function lxAlert(message, { title = "Aviso", okText = "OK" } = {}) {
-  return request({ kind: "alert", title, message, okText });
+export function lxAlert(message, { title, okText = "OK" } = {}) {
+  return request({ kind: "alert", title: title ?? t("Aviso"), message, okText });
 }
 
 export function LxDialogHost() {
@@ -124,7 +125,7 @@ export function LxDialogHost() {
             onMouseEnter={() => isConfirm && setFocusIdx(1)}
           >{dlg.okText}</button>
         </div>
-        <div className="lx-dlg-hint">🎮 <b>A</b> {isConfirm ? "selecionar" : "OK"} · {isConfirm ? "←/→ trocar · B cancelar" : "B fechar"}</div>
+        <div className="lx-dlg-hint">🎮 <b>A</b> {isConfirm ? t("selecionar") : "OK"} · {isConfirm ? t("←/→ trocar · B cancelar") : t("B fechar")}</div>
       </div>
     </div>
   );

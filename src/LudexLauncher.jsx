@@ -667,8 +667,8 @@ function AchievementToast({ achievement, onDone }) {
       <div className="pb-achievement-icon"><StarIcon filled /></div>
       <div className="pb-achievement-text">
         <div className="pb-achievement-label">{t("CONQUISTA DESBLOQUEADA")}</div>
-        <div className="pb-achievement-name">{achievement.name}</div>
-        <div className="pb-achievement-desc">{achievement.desc}</div>
+        <div className="pb-achievement-name">{t(achievement.name)}</div>
+        <div className="pb-achievement-desc">{t(achievement.desc)}</div>
       </div>
     </div>
   );

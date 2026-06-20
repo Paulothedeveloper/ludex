@@ -547,8 +547,8 @@ export default function SettingsPanel({
                   <li key={a.id} className={isUnlocked ? "unlocked" : "locked"}>
                     <span className="pb-achievement-list-icon"><StarIcon filled={isUnlocked} /></span>
                     <div>
-                      <strong>{a.name}</strong>
-                      <span>{a.desc}</span>
+                      <strong>{t(a.name)}</strong>
+                      <span>{t(a.desc)}</span>
                     </div>
                   </li>
                 );

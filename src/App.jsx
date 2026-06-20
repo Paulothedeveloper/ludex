@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import LudexLauncher from "./LudexLauncher";
 import LudexMobile from "./LudexMobile";
 import { LxDialogHost } from "./LudexDialog";
-import { subscribeLanguage } from "./ludexI18n";
+import { subscribeLanguage, t } from "./ludexI18n";
 import "./LudexMobile.css";
 
 // Detecta Android: renderiza app mobile dedicado (LudexMobile).
@@ -39,8 +39,8 @@ class ErrorBoundary extends React.Component {
         fontFamily: "system-ui, -apple-system, Segoe UI, sans-serif", padding: 32,
       }}>
         <div style={{ maxWidth: 720, textAlign: "left" }}>
-          <h1 style={{ fontSize: 22, margin: 0, color: "#f87171" }}>Ludex falhou ao iniciar</h1>
-          <p style={{ color: "#aaa", marginTop: 12 }}>Detalhe do erro:</p>
+          <h1 style={{ fontSize: 22, margin: 0, color: "#f87171" }}>{t("Ludex falhou ao iniciar")}</h1>
+          <p style={{ color: "#aaa", marginTop: 12 }}>{t("Detalhe do erro:")}</p>
           <pre style={{
             background: "#0f0f0f", padding: 14, borderRadius: 8,
             color: "#fca5a5", fontSize: 12, overflow: "auto", maxHeight: 220,
@@ -50,15 +50,15 @@ class ErrorBoundary extends React.Component {
             <button onClick={() => window.location.reload()} style={{
               padding: "10px 22px", background: "#fff", color: "#1a1a1a",
               border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer",
-            }}>Reiniciar</button>
+            }}>{t("Reiniciar")}</button>
             <button onClick={() => this.resetConfig()} style={{
               padding: "10px 22px", background: "#7f1d1d", color: "#fff",
               border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer",
-            }}>Apagar config e reiniciar</button>
+            }}>{t("Apagar config e reiniciar")}</button>
             <button onClick={() => invoke("quit_app")} style={{
               padding: "10px 22px", background: "transparent", color: "#aaa",
               border: "1px solid #444", borderRadius: 8, fontSize: 14, cursor: "pointer",
-            }}>Sair</button>
+            }}>{t("Sair")}</button>
           </div>
         </div>
       </div>

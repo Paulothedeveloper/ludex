@@ -5,6 +5,7 @@
 // Persistencia: localStorage 'ludex.cheats.<gameKey>' = [{desc, code, enabled}]
 
 import { invoke } from "@tauri-apps/api/core";
+import { t } from "./ludexI18n";
 
 // system.id -> nome da pasta em libretro-database/cht/.
 // HD systems (ps2, gc, wii, 3ds, switch...) nao tem .cht no DB (usam pnach/gct),
@@ -68,7 +69,7 @@ export function cleanGameName(gamePath) {
 // Busca online via Rust (evita CORS + parseia .cht). Retorna [{desc, code}].
 export async function fetchOnlineCheats(systemId, gamePath) {
   const folder = cheatDbFolder(systemId);
-  if (!folder) throw new Error("Sistema sem base de cheats online — adicione manualmente.");
+  if (!folder) throw new Error(t("Sistema sem base de cheats online — adicione manualmente."));
   const name = cleanGameName(gamePath);
   return await invoke("fetch_cheats", { dbFolder: folder, gameName: name });
 }

@@ -1900,7 +1900,7 @@ function FolderPickerModal({ onClose, onPick, mode = "folder", title }) {
             {crumbs.length === 0 ? <span className="lmx-fb-crumb">/</span> : crumbs.map((c, i) => (
               <span key={c.path} className="lmx-fb-crumb-wrap">
                 {i > 0 && <span className="lmx-fb-sep">/</span>}
-                <button className="lmx-fb-crumb" onClick={() => load(c.path)}>{c.label}</button>
+                <button className="lmx-fb-crumb" onClick={() => load(c.path)}>{t(c.label)}</button>
               </span>
             ))}
           </div>
@@ -3492,8 +3492,8 @@ function AchievementsCard() {
                 </svg>
               </div>
               <div className="lmx-ach-info">
-                <div className="lmx-ach-name">{a.name}</div>
-                <div className="lmx-ach-desc">{a.desc}</div>
+                <div className="lmx-ach-name">{t(a.name)}</div>
+                <div className="lmx-ach-desc">{t(a.desc)}</div>
               </div>
             </div>
           );

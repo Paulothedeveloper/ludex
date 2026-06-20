@@ -72,7 +72,7 @@ export default function LudexLicenseGate({ onLicensed, reason }) {
         setOskOpen(false);
       }
     } catch (e) {
-      setErr("Nao consegui ler o clipboard. Cola manualmente com Ctrl+V no campo.");
+      setErr(t("Nao consegui ler o clipboard. Cola manualmente com Ctrl+V no campo."));
     }
   }
 
@@ -105,9 +105,7 @@ export default function LudexLicenseGate({ onLicensed, reason }) {
             color: "#fde68a", borderRadius: 10, padding: "10px 12px", fontSize: 13,
             lineHeight: 1.45, margin: "0 0 14px 0",
           }}>
-            Você já ativou o Ludex aqui, mas não consegui revalidar a licença (parece
-            que ficou muito tempo sem internet). Reconecte e clique em <b>Ativar</b> com
-            a <b>mesma chave</b> — seus jogos e perfis continuam salvos.
+            {t("Você já ativou o Ludex aqui, mas não consegui revalidar a licença (parece que ficou muito tempo sem internet). Reconecte e clique em")} <b>{t("Ativar")}</b> {t("com a")} <b>{t("mesma chave")}</b> {t("— seus jogos e perfis continuam salvos.")}
           </p>
         )}
 
@@ -163,7 +161,7 @@ export default function LudexLicenseGate({ onLicensed, reason }) {
 
       {oskOpen && (
         <VirtualKeyboard
-          label="License key"
+          label={t("License key")}
           value={key}
           maxLength={64}
           placeholder="XXXX-XXXX-XXXX-XXXX"
