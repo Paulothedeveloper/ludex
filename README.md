@@ -84,3 +84,12 @@ Roda o `.exe` e segue as instruções (pede admin pra instalar em `C:\Program Fi
 ## 📜 Licença
 
 Código MIT. Cores libretro mantêm suas próprias licenças. Logos/marcas dos consoles são propriedade dos respectivos donos — uso aqui é apenas referencial.
+
+
+---
+
+<div align="center">
+
+📧 [paulothedeveloper@protonmail.com](mailto:paulothedeveloper@protonmail.com) · 📸 [Instagram](https://instagram.com/) · 💼 [LinkedIn](https://linkedin.com/) · 🐙 [github.com/Paulothedeveloper](https://github.com/Paulothedeveloper)
+
+</div>
