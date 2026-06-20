@@ -767,7 +767,7 @@ function SplashScreen({ profileName }) {
 
       {/* Conteudo central: logo + tagline + barra. Mais respiro entre eles. */}
       <div className="pb-splash-content lx-splash-content-v3">
-        <div className="pb-splash-logo lx-splash-logo-v2">L U D E X</div>
+        <div className="pb-splash-logo lx-splash-logo-v2"><img src="/ludex-wordmark.png" alt="Ludex" style={{ width: "min(440px, 62vw)", height: "auto", display: "block", margin: "0 auto" }} /></div>
         <div className="pb-splash-tagline">{t("SUA BIBLIOTECA RETRO EM UM LUGAR SO")}</div>
         {profileName && <div className="pb-splash-welcome">{t("Bem-vindo, {name}", { name: profileName })}</div>}
         <div className="pb-splash-bar"><div className="pb-splash-bar-fill" /></div>
@@ -3695,7 +3695,7 @@ export default function LudexLauncher() {
           </button>
 
           <div className="lx-mobile-title-wrap">
-            <div className="lx-mobile-brand">LUDEX</div>
+            <div className="lx-mobile-brand"><img src="/ludex-wordmark.png" alt="Ludex" style={{ height: "26px", width: "auto", display: "block" }} /></div>
             {selected && (
               <button
                 className="lx-mobile-system-chip"

@@ -94,7 +94,7 @@ export default function LudexLicenseGate({ onLicensed, reason }) {
               }}>{lng.flag}</button>
           ))}
         </div>
-        <div className="lx-licgate-logo">L U D E X</div>
+        <div className="lx-licgate-logo"><img src="/ludex-wordmark.png" alt="Ludex" style={{ width: "min(320px, 78%)", height: "auto", display: "block", margin: "0 auto" }} /></div>
         <p className="lx-licgate-sub">{t("Sua biblioteca retro em um lugar só")}</p>
 
         <div className="lx-licgate-divider" />

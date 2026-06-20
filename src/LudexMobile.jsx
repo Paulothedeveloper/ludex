@@ -137,7 +137,7 @@ function saveSystemFolder(systemId, path) {
 function MobileSplash() {
   return (
     <div className="lmx-splash">
-      <div className="lmx-splash-word">LUDEX</div>
+      <div className="lmx-splash-word"><img src="/ludex-wordmark.png" alt="Ludex" style={{ width: "min(280px, 66vw)", height: "auto", display: "block" }} /></div>
       <div className="lmx-splash-bar"><span /></div>
     </div>
   );
