@@ -46,7 +46,7 @@ export function WhatsNewModal({ data, onClose }) {
             <div key={e.version}>
               {multi && <div style={S.verLabel}>v{e.version}</div>}
               {e.items.map((it, i) => (
-                <div key={i} style={S.item}><span style={S.dot} /><span>{it}</span></div>
+                <div key={i} style={S.item}><span style={S.dot} /><span>{t(it)}</span></div>
               ))}
             </div>
           ))}

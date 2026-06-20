@@ -12,7 +12,7 @@ import "./LudexLauncher.css";
 import LudexOnboarding, { DEFAULT_AVATARS, avatarUrl, getProfileAvatarUrl } from "./LudexOnboarding";
 import LudexLicenseGate from "./LudexLicenseGate";
 import { lxConfirm, lxAlert } from "./LudexDialog";
-import { t } from "./ludexI18n";
+import { t, currentLocale } from "./ludexI18n";
 import LudexAdminPanel from "./LudexAdminPanel";
 import {
   EmptyStateSystem, SuggestionsModal, ControlsTipModal,
@@ -208,7 +208,7 @@ function useClock() {
     const id = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
-  return time.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return time.toLocaleTimeString(currentLocale(), { hour: "2-digit", minute: "2-digit" });
 }
 
 function genId() {
@@ -442,12 +442,12 @@ const ACHIEVEMENTS = [
 function formatRelativeDays(unixSec) {
   if (!unixSec) return "";
   const diff = Date.now() / 1000 - unixSec;
-  if (diff < 3600) return "agora ha pouco";
-  if (diff < 86400) return `ha ${Math.floor(diff / 3600)}h`;
-  if (diff < 86400 * 7) return `ha ${Math.floor(diff / 86400)}d`;
-  if (diff < 86400 * 30) return `ha ${Math.floor(diff / (86400 * 7))}sem`;
-  if (diff < 86400 * 365) return `ha ${Math.floor(diff / (86400 * 30))}m`;
-  return `ha ${Math.floor(diff / (86400 * 365))}a`;
+  if (diff < 3600) return t("agora ha pouco");
+  if (diff < 86400) return t("ha {n}h", { n: Math.floor(diff / 3600) });
+  if (diff < 86400 * 7) return t("ha {n}d", { n: Math.floor(diff / 86400) });
+  if (diff < 86400 * 30) return t("ha {n}sem", { n: Math.floor(diff / (86400 * 7)) });
+  if (diff < 86400 * 365) return t("ha {n}m", { n: Math.floor(diff / (86400 * 30)) });
+  return t("ha {n}a", { n: Math.floor(diff / (86400 * 365)) });
 }
 
 // v0.8.50: Icones extraidos pra ludexIcons.jsx (230L removidas daqui).
@@ -460,7 +460,7 @@ function ContinueBanner({ lastPlayed, system, coverSrc, onResume }) {
       <div className="pb-continue-overlay" />
       <div className="pb-continue-content">
         <div className="pb-continue-label">
-          <PlayIcon /> CONTINUAR ONDE PAROU
+          <PlayIcon /> {t("CONTINUAR ONDE PAROU")}
         </div>
         <div className="pb-continue-title">{lastPlayed.rom_name}</div>
         <div className="pb-continue-system">
@@ -508,38 +508,38 @@ function LicenseSettingsSection() {
     try {
       const remote = await invoke("license_validate");
       setInfo(remote);
-      setMsg({ kind: "ok", text: "Licença revalidada com sucesso" });
+      setMsg({ kind: "ok", text: t("Licença revalidada com sucesso") });
     } catch (e) {
       // v0.9.39: distingue rede de outros erros; não mostra erro técnico cru.
       const low = String(e).toLowerCase();
       const net = /sending request|conex|timeout|connect|offline|dns|resolve/.test(low);
       setMsg({ kind: "error", text: net
-        ? "Sem internet — não consegui revalidar agora. Reconecte e tente de novo."
-        : "Não consegui revalidar a licença. Tente de novo em alguns minutos." });
+        ? t("Sem internet — não consegui revalidar agora. Reconecte e tente de novo.")
+        : t("Não consegui revalidar a licença. Tente de novo em alguns minutos.") });
     } finally { setBusy(false); }
   }
 
   async function deactivate() {
-    if (!await lxConfirm("Desativar este PC libera 1 slot da sua license. Você precisará colar a key de novo se quiser usar o Ludex aqui. Confirmar?", { title: "Desativar este PC", okText: "Desativar", danger: true })) return;
+    if (!await lxConfirm(t("Desativar este PC libera 1 slot da sua license. Você precisará colar a key de novo se quiser usar o Ludex aqui. Confirmar?"), { title: t("Desativar este PC"), okText: t("Desativar"), danger: true })) return;
     setBusy(true); setMsg(null);
     try {
       await invoke("license_deactivate");
-      setMsg({ kind: "ok", text: "PC desativado. Recarregando..." });
+      setMsg({ kind: "ok", text: t("PC desativado. Recarregando...") });
       setTimeout(() => window.location.reload(), 1000);
     } catch (e) {
       const low = String(e).toLowerCase();
       const net = /sending request|conex|timeout|connect|offline|dns|resolve/.test(low);
       setMsg({ kind: "error", text: net
-        ? "Sem internet — não consegui desativar agora. Reconecte e tente de novo."
-        : (low.includes("limite") ? String(e) : "Não consegui desativar este PC. Tente de novo em alguns minutos.") });
+        ? t("Sem internet — não consegui desativar agora. Reconecte e tente de novo.")
+        : (low.includes("limite") ? String(e) : t("Não consegui desativar este PC. Tente de novo em alguns minutos.")) });
     } finally { setBusy(false); }
   }
 
   if (!info) {
     return (
       <div className="pb-settings-section">
-        <h3>Licença</h3>
-        <p className="pb-settings-hint">Build de desenvolvimento — sistema de licença desabilitado.</p>
+        <h3>{t("Licença")}</h3>
+        <p className="pb-settings-hint">{t("Build de desenvolvimento — sistema de licença desabilitado.")}</p>
       </div>
     );
   }
@@ -550,37 +550,37 @@ function LicenseSettingsSection() {
 
   return (
     <div className="pb-settings-section">
-      <h3>Licença</h3>
+      <h3>{t("Licença")}</h3>
       <div className="pb-version-line">
-        <span className="pb-version-label">Status:</span>
+        <span className="pb-version-label">{t("Status:")}</span>
         <strong style={{ color: info.valid ? "#86efac" : "#fca5a5" }}>
-          {info.valid ? "Ativa" : "Expirada"}
+          {info.valid ? t("Ativa") : t("Expirada")}
         </strong>
       </div>
       <div className="pb-version-line">
-        <span className="pb-version-label">PCs ativados:</span>
-        <strong>{info.uses} de {info.max_uses}</strong>
+        <span className="pb-version-label">{t("PCs ativados:")}</span>
+        <strong>{t("{used} de {max}", { used: info.uses, max: info.max_uses })}</strong>
       </div>
       <div className="pb-version-line">
-        <span className="pb-version-label">Última validação:</span>
-        <strong>{ageDays === "—" ? "—" : `há ${ageDays} dias`}</strong>
+        <span className="pb-version-label">{t("Última validação:")}</span>
+        <strong>{ageDays === "—" ? "—" : t("há {n} dias", { n: ageDays })}</strong>
       </div>
       {info.buyer_email && (
         <div className="pb-version-line">
-          <span className="pb-version-label">Comprado por:</span>
+          <span className="pb-version-label">{t("Comprado por:")}</span>
           <strong style={{ fontSize: 12 }}>{info.buyer_email}</strong>
         </div>
       )}
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
         <button className="pb-settings-btn" onClick={revalidate} disabled={busy}>
-          {busy ? "..." : "Revalidar agora"}
+          {busy ? "..." : t("Revalidar agora")}
         </button>
         <button
           className="pb-settings-btn pb-settings-btn-danger"
           onClick={deactivate}
           disabled={busy}
         >
-          Desativar este PC
+          {t("Desativar este PC")}
         </button>
         {isAdmin && (
           <button
@@ -588,7 +588,7 @@ function LicenseSettingsSection() {
             style={{ background: "linear-gradient(135deg, #c4b5fd 0%, #ec4899 100%)", color: "#0a0814", fontWeight: 700 }}
             onClick={() => setShowAdmin(true)}
           >
-            Painel Admin
+            {t("Painel Admin")}
           </button>
         )}
       </div>
@@ -599,7 +599,7 @@ function LicenseSettingsSection() {
         </p>
       )}
       <p className="pb-settings-hint" style={{ marginTop: 6 }}>
-        License vitalícia, funciona em até {info.max_uses} PCs. Re-validação automática 1x por semana. Modo offline funciona até 30 dias sem internet.
+        {t("License vitalícia, funciona em até {max} PCs. Re-validação automática 1x por semana. Modo offline funciona até 30 dias sem internet.", { max: info.max_uses })}
       </p>
     </div>
   );
@@ -609,13 +609,13 @@ function LicenseSettingsSection() {
 // Ex: "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02e0)"
 //   -> "Xbox Wireless Controller"
 function friendlyPadName(id) {
-  if (!id) return "Controle";
+  if (!id) return t("Controle");
   // Remove sufixos tipicos do Windows W3C Gamepad
   let s = String(id);
   // Remove "(STANDARD GAMEPAD ...)" / "(Vendor: ... Product: ...)" / "(XInput STANDARD ...)"
   s = s.replace(/\s*\((?:STANDARD\s+GAMEPAD|Vendor:|XInput\s+STANDARD).*$/i, "");
   s = s.trim();
-  if (!s) return "Controle";
+  if (!s) return t("Controle");
   // Conhecidos: encurta strings longas
   const lower = s.toLowerCase();
   if (lower.includes("xbox")) return "Xbox Controller";
@@ -639,12 +639,12 @@ function GamepadStatusToast({ event, onDone }) {
       <div className="pb-gamepad-toast-icon"><GamepadIcon /></div>
       <div className="pb-gamepad-toast-text">
         <div className="pb-gamepad-toast-label">
-          {connected ? "CONTROLE CONECTADO" : "CONTROLE DESCONECTADO"}
+          {connected ? t("CONTROLE CONECTADO") : t("CONTROLE DESCONECTADO")}
         </div>
         <div className="pb-gamepad-toast-name">{event.name}</div>
         {!connected && (
           <div className="pb-gamepad-toast-hint">
-            Verifique cabo USB ou bateria do Bluetooth
+            {t("Verifique cabo USB ou bateria do Bluetooth")}
           </div>
         )}
       </div>
@@ -666,7 +666,7 @@ function AchievementToast({ achievement, onDone }) {
     <div className="pb-achievement">
       <div className="pb-achievement-icon"><StarIcon filled /></div>
       <div className="pb-achievement-text">
-        <div className="pb-achievement-label">CONQUISTA DESBLOQUEADA</div>
+        <div className="pb-achievement-label">{t("CONQUISTA DESBLOQUEADA")}</div>
         <div className="pb-achievement-name">{achievement.name}</div>
         <div className="pb-achievement-desc">{achievement.desc}</div>
       </div>
@@ -768,8 +768,8 @@ function SplashScreen({ profileName }) {
       {/* Conteudo central: logo + tagline + barra. Mais respiro entre eles. */}
       <div className="pb-splash-content lx-splash-content-v3">
         <div className="pb-splash-logo lx-splash-logo-v2">L U D E X</div>
-        <div className="pb-splash-tagline">SUA BIBLIOTECA RETRO EM UM LUGAR SO</div>
-        {profileName && <div className="pb-splash-welcome">Bem-vindo, {profileName}</div>}
+        <div className="pb-splash-tagline">{t("SUA BIBLIOTECA RETRO EM UM LUGAR SO")}</div>
+        {profileName && <div className="pb-splash-welcome">{t("Bem-vindo, {name}", { name: profileName })}</div>}
         <div className="pb-splash-bar"><div className="pb-splash-bar-fill" /></div>
       </div>
     </div>
@@ -854,10 +854,10 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
 
   const isFormMode = mode === "create" || mode?.mode === "edit";
   const headerTitle = mode === "create"
-    ? "Novo Perfil"
+    ? t("Novo Perfil")
     : mode?.mode === "edit"
-      ? "Editar Perfil"
-      : "Quem está jogando?";
+      ? t("Editar Perfil")
+      : t("Quem está jogando?");
 
   // Preview da foto atual no modo edit (se não escolheu nova e não marcou pra remover)
   const currentPhotoSrc = editingProfile && !clearPhoto && !photoPath && editingProfile.photo_path
@@ -936,12 +936,12 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
                 <button
                   className="pb-profile-edit"
                   onClick={() => { sfx.click(); startEdit(p); }}
-                  title="Editar perfil"
+                  title={t("Editar perfil")}
                 >
                   <EditIcon />
                 </button>
                 {profiles.length > 1 && (
-                  <button className="pb-profile-del" onClick={() => { sfx.back(); onDelete(p.id); }} title="Deletar perfil">
+                  <button className="pb-profile-del" onClick={() => { sfx.back(); onDelete(p.id); }} title={t("Deletar perfil")}>
                     <TrashIcon />
                   </button>
                 )}
@@ -949,7 +949,7 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
             ))}
             <button className={`pb-profile-card pb-profile-add ${focusedIdx === profiles.length ? "focused" : ""}`} onClick={() => { sfx.click(); startCreate(); }}>
               <div className="pb-profile-avatar pb-profile-avatar-add"><PlusIcon /></div>
-              <div className="pb-profile-name">Novo Perfil</div>
+              <div className="pb-profile-name">{t("Novo Perfil")}</div>
             </button>
           </div>
         ) : (
@@ -967,7 +967,7 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
                 className="pb-btn pb-btn-ghost pb-btn-sm"
                 onClick={() => { setPhotoPath(null); setClearPhoto(true); }}
               >
-                Remover foto e usar avatar
+                {t("Remover foto e usar avatar")}
               </button>
             )}
             {photoErr && <div className="pb-warn">{photoErr}</div>}
@@ -982,7 +982,7 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
                       key={av.id}
                       type="button"
                       className={`lx-avatar-tile ${selected ? "selected" : ""}`}
-                      title={av.label}
+                      title={t(av.label)}
                       onClick={() => { sfx.click(); setAvatarId(av.id); }}
                     >
                       <img src={avatarUrl(av)} alt={av.label} />
@@ -993,9 +993,9 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
                   type="button"
                   className="lx-avatar-tile lx-avatar-custom"
                   onClick={pickPhoto}
-                  title="Usar foto do PC"
+                  title={t("Usar foto do PC")}
                 >
-                  <span>+ Foto</span>
+                  <span>{t("+ Foto")}</span>
                 </button>
               </div>
             )}
@@ -1003,7 +1003,7 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
             <input
               type="text"
               className="pb-input"
-              placeholder="Nome do perfil"
+              placeholder={t("Nome do perfil")}
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={30}
@@ -1011,10 +1011,10 @@ function ProfileSelector({ profiles, activeId, onSelect, onCreate, onDelete, onU
             />
             <div className="pb-modal-actions">
               <button className="pb-btn pb-btn-ghost" onClick={() => { sfx.back(); backToList(); }}>
-                Cancelar
+                {t("Cancelar")}
               </button>
               <button className="pb-btn pb-btn-primary" disabled={!name.trim()} onClick={() => { sfx.confirm(); submit(); }}>
-                {mode === "create" ? "Criar" : "Salvar"}
+                {mode === "create" ? t("Criar") : t("Salvar")}
               </button>
             </div>
           </div>
@@ -1054,34 +1054,34 @@ function GamepadDebugOverlay({ onClose }) {
   return (
     <div className="pb-gamepad-debug" onClick={(e) => e.stopPropagation()}>
       <header className="pb-gamepad-debug-header">
-        <strong>Diagnostico de Controle</strong>
-        <button className="pb-icon-btn" onClick={onClose} title="Fechar (F2)"><CloseIcon /></button>
+        <strong>{t("Diagnostico de Controle")}</strong>
+        <button className="pb-icon-btn" onClick={onClose} title={t("Fechar (F2)")}><CloseIcon /></button>
       </header>
       <div className="pb-gamepad-debug-body">
         {!snap || snap.pads.length === 0 ? (
           <div className="pb-gamepad-debug-empty">
-            Nenhum controle detectado. Aperte qualquer botão do controle pra acordar.
+            {t("Nenhum controle detectado. Aperte qualquer botão do controle pra acordar.")}
           </div>
         ) : snap.pads.map((p) => (
           <div key={p.index} className="pb-gamepad-debug-pad">
             <div className="pb-gamepad-debug-id">
-              <strong>Slot {p.index}:</strong> {p.id}
+              <strong>{t("Slot {n}:", { n: p.index })}</strong> {p.id}
             </div>
             <div className="pb-gamepad-debug-meta">
-              mapping: <code>{p.mapping}</code> {p.mapping !== "standard" && <span style={{color:"#f87171"}}>(NAO PADRAO — use modo XInput)</span>}
-              {" · "}botões: {p.buttons.length} · eixos: {p.axes.length}
+              {t("mapping:")} <code>{p.mapping}</code> {p.mapping !== "standard" && <span style={{color:"#f87171"}}>{t("(NAO PADRAO — use modo XInput)")}</span>}
+              {" · "}{t("botões: {b} · eixos: {a}", { b: p.buttons.length, a: p.axes.length })}
             </div>
             <div className="pb-gamepad-debug-section">
-              <div className="pb-gamepad-debug-label">Botoes pressionados:</div>
+              <div className="pb-gamepad-debug-label">{t("Botoes pressionados:")}</div>
               <div className="pb-gamepad-debug-buttons">
-                {p.buttons.filter((b) => b.p).length === 0 && <span style={{color:"#6b7280"}}>(nenhum)</span>}
+                {p.buttons.filter((b) => b.p).length === 0 && <span style={{color:"#6b7280"}}>{t("(nenhum)")}</span>}
                 {p.buttons.filter((b) => b.p).map((b) => (
                   <span key={b.i} className="pb-gamepad-debug-btn-on">btn{b.i}</span>
                 ))}
               </div>
             </div>
             <div className="pb-gamepad-debug-section">
-              <div className="pb-gamepad-debug-label">Eixos:</div>
+              <div className="pb-gamepad-debug-label">{t("Eixos:")}</div>
               <div className="pb-gamepad-debug-axes">
                 {p.axes.map((a) => (
                   <div key={a.i} className={`pb-gamepad-debug-axis ${Math.abs(a.v) > 0.2 ? "active" : ""}`}>
@@ -1094,8 +1094,8 @@ function GamepadDebugOverlay({ onClose }) {
           </div>
         ))}
         <div className="pb-gamepad-debug-help">
-          <strong>GameSir T4n Lite:</strong> aperte <kbd>HOME + Y</kbd> por 3s pra entrar em modo XInput (Windows).<br />
-          Outros modos: HOME+A=Android · HOME+B=iOS · HOME+X=Switch · <strong>HOME+Y=Windows/XInput</strong>
+          <strong>GameSir T4n Lite:</strong> {t("aperte")} <kbd>HOME + Y</kbd> {t("por 3s pra entrar em modo XInput (Windows).")}<br />
+          {t("Outros modos: HOME+A=Android · HOME+B=iOS · HOME+X=Switch ·")} <strong>HOME+Y=Windows/XInput</strong>
         </div>
       </div>
     </div>
@@ -1137,23 +1137,23 @@ function HealthCheckModal({ onClose }) {
     <div className="pb-modal-backdrop" onClick={onClose}>
       <div className="pb-modal pb-health-modal" onClick={(e) => e.stopPropagation()}>
         <header className="pb-modal-header">
-          <h2><ShieldIcon /> Health Check dos Emuladores</h2>
+          <h2><ShieldIcon /> {t("Health Check dos Emuladores")}</h2>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="pb-icon-btn" onClick={load} title="Re-verificar" disabled={loading}><RefreshIcon /></button>
+            <button className="pb-icon-btn" onClick={load} title={t("Re-verificar")} disabled={loading}><RefreshIcon /></button>
             <button className="pb-icon-btn" onClick={onClose}><CloseIcon /></button>
           </div>
         </header>
 
         {summary && (
           <div className="pb-health-summary">
-            <span className="pb-health-badge pb-health-ok">{summary.ok} OK</span>
-            <span className="pb-health-badge pb-health-warn">{summary.warn} avisos</span>
-            <span className="pb-health-badge pb-health-error">{summary.error} erros</span>
+            <span className="pb-health-badge pb-health-ok">{t("{n} OK", { n: summary.ok })}</span>
+            <span className="pb-health-badge pb-health-warn">{t("{n} avisos", { n: summary.warn })}</span>
+            <span className="pb-health-badge pb-health-error">{t("{n} erros", { n: summary.error })}</span>
           </div>
         )}
 
         <div className="pb-health-list">
-          {loading && <div className="pb-health-loading">Verificando todos os emuladores...</div>}
+          {loading && <div className="pb-health-loading">{t("Verificando todos os emuladores...")}</div>}
           {items && items.map((s) => (
             <div key={s.system_id} className={`pb-health-item pb-health-${s.status}`}>
               <div className="pb-health-head">
@@ -1161,7 +1161,7 @@ function HealthCheckModal({ onClose }) {
                   {s.status === "ok" ? "✓" : s.status === "warn" ? "⚠" : "✕"}
                 </span>
                 <strong className="pb-health-name">{s.system_name}</strong>
-                <span className="pb-health-rom-count">{s.rom_count} ROMs</span>
+                <span className="pb-health-rom-count">{t("{n} ROMs", { n: s.rom_count })}</span>
               </div>
               {s.checks_ok.length > 0 && (
                 <ul className="pb-health-checks pb-health-checks-ok">
@@ -1183,17 +1183,17 @@ function HealthCheckModal({ onClose }) {
 }
 
 function LogsViewerModal({ onClose }) {
-  const [text, setText] = useState("Carregando...");
+  const [text, setText] = useState(t("Carregando..."));
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("all"); // all | error | warn | info
   const [autoRefresh, setAutoRefresh] = useState(false);
   const load = useCallback(async () => {
     setBusy(true);
     try {
-      const t = await invoke("read_app_logs", { maxLines: 500 });
-      setText(t || "(vazio)");
+      const logTxt = await invoke("read_app_logs", { maxLines: 500 });
+      setText(logTxt || t("(vazio)"));
     } catch (e) {
-      setText(`Erro ao ler log: ${e}`);
+      setText(t("Erro ao ler log: {err}", { err: e }));
     } finally {
       setBusy(false);
     }
@@ -1208,7 +1208,7 @@ function LogsViewerModal({ onClose }) {
   const filtered = useMemo(() => {
     if (filter === "all") return text;
     const want = filter.toUpperCase();
-    return text.split("\n").filter((l) => l.includes(`[${want}]`) || l.toUpperCase().includes(` ${want} `)).join("\n") || "(nada com este filtro)";
+    return text.split("\n").filter((l) => l.includes(`[${want}]`) || l.toUpperCase().includes(` ${want} `)).join("\n") || t("(nada com este filtro)");
   }, [text, filter]);
 
   const counts = useMemo(() => {
@@ -1231,7 +1231,7 @@ function LogsViewerModal({ onClose }) {
   }, []);
 
   const clearLogs = useCallback(async () => {
-    if (!await lxConfirm("Apagar todos os arquivos de log?", { title: "Apagar logs", okText: "Apagar", danger: true })) return;
+    if (!await lxConfirm(t("Apagar todos os arquivos de log?"), { title: t("Apagar logs"), okText: t("Apagar"), danger: true })) return;
     try {
       await invoke("clear_app_logs");
       load();
@@ -1244,19 +1244,19 @@ function LogsViewerModal({ onClose }) {
     <div className="pb-modal-backdrop" onClick={onClose}>
       <div className="pb-modal pb-logs-modal" onClick={(e) => e.stopPropagation()}>
         <header className="pb-modal-header">
-          <h2>Logs do Ludex</h2>
+          <h2>{t("Logs do Ludex")}</h2>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="pb-icon-btn" onClick={load} title="Recarregar" disabled={busy}><RefreshIcon /></button>
+            <button className="pb-icon-btn" onClick={load} title={t("Recarregar")} disabled={busy}><RefreshIcon /></button>
             <button className="pb-icon-btn" onClick={onClose}><CloseIcon /></button>
           </div>
         </header>
         <div className="pb-logs-toolbar">
           <div className="pb-logs-filters">
             {[
-              { id: "all",   label: `Todos (${text.split("\n").length})` },
-              { id: "error", label: `Erros (${counts.error})` },
-              { id: "warn",  label: `Avisos (${counts.warn})` },
-              { id: "info",  label: `Info (${counts.info})` },
+              { id: "all",   label: t("Todos ({n})", { n: text.split("\n").length }) },
+              { id: "error", label: t("Erros ({n})", { n: counts.error }) },
+              { id: "warn",  label: t("Avisos ({n})", { n: counts.warn }) },
+              { id: "info",  label: t("Info ({n})", { n: counts.info }) },
             ].map((f) => (
               <button
                 key={f.id}
@@ -1268,10 +1268,10 @@ function LogsViewerModal({ onClose }) {
           <div className="pb-logs-actions">
             <label className="pb-logs-toggle">
               <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
-              Auto-refresh 2s
+              {t("Auto-refresh 2s")}
             </label>
-            <button className="pb-btn pb-btn-small" onClick={openLogDir}>Abrir pasta</button>
-            <button className="pb-btn pb-btn-small pb-btn-danger" onClick={clearLogs}>Limpar</button>
+            <button className="pb-btn pb-btn-small" onClick={openLogDir}>{t("Abrir pasta")}</button>
+            <button className="pb-btn pb-btn-small pb-btn-danger" onClick={clearLogs}>{t("Limpar")}</button>
           </div>
         </div>
         <pre className="pb-logs-content">{filtered}</pre>
@@ -1321,7 +1321,7 @@ function TopPlayedList({ playTime, sessions, systems }) {
   return (
     <div className="pb-top-played" style={{ marginTop: 14 }}>
       <h4 style={{ margin: "0 0 10px", fontSize: 13, opacity: 0.7, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
-        Top jogos por tempo
+        {t("Top jogos por tempo")}
       </h4>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {top.map((g, i) => {
@@ -1375,42 +1375,42 @@ function CollectionStats({ gameMeta, systems }) {
       <div className="pb-coll-row">
         <div className="pb-coll-card pb-coll-card-total">
           <strong>{totalGames}</strong>
-          <span>jogos na coleção</span>
+          <span>{t("jogos na coleção")}</span>
         </div>
         <div className="pb-coll-card">
           <strong>{completionRate}%</strong>
-          <span>completion rate</span>
+          <span>{t("completion rate")}</span>
         </div>
         <div className="pb-coll-card">
           <strong>{avgRating > 0 ? avgRating.toFixed(1) : "—"}<small>{avgRating > 0 ? " ★" : ""}</small></strong>
-          <span>nota média ({ratedCount} avaliados)</span>
+          <span>{t("nota média ({n} avaliados)", { n: ratedCount })}</span>
         </div>
       </div>
       <div className="pb-coll-status-grid">
         <div className="pb-coll-status pb-coll-status-wishlist">
           <span className="pb-coll-status-icon">{GAME_STATUS_EMOJI.wishlist}</span>
           <strong>{counts.wishlist}</strong>
-          <span>quero jogar</span>
+          <span>{t("quero jogar")}</span>
         </div>
         <div className="pb-coll-status pb-coll-status-playing">
           <span className="pb-coll-status-icon">{GAME_STATUS_EMOJI.playing}</span>
           <strong>{counts.playing}</strong>
-          <span>jogando</span>
+          <span>{t("jogando")}</span>
         </div>
         <div className="pb-coll-status pb-coll-status-beat">
           <span className="pb-coll-status-icon">{GAME_STATUS_EMOJI.beat}</span>
           <strong>{counts.beat}</strong>
-          <span>zerei</span>
+          <span>{t("zerei")}</span>
         </div>
         <div className="pb-coll-status pb-coll-status-mastered">
           <span className="pb-coll-status-icon">{GAME_STATUS_EMOJI.mastered}</span>
           <strong>{counts.mastered}</strong>
-          <span>platinei</span>
+          <span>{t("platinei")}</span>
         </div>
         <div className="pb-coll-status pb-coll-status-abandoned">
           <span className="pb-coll-status-icon">{GAME_STATUS_EMOJI.abandoned}</span>
           <strong>{counts.abandoned}</strong>
-          <span>abandonei</span>
+          <span>{t("abandonei")}</span>
         </div>
       </div>
     </div>
@@ -1425,7 +1425,7 @@ function SessionsGraph({ sessions }) {
     now.setHours(0, 0, 0, 0);
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now.getTime() - i * 86400000);
-      const label = d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
+      const label = d.toLocaleDateString(currentLocale(), { weekday: "short" }).replace(".", "");
       out.push({ date: d, label, total: 0 });
     }
     for (const s of sessions || []) {
@@ -1444,7 +1444,7 @@ function SessionsGraph({ sessions }) {
     <div className="pb-sessions-graph">
       <div className="pb-sessions-summary">
         <strong>{formatPlayTime(totalWeek)}</strong>
-        <span>nos últimos 7 dias</span>
+        <span>{t("nos últimos 7 dias")}</span>
       </div>
       <div className="pb-sessions-bars">
         {days.map((d, i) => {
@@ -1472,12 +1472,12 @@ function SessionsGraph({ sessions }) {
 
 function CustomThemeEditor({ theme, onChange }) {
   const fields = [
-    { key: "bg",      label: "Fundo" },
-    { key: "surface", label: "Superfície" },
-    { key: "card",    label: "Card" },
-    { key: "text",    label: "Texto" },
-    { key: "muted",   label: "Texto Secundário" },
-    { key: "border",  label: "Borda" },
+    { key: "bg",      label: t("Fundo") },
+    { key: "surface", label: t("Superfície") },
+    { key: "card",    label: t("Card") },
+    { key: "text",    label: t("Texto") },
+    { key: "muted",   label: t("Texto Secundário") },
+    { key: "border",  label: t("Borda") },
   ];
   return (
     <div className="pb-custom-theme">
@@ -1493,7 +1493,7 @@ function CustomThemeEditor({ theme, onChange }) {
           <code className="pb-custom-theme-code">{theme[f.key]}</code>
         </label>
       ))}
-      <p className="pb-settings-hint">Aplica em tempo real. Salvo automaticamente.</p>
+      <p className="pb-settings-hint">{t("Aplica em tempo real. Salvo automaticamente.")}</p>
     </div>
   );
 }
@@ -1503,7 +1503,7 @@ function DiscPickerModal({ system, game, onCancel, onPick }) {
     <div className="pb-modal-backdrop" onClick={onCancel}>
       <div className="pb-modal pb-disc-modal" onClick={(e) => e.stopPropagation()}>
         <header className="pb-modal-header">
-          <h2>Escolher disco</h2>
+          <h2>{t("Escolher disco")}</h2>
           <button className="pb-icon-btn" onClick={onCancel}><CloseIcon /></button>
         </header>
         <div className="pb-disc-body">
@@ -1647,7 +1647,7 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
               ref={videoRef}
               className="pb-preview-video"
               src={`https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&playsinline=1&loop=1&playlist=${youtubeId}&enablejsapi=1`}
-              title="Game trailer"
+              title={t("Game trailer")}
               frameBorder="0"
               allow="autoplay; encrypted-media; picture-in-picture"
               referrerPolicy="strict-origin-when-cross-origin"
@@ -1662,7 +1662,7 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
           {loading && (
             <div className="pb-preview-shot-loading">
               <div className="pb-preview-spinner" aria-hidden />
-              <span>Carregando preview...</span>
+              <span>{t("Carregando preview...")}</span>
             </div>
           )}
           <div className="pb-preview-shot-overlay" />
@@ -1670,12 +1670,12 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
             <button
               className="pb-preview-mute"
               onClick={(e) => { e.stopPropagation(); toggleMute(); }}
-              title={videoMuted ? "Ativar som" : "Mutar"}
+              title={videoMuted ? t("Ativar som") : t("Mutar")}
             >
               {videoMuted ? <SpeakerMuteIcon /> : <SpeakerIcon />}
             </button>
           )}
-          <button className="pb-preview-close" onClick={onClose} title="Fechar (Esc)">
+          <button className="pb-preview-close" onClick={onClose} title={t("Fechar (Esc)")}>
             <CloseIcon />
           </button>
         </div>
@@ -1703,7 +1703,7 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
             <div className="pb-preview-meta">
               {details?.first_release_year && <span>{details.first_release_year}</span>}
               {details?.developer && <span>· {details.developer}</span>}
-              {playTimeSec > 0 && <span>· {formatPlayTime(playTimeSec)} jogado</span>}
+              {playTimeSec > 0 && <span>· {t("{time} jogado", { time: formatPlayTime(playTimeSec) })}</span>}
               {!details?.first_release_year && !details?.developer && playTimeSec === 0 && game.size_mb && (
                 <span>{game.size_mb} MB</span>
               )}
@@ -1719,13 +1719,13 @@ function GamePreviewPopup({ system, game, playTimeSec, isFavorite, onClose, onLa
 
         <div className="pb-preview-actions">
           <button className="pb-preview-btn pb-preview-btn-primary" onClick={onLaunch}>
-            <PlayIcon /> <span>Jogar</span>
+            <PlayIcon /> <span>{t("Jogar")}</span>
           </button>
           <button className="pb-preview-btn" onClick={onOpenDetails}>
-            <InfoIcon /> <span>Detalhes</span>
+            <InfoIcon /> <span>{t("Detalhes")}</span>
           </button>
           <button className="pb-preview-btn pb-preview-btn-ghost" onClick={onClose}>
-            <span>Fechar</span>
+            <span>{t("Fechar")}</span>
           </button>
         </div>
       </div>
@@ -1776,28 +1776,28 @@ function GameContextMenu({ x, y, system, game, isFavorite, onClose, onLaunch, on
       </div>
       <div className="pb-ctx-divider" />
       <button className="pb-ctx-item pb-ctx-primary" onClick={onLaunch}>
-        <PlayIcon /> <span>Jogar</span>
+        <PlayIcon /> <span>{t("Jogar")}</span>
       </button>
       <button className="pb-ctx-item" onClick={onShowDetails}>
-        <InfoIcon /> <span>Ver detalhes</span>
+        <InfoIcon /> <span>{t("Ver detalhes")}</span>
       </button>
       <button className="pb-ctx-item" onClick={onToggleFavorite}>
         <StarIcon filled={isFavorite} />
-        <span>{isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}</span>
+        <span>{isFavorite ? t("Remover dos favoritos") : t("Adicionar aos favoritos")}</span>
       </button>
       <div className="pb-ctx-divider" />
       <button className="pb-ctx-item" onClick={onPickCover}>
-        <ImageIcon /> <span>Escolher capa do PC...</span>
+        <ImageIcon /> <span>{t("Escolher capa do PC...")}</span>
       </button>
       <button className="pb-ctx-item" onClick={onResyncCover}>
-        <RotateIcon /> <span>Re-sincronizar capa (IGDB)</span>
+        <RotateIcon /> <span>{t("Re-sincronizar capa (IGDB)")}</span>
       </button>
       <button className="pb-ctx-item" onClick={onOpenLocation}>
-        <FolderIcon /> <span>Abrir local do arquivo</span>
+        <FolderIcon /> <span>{t("Abrir local do arquivo")}</span>
       </button>
       <div className="pb-ctx-divider" />
       <button className="pb-ctx-item pb-ctx-danger" onClick={onDelete}>
-        <TrashIcon /> <span>Excluir do PC (Lixeira)</span>
+        <TrashIcon /> <span>{t("Excluir do PC (Lixeira)")}</span>
       </button>
     </div>
   );
@@ -1808,12 +1808,12 @@ function DeleteConfirmModal({ game, system, onCancel, onConfirm }) {
     <div className="pb-modal-backdrop" onClick={onCancel}>
       <div className="pb-modal pb-confirm-modal" onClick={(e) => e.stopPropagation()}>
         <header className="pb-modal-header">
-          <h2>Excluir do PC</h2>
+          <h2>{t("Excluir do PC")}</h2>
           <button className="pb-icon-btn" onClick={onCancel}><CloseIcon /></button>
         </header>
         <div className="pb-confirm-body">
           <p className="pb-confirm-question">
-            Tem certeza que quer enviar este jogo pra Lixeira do Windows?
+            {t("Tem certeza que quer enviar este jogo pra Lixeira do Windows?")}
           </p>
           <div className="pb-confirm-game">
             <span className="pb-confirm-game-sys" style={{ background: system.color }}>
@@ -1825,11 +1825,11 @@ function DeleteConfirmModal({ game, system, onCancel, onConfirm }) {
             </div>
           </div>
           <p className="pb-confirm-hint">
-            O arquivo (ou pasta-jogo, se for PS3/PS4/Wii U) vai pra Lixeira. Você pode restaurar de lá se mudar de ideia.
+            {t("O arquivo (ou pasta-jogo, se for PS3/PS4/Wii U) vai pra Lixeira. Você pode restaurar de lá se mudar de ideia.")}
           </p>
           <div className="pb-modal-actions">
-            <button className="pb-btn pb-btn-ghost" onClick={onCancel}>Cancelar</button>
-            <button className="pb-btn pb-btn-danger" onClick={onConfirm}>Excluir</button>
+            <button className="pb-btn pb-btn-ghost" onClick={onCancel}>{t("Cancelar")}</button>
+            <button className="pb-btn pb-btn-danger" onClick={onConfirm}>{t("Excluir")}</button>
           </div>
         </div>
       </div>
@@ -1856,10 +1856,10 @@ function AndroidDemoExpired({ demo, onUnlock }) {
       const ok = await invoke("android_demo_admin_unlock", { licenseKey: k });
       if (ok) {
         const newDemo = await invoke("android_demo_status");
-        setMsg({ kind: "ok", text: "Destravado! Carregando..." });
+        setMsg({ kind: "ok", text: t("Destravado! Carregando...") });
         setTimeout(() => onUnlock(newDemo), 800);
       } else {
-        setMsg({ kind: "error", text: "License não destravou (não e admin)" });
+        setMsg({ kind: "error", text: t("License não destravou (não e admin)") });
       }
     } catch (e) {
       setMsg({ kind: "error", text: String(e) });
@@ -1880,13 +1880,12 @@ function AndroidDemoExpired({ demo, onUnlock }) {
             <line x1="32" y1="6" x2="32" y2="14" />
           </svg>
         </div>
-        <h1>Demo expirou</h1>
+        <h1>{t("Demo expirou")}</h1>
         <p className="pb-demo-expired-sub">
-          Voce usou {demo.demo_days_total} dias da versão Android gratuita.
+          {t("Voce usou {n} dias da versão Android gratuita.", { n: demo.demo_days_total })}
         </p>
         <p className="pb-demo-expired-pitch">
-          Pra continuar sem limite, compra a versão <strong>Windows</strong> com mais features
-          (auto-update, todos os sistemas embedded, license vitalicia, etc).
+          {t("Pra continuar sem limite, compra a versão")} <strong>Windows</strong> {t("com mais features (auto-update, todos os sistemas embedded, license vitalicia, etc).")}
         </p>
 
         <a
@@ -1895,7 +1894,7 @@ function AndroidDemoExpired({ demo, onUnlock }) {
           target="_blank"
           rel="noopener noreferrer"
         >
-          Comprar Windows (R$ 49,90)
+          {t("Comprar Windows (R$ 49,90)")}
         </a>
 
         {!showKeyInput ? (
@@ -1903,14 +1902,14 @@ function AndroidDemoExpired({ demo, onUnlock }) {
             className="pb-demo-expired-btn pb-demo-expired-btn-ghost"
             onClick={() => setShowKeyInput(true)}
           >
-            Sou admin / tenho license
+            {t("Sou admin / tenho license")}
           </button>
         ) : (
           <div className="pb-demo-expired-input-wrap">
             <input
               className="pb-demo-expired-input"
               type="text"
-              placeholder="Cole sua license key"
+              placeholder={t("Cole sua license key")}
               value={keyInput}
               onChange={(e) => setKeyInput(e.target.value)}
               autoFocus
@@ -1921,7 +1920,7 @@ function AndroidDemoExpired({ demo, onUnlock }) {
               onClick={tryUnlock}
               disabled={busy || !keyInput.trim()}
             >
-              {busy ? "Verificando..." : "Destravar"}
+              {busy ? t("Verificando...") : t("Destravar")}
             </button>
             {msg && (
               <p className={`pb-demo-expired-msg pb-demo-expired-msg-${msg.kind}`}>{msg.text}</p>
@@ -1952,15 +1951,15 @@ const GameCardInner = React.memo(function GameCardInner({ hasCover, cover, name,
       )}
       {isFav && <span className="pb-card-fav"><StarIcon filled /></span>}
       {discsLen > 1 && (
-        <span className="pb-card-discs" title={`${discsLen} discos`}>💿×{discsLen}</span>
+        <span className="pb-card-discs" title={t("{n} discos", { n: discsLen })}>💿×{discsLen}</span>
       )}
       {metaStatus && (
-        <span className={`pb-card-status pb-card-status-${metaStatus}`} title={GAME_STATUS_LABELS[metaStatus]}>
+        <span className={`pb-card-status pb-card-status-${metaStatus}`} title={t(GAME_STATUS_LABELS[metaStatus])}>
           {GAME_STATUS_EMOJI[metaStatus]}
         </span>
       )}
       {metaRating > 0 && (
-        <span className="pb-card-rating" title={`${metaRating}/5 estrelas`}>{"★".repeat(metaRating)}</span>
+        <span className="pb-card-rating" title={t("{n}/5 estrelas", { n: metaRating })}>{"★".repeat(metaRating)}</span>
       )}
       {playSec > 0 && (
         <div className="pb-card-stats"><span className="pb-card-stat-time">{formatPlayTime(playSec)}</span></div>
@@ -2578,7 +2577,7 @@ export default function LudexLauncher() {
     if (!selected || !selectedGame) return;
     sfx.confirm();
     setLaunching(true);
-    setLaunchMsg({ kind: "launching", text: `Iniciando ${selectedGame.name}...` });
+    setLaunchMsg({ kind: "launching", text: t("Iniciando {name}...", { name: selectedGame.name }) });
     // CRITICO: minimiza/oculta o launcher ANTES de spawn do emulador.
     // Se spawnar primeiro, o launcher continua em fullscreen exclusive segurando foco
     // -> emulador abre por baixo, Windows trata launcher como prioridade, qualquer
@@ -2593,7 +2592,7 @@ export default function LudexLauncher() {
     }
     try {
       await invoke("launch_game", { systemId: launchSystemId, romPath });
-      setLaunchMsg({ kind: "ok", text: `${selectedGame.name} iniciado` });
+      setLaunchMsg({ kind: "ok", text: t("{name} iniciado", { name: selectedGame.name }) });
       launchStartRef.current = {
         rom_path: selectedGame.path,
         rom_name: selectedGame.name,
@@ -2636,20 +2635,20 @@ export default function LudexLauncher() {
       const raw = String(e);
       const low = raw.toLowerCase();
       if (low.includes("bios") || low.includes("required")) {
-        if (await lxConfirm("BIOS faltando pra esse sistema. Quer que eu procure BIOS no PC inteiro agora? (pode demorar até 2 min)", { title: "Não consegui abrir o jogo", okText: "Procurar BIOS" })) {
+        if (await lxConfirm(t("BIOS faltando pra esse sistema. Quer que eu procure BIOS no PC inteiro agora? (pode demorar até 2 min)"), { title: t("Não consegui abrir o jogo"), okText: t("Procurar BIOS") })) {
           try {
             const n = await invoke("bios_deep_scan");
-            await lxAlert(n > 0 ? `Importei ${n} BIOS. Tenta abrir o jogo de novo.` : "Nenhuma BIOS nova encontrada no PC.", { title: "Procurar BIOS" });
-          } catch (err) { await lxAlert("Falha ao procurar BIOS: " + err, { title: "Procurar BIOS" }); }
+            await lxAlert(n > 0 ? t("Importei {n} BIOS. Tenta abrir o jogo de novo.", { n }) : t("Nenhuma BIOS nova encontrada no PC."), { title: t("Procurar BIOS") });
+          } catch (err) { await lxAlert(t("Falha ao procurar BIOS: {err}", { err }), { title: t("Procurar BIOS") }); }
         }
       } else if (low.includes("core") && (low.includes("encontr") || low.includes("missing") || low.includes(".dll"))) {
-        if (await lxConfirm("Core libretro faltando pra esse sistema. Abrir a pasta de cores? (ou baixe em Ajustes → Cores libretro)", { title: "Não consegui abrir o jogo", okText: "Abrir pasta de cores" })) {
+        if (await lxConfirm(t("Core libretro faltando pra esse sistema. Abrir a pasta de cores? (ou baixe em Ajustes → Cores libretro)"), { title: t("Não consegui abrir o jogo"), okText: t("Abrir pasta de cores") })) {
           invoke("open_cores_folder").catch(() => {});
         }
       } else if (low.includes("prod.keys") || low.includes("keys.txt") || low.includes(" key")) {
-        await lxAlert("Faltam as keys autorais do emulador — coloque em roms/KEYS e reimporte nos Ajustes.", { title: "Não consegui abrir o jogo" });
+        await lxAlert(t("Faltam as keys autorais do emulador — coloque em roms/KEYS e reimporte nos Ajustes."), { title: t("Não consegui abrir o jogo") });
       } else {
-        await lxAlert("Não consegui abrir o jogo:\n" + raw, { title: "Não consegui abrir o jogo" });
+        await lxAlert(t("Não consegui abrir o jogo:") + "\n" + raw, { title: t("Não consegui abrir o jogo") });
       }
     }
   }, [selected, selectedGame, launchSystemId, activeProfile, updateActiveProfile, checkAchievements]);
@@ -2878,7 +2877,7 @@ export default function LudexLauncher() {
     setSwitchKeysStatus({ busy: true, message: null, kind: null });
     try {
       const res = await invoke("setup_switch_keys", { romsRoot });
-      const msg = `OK · keys: ${res.keys_copied ? "copiadas" : "não encontradas"} · firmware: ${res.firmware_files} arquivos\n${res.yuzu_dir}`;
+      const msg = t("OK · keys: {keys} · firmware: {n} arquivos", { keys: res.keys_copied ? t("copiadas") : t("não encontradas"), n: res.firmware_files }) + `\n${res.yuzu_dir}`;
       setSwitchKeysStatus({ busy: false, message: msg, kind: "ok" });
     } catch (e) {
       setSwitchKeysStatus({ busy: false, message: String(e), kind: "error" });
@@ -2890,7 +2889,7 @@ export default function LudexLauncher() {
     setWiiuKeysStatus({ busy: true, message: null, kind: null });
     try {
       const res = await invoke("setup_wiiu_keys", { romsRoot });
-      const msg = `OK · keys.txt: ${res.keys_copied ? "copiada" : "não encontrada"} · extras: ${res.extra_files}\n${res.cemu_dir}`;
+      const msg = t("OK · keys.txt: {keys} · extras: {n}", { keys: res.keys_copied ? t("copiada") : t("não encontrada"), n: res.extra_files }) + `\n${res.cemu_dir}`;
       setWiiuKeysStatus({ busy: false, message: msg, kind: res.keys_copied ? "ok" : "error" });
     } catch (e) {
       setWiiuKeysStatus({ busy: false, message: String(e), kind: "error" });
@@ -2903,8 +2902,8 @@ export default function LudexLauncher() {
     try {
       const res = await invoke("setup_vita_firmware", { romsRoot });
       const msg = res.pup_copied
-        ? `OK · PUP copiado pra:\n${res.pup_path_if_copied}\n\nAgora abra Vita3K, Welcome wizard, aponte esse PUP.`
-        : `Nada copiado: ${res.vita_dir}`;
+        ? t("OK · PUP copiado pra:") + `\n${res.pup_path_if_copied}\n\n` + t("Agora abra Vita3K, Welcome wizard, aponte esse PUP.")
+        : t("Nada copiado: {dir}", { dir: res.vita_dir });
       setVitaFwStatus({ busy: false, message: msg, kind: res.pup_copied ? "ok" : "error" });
     } catch (e) {
       setVitaFwStatus({ busy: false, message: String(e), kind: "error" });
@@ -3004,7 +3003,7 @@ export default function LudexLauncher() {
       await invoke("open_in_explorer", { path: game.path });
     } catch (e) {
       console.error("open_in_explorer", e);
-      setLaunchMsg({ kind: "error", text: `Falha ao abrir local: ${e}` });
+      setLaunchMsg({ kind: "error", text: t("Falha ao abrir local: {err}", { err: e }) });
       setTimeout(() => setLaunchMsg(null), 2200);
     }
   }, []);
@@ -3025,11 +3024,11 @@ export default function LudexLauncher() {
         delete next[game.path];
         return next;
       });
-      setLaunchMsg({ kind: "ok", text: `Capa atualizada: ${game.name}` });
+      setLaunchMsg({ kind: "ok", text: t("Capa atualizada: {name}", { name: game.name }) });
       setTimeout(() => setLaunchMsg(null), 2200);
     } catch (e) {
       console.error("set_custom_cover", e);
-      setLaunchMsg({ kind: "error", text: `Falha ao trocar capa: ${e}` });
+      setLaunchMsg({ kind: "error", text: t("Falha ao trocar capa: {err}", { err: e }) });
       setTimeout(() => setLaunchMsg(null), 2200);
     }
   }, []);
@@ -3050,7 +3049,7 @@ export default function LudexLauncher() {
         gameName: game.name,
         gamePath: game.path,
       });
-      setLaunchMsg({ kind: "ok", text: `${game.name} enviado pra Lixeira` });
+      setLaunchMsg({ kind: "ok", text: t("{name} enviado pra Lixeira", { name: game.name }) });
       setTimeout(() => setLaunchMsg(null), 2200);
       // Re-escaneia pra refletir
       try {
@@ -3059,7 +3058,7 @@ export default function LudexLauncher() {
       } catch {}
     } catch (e) {
       console.error("delete_game_to_trash", e);
-      setLaunchMsg({ kind: "error", text: `Falha ao excluir: ${e}` });
+      setLaunchMsg({ kind: "error", text: t("Falha ao excluir: {err}", { err: e }) });
       setTimeout(() => setLaunchMsg(null), 2800);
     }
   }, [deleteConfirm]);
@@ -3082,7 +3081,7 @@ export default function LudexLauncher() {
       setCovers((prev) => ({ ...prev, [game.path]: localPath ? convertFileSrc(localPath) : null }));
       setLaunchMsg({
         kind: localPath ? "ok" : "error",
-        text: localPath ? `Capa atualizada: ${game.name}` : `Sem capa encontrada pra ${game.name}`,
+        text: localPath ? t("Capa atualizada: {name}", { name: game.name }) : t("Sem capa encontrada pra {name}", { name: game.name }),
       });
       setTimeout(() => setLaunchMsg(null), 2200);
     } catch (e) {
@@ -3091,7 +3090,7 @@ export default function LudexLauncher() {
   }, []);
 
   const syncCovers = useCallback(async () => {
-    setSyncStatus({ busy: true, text: "limpando cache" });
+    setSyncStatus({ busy: true, text: t("limpando cache") });
     try {
       await invoke("clear_covers_cache", { systemId: null });
       fetchedSystems.current.clear();
@@ -3140,7 +3139,7 @@ export default function LudexLauncher() {
       setWelcomeBack(true);
       sfx.open();
       setTimeout(() => setWelcomeBack(false), 700);
-      setLaunchMsg({ kind: "ok", text: "Jogo encerrado" });
+      setLaunchMsg({ kind: "ok", text: t("Jogo encerrado") });
       setTimeout(() => setLaunchMsg(null), 2200);
       invoke("discord_clear_activity").catch(() => {});
       // Restaura janela do launcher (foi escondida + minimizada ao iniciar jogo externo)
@@ -3686,7 +3685,7 @@ export default function LudexLauncher() {
           <button
             className="lx-mobile-btn-icon"
             onClick={() => { sfx.open(); setSystemPickerOpen(true); }}
-            aria-label="Trocar sistema"
+            aria-label={t("Trocar sistema")}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
               <line x1="4" y1="6" x2="20" y2="6" />
@@ -3721,7 +3720,7 @@ export default function LudexLauncher() {
           <button
             className="lx-mobile-btn-icon"
             onClick={() => { sfx.confirm(); setSettingsOpen(true); }}
-            aria-label="Configurações"
+            aria-label={t("Configurações")}
           >
             <GearIcon />
           </button>
@@ -3734,26 +3733,25 @@ export default function LudexLauncher() {
             onClick={() => { sfx.confirm(); setSearchOpen(true); }}
           >
             <SearchIcon />
-            <span>Buscar jogo</span>
+            <span>{t("Buscar jogo")}</span>
           </button>
         </div>
 
         {/* Grid de jogos */}
         <main className="lx-mobile-main">
-          {loading && <div className="lx-mobile-msg">Carregando...</div>}
+          {loading && <div className="lx-mobile-msg">{t("Carregando...")}</div>}
           {scanError && (
             <div className="lx-mobile-msg lx-mobile-msg-error">
-              <strong>Falha no scan</strong>
+              <strong>{t("Falha no scan")}</strong>
               <span>{scanError}</span>
             </div>
           )}
 
           {!loading && !scanError && selected && visibleGames.length === 0 && (
             <div className="lx-mobile-empty">
-              <h2>Sem jogos de {selected.name} ainda</h2>
+              <h2>{t("Sem jogos de {name} ainda", { name: selected.name })}</h2>
               <p>
-                Coloque suas ROMs em <code>/storage/emulated/0/Ludex/roms/{selected.folder_name}/</code> e
-                volte aqui — o Ludex detecta automaticamente.
+                {t("Coloque suas ROMs em")} <code>/storage/emulated/0/Ludex/roms/{selected.folder_name}/</code> {t("e volte aqui — o Ludex detecta automaticamente.")}
               </p>
             </div>
           )}
@@ -3793,7 +3791,7 @@ export default function LudexLauncher() {
             <div className="lx-mobile-sheet" onClick={(e) => e.stopPropagation()}>
               <div className="lx-mobile-sheet-handle" />
               <div className="lx-mobile-sheet-header">
-                <h3>Sistemas</h3>
+                <h3>{t("Sistemas")}</h3>
                 <button className="lx-mobile-btn-icon" onClick={() => setSystemPickerOpen(false)}>
                   <CloseIcon />
                 </button>
@@ -3806,7 +3804,7 @@ export default function LudexLauncher() {
                     onClick={() => { sfx.switchSys(); setSelectedCategoryId(cat.id); }}
                   >
                     <CategoryIcon id={cat.id} />
-                    <span>{cat.name}</span>
+                    <span>{t(cat.name)}</span>
                   </button>
                 ))}
               </div>
@@ -3827,7 +3825,7 @@ export default function LudexLauncher() {
                       <span className="lx-mobile-sheet-sys-icon"><SystemIcon id={sys.id} /></span>
                       <span className="lx-mobile-sheet-sys-name">{sys.name}</span>
                       <span className="lx-mobile-sheet-sys-count">
-                        {sys.games.length > 0 ? `${sys.games.length} jogos` : ""}
+                        {sys.games.length > 0 ? t("{n} jogos", { n: sys.games.length }) : ""}
                       </span>
                     </button>
                   );
@@ -3941,7 +3939,7 @@ export default function LudexLauncher() {
         {launching && (
           <div className="lx-mobile-launching">
             <div className="lx-mobile-spinner" />
-            <div>{launchMsg?.text || "Iniciando..."}</div>
+            <div>{launchMsg?.text || t("Iniciando...")}</div>
           </div>
         )}
       </div>
@@ -3973,8 +3971,8 @@ export default function LudexLauncher() {
       {updateBanner && !updateInstalling && (
         <div className="pb-update-banner">
           <div className="pb-update-banner-text">
-            <strong>Atualizacao disponível: v{updateBanner.version}</strong>
-            <span>Reinicie depois da instalação pra usar a versão nova.</span>
+            <strong>{t("Atualizacao disponível: v{version}", { version: updateBanner.version })}</strong>
+            <span>{t("Reinicie depois da instalação pra usar a versão nova.")}</span>
           </div>
           <button className="pb-btn pb-btn-primary" onClick={async () => {
             setUpdateInstalling(true);
@@ -3988,21 +3986,21 @@ export default function LudexLauncher() {
                 }
               });
               await relaunch();
-            } catch (e) { lxAlert("Falha ao atualizar: " + e, { title: "Atualização" }); setUpdateInstalling(false); }
-          }}>Atualizar</button>
-          <button className="pb-btn" onClick={() => setUpdateBanner(null)}>Depois</button>
+            } catch (e) { lxAlert(t("Falha ao atualizar: {err}", { err: e }), { title: t("Atualização") }); setUpdateInstalling(false); }
+          }}>{t("Atualizar")}</button>
+          <button className="pb-btn" onClick={() => setUpdateBanner(null)}>{t("Depois")}</button>
         </div>
       )}
       {updateInstalling && (
         <div className="pb-update-banner pb-update-installing">
-          <strong>Baixando atualização... {updateProgress}%</strong>
+          <strong>{t("Baixando atualização... {pct}%", { pct: updateProgress })}</strong>
         </div>
       )}
 
       <header className="pb-top" data-tour="topbar">
         <div className="pb-top-left">
           {activeProfile ? (
-            <button className="pb-top-avatar" onClick={() => { sfx.open(); setProfilesOpen(true); }} title="Trocar perfil (P)">
+            <button className="pb-top-avatar" onClick={() => { sfx.open(); setProfilesOpen(true); }} title={t("Trocar perfil (P)")}>
               <div className="pb-profile-avatar pb-profile-avatar-sm">
                 {(() => {
                   const src = getProfileAvatarUrl(activeProfile, convertFileSrc);
@@ -4011,7 +4009,7 @@ export default function LudexLauncher() {
               </div>
             </button>
           ) : (
-            <button className="pb-top-avatar" onClick={() => { sfx.open(); setProfilesOpen(true); }} title="Criar perfil (P)">
+            <button className="pb-top-avatar" onClick={() => { sfx.open(); setProfilesOpen(true); }} title={t("Criar perfil (P)")}>
               <div className="pb-profile-avatar pb-profile-avatar-sm"><UserIcon /></div>
             </button>
           )}
@@ -4025,15 +4023,15 @@ export default function LudexLauncher() {
           )}
           {/* Demo Android: contador de dias restantes */}
           {IS_ANDROID && androidDemo && !androidDemo.is_admin_unlocked && androidDemo.days_left > 0 && (
-            <div className={`pb-android-demo-pill ${androidDemo.days_left <= 2 ? "warn" : ""}`} title="Demo gratuita Android">
-              DEMO · {androidDemo.days_left} dia{androidDemo.days_left === 1 ? "" : "s"}
+            <div className={`pb-android-demo-pill ${androidDemo.days_left <= 2 ? "warn" : ""}`} title={t("Demo gratuita Android")}>
+              {androidDemo.days_left === 1 ? t("DEMO · {n} dia", { n: androidDemo.days_left }) : t("DEMO · {n} dias", { n: androidDemo.days_left })}
             </div>
           )}
           {selected && (
             <div className="lx-top-sys-actions">
               <button
                 className="lx-top-sys-btn"
-                title="Abrir pasta de ROMs"
+                title={t("Abrir pasta de ROMs")}
                 onClick={async () => {
                   sfx.click();
                   try {
@@ -4046,7 +4044,7 @@ export default function LudexLauncher() {
               </button>
               <button
                 className="lx-top-sys-btn"
-                title="Abrir pasta de DLCs"
+                title={t("Abrir pasta de DLCs")}
                 onClick={async () => {
                   sfx.click();
                   try {
@@ -4059,7 +4057,7 @@ export default function LudexLauncher() {
               </button>
               <button
                 className="lx-top-sys-btn"
-                title="Abrir pasta de Mods/Patches"
+                title={t("Abrir pasta de Mods/Patches")}
                 onClick={async () => {
                   sfx.click();
                   try {
@@ -4072,26 +4070,26 @@ export default function LudexLauncher() {
               </button>
               <button
                 className="lx-top-sys-btn"
-                title="Onde baixar (guia de fontes)"
+                title={t("Onde baixar (guia de fontes)")}
                 onClick={() => { sfx.open(); setSuggestionsTab("roms"); setSuggestionsOpen(true); }}
               >
-                <LxGlobeIcon /><span>Sites</span>
+                <LxGlobeIcon /><span>{t("Sites")}</span>
               </button>
               {hasOptionsForSystem(selected.id) && (
                 <button
                   className="lx-top-sys-btn"
-                  title="Configurar opções do emulador (resolução, performance, etc)"
+                  title={t("Configurar opções do emulador (resolução, performance, etc)")}
                   onClick={() => { sfx.open(); setSettingsModal({ systemId: selected.id }); }}
                 >
-                  <LxToolsIcon /><span>Opções</span>
+                  <LxToolsIcon /><span>{t("Opções")}</span>
                 </button>
               )}
               <button
                 className="lx-top-sys-btn"
-                title="Configurar controle deste emulador"
+                title={t("Configurar controle deste emulador")}
                 onClick={() => { sfx.open(); setControlsTip({ system: selected }); }}
               >
-                <LxGamepadIcon /><span>Controle</span>
+                <LxGamepadIcon /><span>{t("Controle")}</span>
               </button>
             </div>
           )}
@@ -4100,14 +4098,14 @@ export default function LudexLauncher() {
           <button
             className="pb-search-pill"
             onClick={() => { sfx.confirm(); setSearchOpen(true); }}
-            title="Buscar jogo (/)"
+            title={t("Buscar jogo (/)")}
             data-tour="search"
           >
             <SearchIcon />
             <span className="pb-search-pill-label">{t("Buscar jogo")}</span>
             <kbd className="pb-search-pill-kbd">/</kbd>
           </button>
-          <button className="pb-icon-btn" onClick={pickRandomGame} title="Surpresa! (R) — escolhe jogo aleatorio" data-tour="random">
+          <button className="pb-icon-btn" onClick={pickRandomGame} title={t("Surpresa! (R) — escolhe jogo aleatorio")} data-tour="random">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <rect x="3" y="3" width="18" height="18" rx="2.5" />
               <circle cx="8" cy="8" r="1.4" fill="currentColor" />
@@ -4117,17 +4115,17 @@ export default function LudexLauncher() {
               <circle cx="16" cy="16" r="1.4" fill="currentColor" />
             </svg>
           </button>
-          <button className="pb-icon-btn" data-tour="settings" onClick={() => { sfx.confirm(); setSettingsOpen(true); }} title="Configurações (S)"><GearIcon /></button>
-          {gamepadConnected && <span className="pb-gamepad-indicator" title="Controle conectado"><GamepadIcon /></span>}
+          <button className="pb-icon-btn" data-tour="settings" onClick={() => { sfx.confirm(); setSettingsOpen(true); }} title={t("Configurações (S)")}><GearIcon /></button>
+          {gamepadConnected && <span className="pb-gamepad-indicator" title={t("Controle conectado")}><GamepadIcon /></span>}
           <span className="pb-clock">{time}</span>
         </div>
       </header>
 
       <main className="pb-stage">
-        {loading && <div className="pb-stage-msg">Carregando...</div>}
+        {loading && <div className="pb-stage-msg">{t("Carregando...")}</div>}
         {scanError && (
           <div className="pb-stage-msg pb-stage-error">
-            <strong>Falha no scan</strong>
+            <strong>{t("Falha no scan")}</strong>
             <span>{scanError}</span>
           </div>
         )}
@@ -4161,11 +4159,11 @@ export default function LudexLauncher() {
                   <span className="pb-game-tag-name">{selectedGame?.name}</span>
                 ) : selected.games.length > 0 ? (
                   <span className="pb-game-tag-name pb-game-tag-name-muted">
-                    {selected.name} · nenhum jogo no filtro "{sortMode}"
+                    {t("{name} · nenhum jogo no filtro \"{filter}\"", { name: selected.name, filter: sortMode })}
                   </span>
                 ) : (
                   <span className="pb-game-tag-name pb-game-tag-name-muted">
-                    {selected.folder_exists ? `${selected.name} · pasta vazia` : `${selected.name} · pasta /${selected.folder_name} não existe`}
+                    {selected.folder_exists ? t("{name} · pasta vazia", { name: selected.name }) : t("{name} · pasta /{folder} não existe", { name: selected.name, folder: selected.folder_name })}
                   </span>
                 )}
               </div>
@@ -4231,7 +4229,7 @@ export default function LudexLauncher() {
                         <button
                           className="pb-card-resync"
                           onClick={(e) => { e.stopPropagation(); resyncSingleCover(selected.id, g); }}
-                          title="Re-sincronizar capa deste jogo"
+                          title={t("Re-sincronizar capa deste jogo")}
                         >
                           <RotateIcon />
                         </button>
@@ -4243,7 +4241,7 @@ export default function LudexLauncher() {
             )}
 
             {selected.games.length === 0 && !selected.emulator_exists && (
-              <div className="pb-warn">Emulador não encontrado em disco</div>
+              <div className="pb-warn">{t("Emulador não encontrado em disco")}</div>
             )}
 
             {selected.games.length === 0 && (
@@ -4268,10 +4266,10 @@ export default function LudexLauncher() {
               key={cat.id}
               className={`pb-category ${selectedCategoryId === cat.id ? "active" : ""}`}
               onClick={() => { sfx.switchSys(); setSelectedCategoryId(cat.id); }}
-              title={cat.name}
+              title={t(cat.name)}
             >
               <span className="pb-category-icon"><CategoryIcon id={cat.id} /></span>
-              <span className="pb-category-name">{cat.name}</span>
+              <span className="pb-category-name">{t(cat.name)}</span>
             </button>
           ))}
         </div>
@@ -4289,7 +4287,7 @@ export default function LudexLauncher() {
                 className={`pb-sys ${isActive ? (focusZone === "systems" ? "active focused" : "active") : ""} ${isEmpty ? "empty" : ""} ${isFav ? "pb-sys-favorites" : ""}`}
                 style={{ "--sys-color": sys.color, animationDelay: `${i * 26}ms` }}
                 onClick={() => setSelectedSystemIdx(i)}
-                title={`${sys.name}${sys.games.length ? ` · ${sys.games.length} jogos` : ""}`}
+                title={sys.games.length ? t("{name} · {n} jogos", { name: sys.name, n: sys.games.length }) : sys.name}
               >
                 <span className="pb-sys-icon">
                   {isFav ? <StarIcon filled /> : <SystemIcon id={sys.id} />}
@@ -4301,14 +4299,14 @@ export default function LudexLauncher() {
           <button
             className={`pb-sys pb-sys-útil ${focusZone === "útil" && utilIdx === 0 ? "active focused" : ""}`}
             onClick={() => { sfx.open(); setSettingsOpen(true); }}
-            title="Configurações (S / Y no controle)"
+            title={t("Configurações (S / Y no controle)")}
           >
             <span className="pb-sys-icon"><GearIcon /></span>
           </button>
           <button
             className={`pb-sys pb-sys-útil pb-sys-power ${focusZone === "útil" && utilIdx === 1 ? "active focused" : ""}`}
             onClick={() => { sfx.back(); handleQuit(); }}
-            title="Sair"
+            title={t("Sair")}
           >
             <span className="pb-sys-icon"><PowerIcon /></span>
           </button>
@@ -4318,33 +4316,33 @@ export default function LudexLauncher() {
       {!IS_ANDROID && <div className="pb-hints">
         {previewPopup ? (
           <>
-            <span className="pb-hint-key">A</span> Jogar
+            <span className="pb-hint-key">A</span> {t("Jogar")}
             <span className="pb-hint-divider" />
-            <span className="pb-hint-key">Y</span> Detalhes
+            <span className="pb-hint-key">Y</span> {t("Detalhes")}
             <span className="pb-hint-divider" />
-            <span className="pb-hint-key">B</span> Fechar
+            <span className="pb-hint-key">B</span> {t("Fechar")}
           </>
         ) : focusZone === "games" ? (
           <>
-            <span className="pb-hint-key">A</span> Iniciar
+            <span className="pb-hint-key">A</span> {t("Iniciar")}
             <span className="pb-hint-divider" />
-            <span className="pb-hint-key">X</span> Preview
+            <span className="pb-hint-key">X</span> {t("Preview")}
             <span className="pb-hint-divider" />
-            <span className="pb-hint-key">B</span> Sistemas
+            <span className="pb-hint-key">B</span> {t("Sistemas")}
             <span className="pb-hint-divider" />
-            <span className="pb-hint-key">Y</span> Opcoes
+            <span className="pb-hint-key">Y</span> {t("Opcoes")}
           </>
         ) : (
           <>
-            <span className="pb-hint-key">A</span> Entrar
+            <span className="pb-hint-key">A</span> {t("Entrar")}
             <span className="pb-hint-divider" />
-            <span className="pb-hint-key">↑</span> Voltar
+            <span className="pb-hint-key">↑</span> {t("Voltar")}
             <span className="pb-hint-divider" />
-            <span className="pb-hint-key">Y</span> Opcoes
+            <span className="pb-hint-key">Y</span> {t("Opcoes")}
           </>
         )}
         <span className="pb-hint-divider" />
-        <span className="pb-hint-key">F2</span> Diagnostico
+        <span className="pb-hint-key">F2</span> {t("Diagnostico")}
       </div>}
 
       {gamepadDebug && <GamepadDebugOverlay onClose={() => setGamepadDebug(false)} />}
@@ -4577,7 +4575,7 @@ export default function LudexLauncher() {
         <div className="pb-launching">
           <img className="pb-launching-bg" src={selectedBgSrc} alt="" aria-hidden />
           <div className="pb-launching-content">
-            <div className="pb-launching-label">INICIANDO</div>
+            <div className="pb-launching-label">{t("INICIANDO")}</div>
             <div className="pb-launching-title">{selectedGame?.name}</div>
             <div className="pb-launching-system">{selected?.name}</div>
             <button
@@ -4595,7 +4593,7 @@ export default function LudexLauncher() {
                   try { await w.setFocus(); } catch {}
                 } catch {}
               }}
-            >Cancelar (Esc / Select+R1)</button>
+            >{t("Cancelar (Esc / Select+R1)")}</button>
           </div>
         </div>
       )}

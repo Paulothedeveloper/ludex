@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { lxConfirm } from "./LudexDialog";
-import { t } from "./ludexI18n";
+import { t, currentLocale } from "./ludexI18n";
 
 /**
  * Painel admin (modal fullscreen) que so abre se a license atual eh marcada
@@ -156,7 +156,7 @@ export default function LudexAdminPanel({ onClose }) {
             </div>
           )}
           {filtered.map(s => {
-            const date = s.created_at ? new Date(s.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+            const date = s.created_at ? new Date(s.created_at).toLocaleDateString(currentLocale(), { day: "2-digit", month: "short", year: "numeric" }) : "—";
             const price = `R$ ${(Number(s.price || 0) / 100).toFixed(2)}`;
             const uses = s.license_uses_count || 0;
             const maxPC = 2;

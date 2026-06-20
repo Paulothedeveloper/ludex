@@ -13,6 +13,7 @@ import { validRomExtension, invokeTimeout } from "./ludexUtils";
 import { CheatsModal } from "./LudexCheatsModal";
 import { loadCheats, applyCheats } from "./ludexCheats";
 import { lxAlert } from "./LudexDialog";
+import { t, currentLocale } from "./ludexI18n";
 
 export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
   const canvasRef = useRef(null);
@@ -35,7 +36,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
     const cur = { ...loadSystemOptions(system.id), [key]: value };
     saveSystemOptions(system.id, cur);
     setScreenLayoutVals(cur);
-    setStateMsg("Aplicando layout...");
+    setStateMsg(t("Aplicando layout..."));
     try {
       try { await invoke("libretro_save_state", { romPath: game.path, slot: 98 }); } catch {}
       await invoke("libretro_set_option", { key, value });
@@ -44,11 +45,11 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
       const result = await invokeTimeout("libretro_load_game", { coreFilename: system.libretro_core, romPath: game.path }, 60000);
       setInfo(result);
       try { await invoke("libretro_load_state", { romPath: game.path, slot: 98 }); } catch {}
-      setStateMsg("Layout aplicado");
+      setStateMsg(t("Layout aplicado"));
       setTimeout(() => setStateMsg(null), 1200);
     } catch (e) {
       console.error("[layout] aplicar falhou", e);
-      setStateMsg(`Falha: ${e}`);
+      setStateMsg(t("Falha: {e}", { e }));
     }
   }, [system.id, system.libretro_core, game.path]);
   const audioCtxRef = useRef(null);
@@ -99,11 +100,11 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
       try {
         const coreFile = system.libretro_core;
         if (!coreFile) {
-          setError(`Sistema "${system.name}" sem core libretro configurado`);
+          setError(t('Sistema "{name}" sem core libretro configurado', { name: system.name }));
           return;
         }
         if (!validRomExtension(game.path)) {
-          setError(`Extensao de arquivo não suportada: ${game.path}`);
+          setError(t("Extensao de arquivo não suportada: {path}", { path: game.path }));
           return;
         }
         try { await applySystemOptions(system.id); } catch {}
@@ -334,10 +335,10 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
     try {
       const thumb = await captureThumbnail();
       await invoke("libretro_save_state", { romPath: game.path, slot, thumbnailPng: thumb });
-      showStateMsg("ok", `Save slot ${slot} salvo`);
+      showStateMsg("ok", t("Save slot {slot} salvo", { slot }));
       refreshSlots();
     } catch (e) {
-      showStateMsg("error", `Erro: ${e}`);
+      showStateMsg("error", t("Erro: {e}", { e }));
     } finally {
       setSlotsBusy(false);
     }
@@ -346,7 +347,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
   const loadState = useCallback(async (slot = 0) => {
     try {
       await invoke("libretro_load_state", { romPath: game.path, slot });
-      showStateMsg("ok", `Save slot ${slot} carregado`);
+      showStateMsg("ok", t("Save slot {slot} carregado", { slot }));
     } catch (e) {
       showStateMsg("error", `${e}`);
     }
@@ -356,7 +357,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
     setSlotsBusy(true);
     try {
       await invoke("libretro_delete_state", { romPath: game.path, slot });
-      showStateMsg("ok", `Slot ${slot} apagado`);
+      showStateMsg("ok", t("Slot {slot} apagado", { slot }));
       refreshSlots();
     } catch (e) {
       showStateMsg("error", `${e}`);
@@ -520,14 +521,14 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
 
   return (
     <div className="pb-emulator-view" onContextMenu={(e) => e.preventDefault()}>
-      <button className="pb-emulator-close" onClick={onClose} title="Sair (Esc / Select+Start)">
+      <button className="pb-emulator-close" onClick={onClose} title={t("Sair (Esc / Select+Start)")}>
         <CloseIcon />
       </button>
       {hasOptionsForSystem(system.id) && (
         <button
           className="pb-emulator-settings"
           onClick={() => setEmuSettingsOpen(true)}
-          title="Opções do emulador (resolução, performance, etc) — efeito no próximo jogo"
+          title={t("Opções do emulador (resolução, performance, etc) — efeito no próximo jogo")}
         >
           <LxToolsIcon />
         </button>
@@ -535,9 +536,9 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
       <button
         className="pb-emulator-cheats"
         onClick={() => setCheatsOpen(true)}
-        title="Cheats (buscar online ou adicionar manualmente)"
+        title={t("Cheats (buscar online ou adicionar manualmente)")}
       >
-        CHEATS
+        {t("CHEATS")}
       </button>
       {cheatsOpen && (
         <CheatsModal systemId={system.id} gamePath={game.path} onClose={() => setCheatsOpen(false)} />
@@ -548,21 +549,21 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
           className="pb-emulator-cheats"
           style={{ right: 200 }}
           onClick={() => setScreenLayoutOpen(true)}
-          title="Layout das duas telas (cima/baixo, lado a lado, etc) — aplica na hora"
+          title={t("Layout das duas telas (cima/baixo, lado a lado, etc) — aplica na hora")}
         >
-          TELAS
+          {t("TELAS")}
         </button>
       )}
       {screenLayoutOpen && SCREEN_LAYOUTS[system.id] && (
         <div className="lx-modal-overlay" onClick={() => setScreenLayoutOpen(false)}>
           <div className="lx-modal" onClick={(e) => e.stopPropagation()} role="dialog" style={{ maxWidth: 460 }}>
             <div className="lx-modal-header">
-              <h2>Layout das telas</h2>
-              <button className="lx-modal-close" onClick={() => setScreenLayoutOpen(false)} aria-label="Fechar">×</button>
+              <h2>{t("Layout das telas")}</h2>
+              <button className="lx-modal-close" onClick={() => setScreenLayoutOpen(false)} aria-label={t("Fechar")}>×</button>
             </div>
             <div className="lx-settings-body">
               <p className="lx-settings-hint">
-                Aplica na hora. Cima/baixo principal, lado a lado, ou uma menor no canto.
+                {t("Aplica na hora. Cima/baixo principal, lado a lado, ou uma menor no canto.")}
               </p>
               <div className="lx-settings-rows" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {SCREEN_LAYOUTS[system.id].options.map(([val, lbl]) => {
@@ -573,7 +574,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
                       key={val}
                       className={`lx-settings-btn ${active ? "lx-settings-btn-primary" : "lx-settings-btn-ghost"}`}
                       onClick={() => setCoreOptionLive(cfg.key, val)}
-                    >{lbl}</button>
+                    >{t(lbl)}</button>
                   );
                 })}
               </div>
@@ -587,7 +588,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
                         key={val}
                         className={`lx-settings-btn ${active ? "lx-settings-btn-primary" : "lx-settings-btn-ghost"}`}
                         onClick={() => setCoreOptionLive(sw.key, val)}
-                      >{lbl}</button>
+                      >{t(lbl)}</button>
                     );
                   })}
                 </div>
@@ -600,21 +601,21 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
         <button
           className="pb-emulator-disc"
           onClick={() => setDiscMenuOpen(true)}
-          title={`Trocar disco (${discInfo.num_images} discos detectados)`}
+          title={t("Trocar disco ({n} discos detectados)", { n: discInfo.num_images })}
         >
-          DISC
+          {t("DISC")}
         </button>
       )}
       {discMenuOpen && discInfo && (
         <div className="lx-modal-overlay" onClick={() => setDiscMenuOpen(false)}>
           <div className="lx-modal" onClick={(e) => e.stopPropagation()} role="dialog" style={{ maxWidth: 420 }}>
             <div className="lx-modal-header">
-              <h2>Trocar Disco</h2>
-              <button className="lx-modal-close" onClick={() => setDiscMenuOpen(false)} aria-label="Fechar">×</button>
+              <h2>{t("Trocar Disco")}</h2>
+              <button className="lx-modal-close" onClick={() => setDiscMenuOpen(false)} aria-label={t("Fechar")}>×</button>
             </div>
             <div className="lx-settings-body">
               <p className="lx-settings-hint">
-                {discInfo.num_images} discos detectados. Disco atual: <b>{discInfo.current_image + 1}</b>
+                {t("{n} discos detectados. Disco atual:", { n: discInfo.num_images })} <b>{discInfo.current_image + 1}</b>
               </p>
               <div className="lx-settings-rows">
                 {Array.from({ length: discInfo.num_images }, (_, i) => (
@@ -628,7 +629,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
                         setDiscInfo(fresh);
                       } catch (e) { console.error(e); }
                     }}
-                  >Disco {i + 1}{i === discInfo.current_image ? " (atual)" : ""}</button>
+                  >{t("Disco {n}", { n: i + 1 })}{i === discInfo.current_image ? t(" (atual)") : ""}</button>
                 ))}
               </div>
               <button
@@ -647,7 +648,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
                     }
                   } catch (e) { console.error(e); }
                 }}
-              >Carregar Disco de Arquivo...</button>
+              >{t("Carregar Disco de Arquivo...")}</button>
             </div>
           </div>
         </div>
@@ -658,8 +659,8 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
         {info && <span className="pb-emulator-meta">{info.library_name} {info.library_version} · {info.base_width}×{info.base_height} · {Math.round(info.fps)}fps</span>}
       </div>
       <div className="pb-emulator-hints">
-        <kbd>Tab</kbd> Slots · <kbd>F5</kbd>/<kbd>F8</kbd> Quick · <kbd>Space</kbd> FF · <kbd>+</kbd>/<kbd>-</kbd> Speed · <kbd>Esc</kbd> Sair
-        <span style={{ opacity: 0.5, marginLeft: 8 }}>· Pad: Select+L1 Save · Select+R1 Load · Select+Start Sair</span>
+        <kbd>Tab</kbd> {t("Slots")} · <kbd>F5</kbd>/<kbd>F8</kbd> {t("Quick")} · <kbd>Space</kbd> {t("FF")} · <kbd>+</kbd>/<kbd>-</kbd> {t("Speed")} · <kbd>Esc</kbd> {t("Sair")}
+        <span style={{ opacity: 0.5, marginLeft: 8 }}>· {t("Pad: Select+L1 Save · Select+R1 Load · Select+Start Sair")}</span>
       </div>
       <SystemSettingsModal
         open={emuSettingsOpen}
@@ -679,26 +680,26 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
       )}
       {error ? (
         <div className="pb-emulator-error">
-          <strong>Erro ao carregar:</strong>
+          <strong>{t("Erro ao carregar:")}</strong>
           <code>{error}</code>
           {String(error).toLowerCase().includes("bios") && (
             <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", justifyContent: "center" }}>
               <button className="pb-btn pb-btn-primary" onClick={async () => {
                 try { await invoke("open_system_folder"); }
-                catch (e) { lxAlert("Falha ao abrir pasta: " + e); }
-              }}>Abrir pasta system\</button>
+                catch (e) { lxAlert(t("Falha ao abrir pasta: {e}", { e })); }
+              }}>{t("Abrir pasta system\\")}</button>
               <button className="pb-btn" onClick={async () => {
                 try {
                   const n = await invoke("bios_try_auto_import");
                   if (n > 0) {
-                    lxAlert(`Importei ${n} BIOS — tentando de novo...`);
+                    lxAlert(t("Importei {n} BIOS — tentando de novo...", { n }));
                     setError(null);
                     autoLoadDoneRef.current = false;
                   } else {
-                    lxAlert("Nenhuma BIOS encontrada em PCSX2/bios, RetroArch/system, Documents, Downloads. Cola o .bin manualmente na pasta system\\");
+                    lxAlert(t("Nenhuma BIOS encontrada em PCSX2/bios, RetroArch/system, Documents, Downloads. Cola o .bin manualmente na pasta system\\"));
                   }
-                } catch (e) { lxAlert("Falha: " + e); }
-              }}>Auto-import BIOS</button>
+                } catch (e) { lxAlert(t("Falha: {e}", { e })); }
+              }}>{t("Auto-import BIOS")}</button>
             </div>
           )}
           {/* v0.9.22: helper p/ core libretro faltando — antes a mensagem aparecia
@@ -710,24 +711,24 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
             String(error).toLowerCase().includes("não encontrado")) && (
             <div style={{ marginTop: 12, padding: 12, background: "rgba(255,255,255,0.04)", borderRadius: 8, maxWidth: 560 }}>
               <p style={{ margin: "0 0 8px 0", fontSize: 13 }}>
-                <b>Como resolver:</b> o core libretro pra <b>{system.name}</b> não esta na pasta <code>cores/</code>.
-                Baixe o arquivo <code>{system.libretro_core || "(verifique CORES-E-BIOS.md)"}</code> em
-                <code> buildbot.libretro.com/nightly/windows/x86_64/latest/</code> (descompacte o .zip e copie o .dll).
+                <b>{t("Como resolver:")}</b> {t("o core libretro pra")} <b>{system.name}</b> {t("não esta na pasta")} <code>cores/</code>.
+                {" "}{t("Baixe o arquivo")} <code>{system.libretro_core || t("(verifique CORES-E-BIOS.md)")}</code> {t("em")}
+                <code> buildbot.libretro.com/nightly/windows/x86_64/latest/</code> {t("(descompacte o .zip e copie o .dll).")}
               </p>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
                 <button className="pb-btn" onClick={async () => {
                   try { await invoke("open_cores_folder"); } catch (e) {
-                    lxAlert("Falha ao abrir pasta cores: " + e);
+                    lxAlert(t("Falha ao abrir pasta cores: {e}", { e }));
                   }
-                }}>Abrir pasta cores/</button>
+                }}>{t("Abrir pasta cores/")}</button>
                 <button className="pb-btn" onClick={() => {
                   navigator.clipboard?.writeText(`https://buildbot.libretro.com/nightly/windows/x86_64/latest/${system.libretro_core || ""}.zip`).catch(() => {});
-                  lxAlert("URL copiada pro clipboard.");
-                }}>Copiar URL do core</button>
+                  lxAlert(t("URL copiada pro clipboard."));
+                }}>{t("Copiar URL do core")}</button>
               </div>
             </div>
           )}
-          <button className="pb-btn pb-btn-primary" onClick={onClose}>Voltar</button>
+          <button className="pb-btn pb-btn-primary" onClick={onClose}>{t("Voltar")}</button>
         </div>
       ) : (
         <canvas ref={canvasRef} className="pb-emulator-canvas" />
@@ -751,24 +752,24 @@ export function ResumePromptModal({ info, onContinue, onFresh, onCancel }) {
     if (!ts) return "";
     const d = new Date(ts * 1000);
     const diff = (Date.now() - d.getTime()) / 1000;
-    if (diff < 3600) return `${Math.max(1, Math.floor(diff / 60))}min atras`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h atras`;
-    if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d atras`;
-    return d.toLocaleDateString("pt-BR");
+    if (diff < 3600) return t("{n}min atras", { n: Math.max(1, Math.floor(diff / 60)) });
+    if (diff < 86400) return t("{n}h atras", { n: Math.floor(diff / 3600) });
+    if (diff < 86400 * 7) return t("{n}d atras", { n: Math.floor(diff / 86400) });
+    return d.toLocaleDateString(currentLocale());
   }
   return (
     <div className="pb-modal-backdrop" onClick={onCancel}>
       <div className="pb-modal pb-resume-modal" onClick={(e) => e.stopPropagation()}>
         <header className="pb-modal-header">
-          <h2>Continuar de onde parou?</h2>
+          <h2>{t("Continuar de onde parou?")}</h2>
           <button className="pb-icon-btn" onClick={onCancel}><CloseIcon /></button>
         </header>
         <div className="pb-resume-body">
           <p><strong>{info.game.name}</strong></p>
-          <p className="pb-resume-meta">Slot {info.slot} · salvo {fmt(info.when)}</p>
+          <p className="pb-resume-meta">{t("Slot {slot} · salvo {when}", { slot: info.slot, when: fmt(info.when) })}</p>
           <div className="pb-resume-actions">
-            <button className="pb-btn pb-btn-primary" autoFocus onClick={onContinue}>Continuar</button>
-            <button className="pb-btn" onClick={onFresh}>Comecar do início</button>
+            <button className="pb-btn pb-btn-primary" autoFocus onClick={onContinue}>{t("Continuar")}</button>
+            <button className="pb-btn" onClick={onFresh}>{t("Comecar do início")}</button>
           </div>
         </div>
       </div>
@@ -790,21 +791,21 @@ function SaveStateOverlay({ slots, busy, onClose, onSave, onLoad, onDelete }) {
     const d = new Date(ts * 1000);
     const now = new Date();
     const diff = (now.getTime() - d.getTime()) / 1000;
-    if (diff < 60) return "agora";
-    if (diff < 3600) return `${Math.floor(diff / 60)}min atras`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h atras`;
-    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    if (diff < 60) return t("agora");
+    if (diff < 3600) return t("{n}min atras", { n: Math.floor(diff / 60) });
+    if (diff < 86400) return t("{n}h atras", { n: Math.floor(diff / 3600) });
+    return d.toLocaleDateString(currentLocale(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   }
 
   return (
     <div className="pb-savestate-overlay" onClick={onClose}>
       <div className="pb-savestate-panel" onClick={(e) => e.stopPropagation()}>
         <header className="pb-savestate-header">
-          <h2>Save States</h2>
-          <button className="pb-icon-btn" onClick={onClose} title="Fechar (Tab/Esc)"><CloseIcon /></button>
+          <h2>{t("Save States")}</h2>
+          <button className="pb-icon-btn" onClick={onClose} title={t("Fechar (Tab/Esc)")}><CloseIcon /></button>
         </header>
         <p className="pb-savestate-hint">
-          <kbd>1-9</kbd> carrega · <kbd>Shift+1-9</kbd> salva · clique nos slots abaixo
+          <kbd>1-9</kbd> {t("carrega")} · <kbd>Shift+1-9</kbd> {t("salva")} · {t("clique nos slots abaixo")}
         </p>
         <div className="pb-savestate-grid">
           {cards.map((n) => {
@@ -814,9 +815,9 @@ function SaveStateOverlay({ slots, busy, onClose, onSave, onLoad, onDelete }) {
               <div key={n} className={`pb-savestate-card ${empty ? "empty" : ""}`}>
                 <div className="pb-savestate-thumb">
                   {info?.thumbnail_path ? (
-                    <img src={convertFileSrc(info.thumbnail_path)} alt={`Slot ${n}`} />
+                    <img src={convertFileSrc(info.thumbnail_path)} alt={t("Slot {n}", { n })} />
                   ) : (
-                    <span className="pb-savestate-empty-label">vazio</span>
+                    <span className="pb-savestate-empty-label">{t("vazio")}</span>
                   )}
                   <span className="pb-savestate-slot-num">{n}</span>
                 </div>
@@ -824,10 +825,10 @@ function SaveStateOverlay({ slots, busy, onClose, onSave, onLoad, onDelete }) {
                   {info ? fmtTime(info.modified_at) : "—"}
                 </div>
                 <div className="pb-savestate-actions">
-                  <button className="pb-savestate-btn" disabled={busy} onClick={() => onSave(n)} title="Salvar (sobrescreve)">Salvar</button>
-                  <button className="pb-savestate-btn pb-savestate-btn-primary" disabled={busy || empty} onClick={() => { onLoad(n); onClose(); }} title="Carregar">Carregar</button>
+                  <button className="pb-savestate-btn" disabled={busy} onClick={() => onSave(n)} title={t("Salvar (sobrescreve)")}>{t("Salvar")}</button>
+                  <button className="pb-savestate-btn pb-savestate-btn-primary" disabled={busy || empty} onClick={() => { onLoad(n); onClose(); }} title={t("Carregar")}>{t("Carregar")}</button>
                   {!empty && (
-                    <button className="pb-savestate-btn pb-savestate-btn-danger" disabled={busy} onClick={() => onDelete(n)} title="Apagar">×</button>
+                    <button className="pb-savestate-btn pb-savestate-btn-danger" disabled={busy} onClick={() => onDelete(n)} title={t("Apagar")}>×</button>
                   )}
                 </div>
               </div>

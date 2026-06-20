@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { t } from "./ludexI18n";
 
 /**
  * On-screen keyboard navegavel por D-pad/setas + A/Enter pra inserir tecla.
@@ -160,10 +161,10 @@ export default function VirtualKeyboard({
 
   function keyLabel(k) {
     if (k === "BACK") return "←";
-    if (k === "SPACE") return "espaço";
-    if (k === "SHIFT") return layout === "upper" ? "shift" : "Shift";
+    if (k === "SPACE") return t("espaço");
+    if (k === "SHIFT") return layout === "upper" ? t("shift") : t("Shift");
     if (k === "SYM") return layout === "sym" ? "ABC" : "@!#";
-    if (k === "CLEAR") return "limpar";
+    if (k === "CLEAR") return t("limpar");
     if (k === "OK") return "OK";
     return k;
   }
@@ -215,11 +216,11 @@ export default function VirtualKeyboard({
         </div>
 
         <div className="lx-osk-hints">
-          <span><b>D-Pad / Setas</b> mover</span>
-          <span><b>A / Enter</b> pressionar</span>
-          <span><b>B / Backspace</b> apagar</span>
-          <span><b>X/Y</b> trocar layout</span>
-          <span><b>Start</b> OK · <b>Select</b> fechar</span>
+          <span><b>D-Pad / Setas</b> {t("mover")}</span>
+          <span><b>A / Enter</b> {t("pressionar")}</span>
+          <span><b>B / Backspace</b> {t("apagar")}</span>
+          <span><b>X/Y</b> {t("trocar layout")}</span>
+          <span><b>Start</b> OK · <b>Select</b> {t("fechar")}</span>
         </div>
       </div>
     </div>

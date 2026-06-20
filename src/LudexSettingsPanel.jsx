@@ -123,21 +123,21 @@ export default function SettingsPanel({
     if (!config.ra_username || !config.ra_api_key) { setRaSummary(null); return; }
     let cancelled = false;
     invoke("ra_get_summary").then((s) => { if (!cancelled) setRaSummary(s); })
-      .catch((e) => { if (!cancelled) setRaStatus({ kind: "warn", text: "Falha ao buscar RA: " + String(e).slice(0, 120) }); });
+      .catch((e) => { if (!cancelled) setRaStatus({ kind: "warn", text: t("Falha ao buscar RA: {err}", { err: String(e).slice(0, 120) }) }); });
     return () => { cancelled = true; };
   }, [config.ra_username, config.ra_api_key]);
 
   async function saveRa() {
     if (!raUser.trim() || !raKey.trim()) {
-      setRaStatus({ kind: "error", text: "Informe usuário e Web API Key." });
+      setRaStatus({ kind: "error", text: t("Informe usuário e Web API Key.") });
       return;
     }
     setRaBusy(true);
-    setRaStatus({ kind: "info", text: "Validando credenciais..." });
+    setRaStatus({ kind: "info", text: t("Validando credenciais...") });
     try {
       const summary = await invoke("ra_save_credentials", { username: raUser.trim(), apiKey: raKey.trim() });
       setRaSummary(summary);
-      setRaStatus({ kind: "ok", text: `Conectado como ${summary.username}!` });
+      setRaStatus({ kind: "ok", text: t("Conectado como {username}!", { username: summary.username }) });
     } catch (e) {
       setRaStatus({ kind: "error", text: String(e).slice(0, 200) });
     } finally {
@@ -151,7 +151,7 @@ export default function SettingsPanel({
       setRaSummary(null);
       setRaUser("");
       setRaKey("");
-      setRaStatus({ kind: "ok", text: "RetroAchievements desconectado." });
+      setRaStatus({ kind: "ok", text: t("RetroAchievements desconectado.") });
       setTimeout(() => setRaStatus(null), 2500);
     } catch (e) {
       setRaStatus({ kind: "error", text: String(e) });
@@ -163,7 +163,7 @@ export default function SettingsPanel({
     try {
       const s = await invoke("ra_get_summary");
       setRaSummary(s);
-      setRaStatus({ kind: "ok", text: "Atualizado." });
+      setRaStatus({ kind: "ok", text: t("Atualizado.") });
       setTimeout(() => setRaStatus(null), 2000);
     } catch (e) {
       setRaStatus({ kind: "error", text: String(e).slice(0, 200) });
@@ -251,14 +251,14 @@ export default function SettingsPanel({
   async function doCheckUpdate() {
     if (updateBusy) return;
     setUpdateBusy(true);
-    setUpdateStatus({ kind: "info", text: "Procurando atualização..." });
+    setUpdateStatus({ kind: "info", text: t("Procurando atualização...") });
     try {
       const update = await checkUpdate();
       if (!update) {
-        setUpdateStatus({ kind: "ok", text: "Você já está na versão mais recente!" });
+        setUpdateStatus({ kind: "ok", text: t("Você já está na versão mais recente!") });
         return;
       }
-      setUpdateStatus({ kind: "info", text: `Versão ${update.version} disponível. Baixando...` });
+      setUpdateStatus({ kind: "info", text: t("Versão {version} disponível. Baixando...", { version: update.version }) });
       let downloaded = 0;
       let total = 0;
       await update.downloadAndInstall((event) => {
@@ -266,9 +266,9 @@ export default function SettingsPanel({
         if (event.event === "Progress") {
           downloaded += event.data.chunkLength || 0;
           const pct = total ? Math.round((downloaded / total) * 100) : 0;
-          setUpdateStatus({ kind: "info", text: `Baixando v${update.version}: ${pct}%` });
+          setUpdateStatus({ kind: "info", text: t("Baixando v{version}: {pct}%", { version: update.version, pct }) });
         }
-        if (event.event === "Finished") setUpdateStatus({ kind: "ok", text: "Download OK. Reiniciando..." });
+        if (event.event === "Finished") setUpdateStatus({ kind: "ok", text: t("Download OK. Reiniciando...") });
       });
       await relaunch();
     } catch (e) {
@@ -279,9 +279,9 @@ export default function SettingsPanel({
       // erro — e so "ainda não ha update pra este sistema". Mostra mensagem amigavel.
       const msg = String(e || "");
       if (/fallback platforms|platforms` object|no longer supported|platform/i.test(msg)) {
-        setUpdateStatus({ kind: "ok", text: "Você já está na versão mais recente!" });
+        setUpdateStatus({ kind: "ok", text: t("Você já está na versão mais recente!") });
       } else {
-        setUpdateStatus({ kind: "error", text: `Erro: ${e}` });
+        setUpdateStatus({ kind: "error", text: t("Erro: {err}", { err: e }) });
       }
     } finally {
       setUpdateBusy(false);
@@ -290,7 +290,7 @@ export default function SettingsPanel({
   async function saveDiscord() {
     try {
       const ok = await invoke("discord_set_app_id", { appId: discordId.trim() || null });
-      setDiscordStatus(ok ? { kind: "ok", text: "Conectado ao Discord!" } : { kind: "warn", text: "Salvo. Discord pode não estar rodando — abre o Discord e tenta de novo." });
+      setDiscordStatus(ok ? { kind: "ok", text: t("Conectado ao Discord!") } : { kind: "warn", text: t("Salvo. Discord pode não estar rodando — abre o Discord e tenta de novo.") });
     } catch (e) {
       setDiscordStatus({ kind: "error", text: String(e) });
     }
@@ -311,7 +311,7 @@ export default function SettingsPanel({
       <aside ref={panelRef} className={`pb-settings ${closing ? "closing" : ""}`} onClick={(e) => e.stopPropagation()}>
         <header className="pb-settings-header">
           <h2>{t("Configurações")}</h2>
-          <button className="pb-icon-btn" onClick={() => { sfx.back(); onClose(); }} title="Fechar (Esc)"><CloseIcon /></button>
+          <button className="pb-icon-btn" onClick={() => { sfx.back(); onClose(); }} title={t("Fechar (Esc)")}><CloseIcon /></button>
         </header>
 
         <div className="pb-settings-section">
@@ -343,13 +343,13 @@ export default function SettingsPanel({
             </button>
           ) : (
             <button className="pb-settings-btn" onClick={() => { sfx.open(); onOpenProfiles(); }}>
-              <UserIcon /> Criar perfil
+              <UserIcon /> {t("Criar perfil")}
             </button>
           )}
         </div>
 
         <div className="pb-settings-section">
-          <h3>Tema</h3>
+          <h3>{t("Tema")}</h3>
           <div className="pb-theme-grid">
             {THEMES.map((t) => (
               <button
@@ -366,12 +366,12 @@ export default function SettingsPanel({
             <button
               className={`pb-theme-card ${config.theme_id === "custom" ? "active" : ""}`}
               onClick={() => onSetTheme("custom")}
-              title="Tema customizado"
+              title={t("Tema customizado")}
             >
               <div className="pb-theme-swatch">
                 {(config.custom_theme ? [config.custom_theme.bg, config.custom_theme.card, config.custom_theme.text] : [DEFAULT_CUSTOM_THEME.bg, DEFAULT_CUSTOM_THEME.card, DEFAULT_CUSTOM_THEME.text]).map((c, i) => <span key={i} style={{ background: c }} />)}
               </div>
-              <span>Custom</span>
+              <span>{t("Custom")}</span>
             </button>
           </div>
           {config.theme_id === "custom" && (
@@ -383,18 +383,18 @@ export default function SettingsPanel({
         </div>
 
         <div className="pb-settings-section">
-          <h3>Música ambiente</h3>
+          <h3>{t("Música ambiente")}</h3>
           <button
             className={`pb-settings-btn ${config.music_enabled ? "pb-settings-btn-danger" : ""}`}
             onClick={() => { sfx.toggle(); onToggleMusic(); }}
           >
             <PowerIcon />
-            {config.music_enabled ? "Desativar música" : "Ativar música"}
+            {config.music_enabled ? t("Desativar música") : t("Ativar música")}
           </button>
           {config.music_enabled && (
             <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
               <label className="pb-settings-hint" style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ minWidth: 60 }}>Volume</span>
+                <span style={{ minWidth: 60 }}>{t("Volume")}</span>
                 <input
                   type="range"
                   min="0"
@@ -407,56 +407,56 @@ export default function SettingsPanel({
                 <span style={{ minWidth: 30, textAlign: "right" }}>{Math.round((config.music_volume ?? 0.3) * 100)}%</span>
               </label>
               <button className="pb-settings-btn" onClick={() => { sfx.click(); ambientMusic.skip(); }}>
-                <RotateIcon /> Próxima música
+                <RotateIcon /> {t("Próxima música")}
               </button>
             </div>
           )}
-          <p className="pb-settings-hint">Playlist embaralhada da pasta <code>music/</code>. Pausa enquanto jogo está aberto.</p>
+          <p className="pb-settings-hint">{t("Playlist embaralhada da pasta")} <code>music/</code>. {t("Pausa enquanto jogo está aberto.")}</p>
         </div>
 
         <div className="pb-settings-section">
-          <h3>Papel de parede</h3>
+          <h3>{t("Papel de parede")}</h3>
           {config.wallpaper_path && (
             <div className="pb-wallpaper-preview">
               <img src={convertFileSrc(config.wallpaper_path)} alt="" />
-              <button className="pb-wallpaper-clear" onClick={onClearWallpaper} title="Remover">
+              <button className="pb-wallpaper-clear" onClick={onClearWallpaper} title={t("Remover")}>
                 <CloseIcon />
               </button>
             </div>
           )}
           <button className="pb-settings-btn" style={{ justifyContent: "center" }} onClick={() => { sfx.click(); onPickWallpaper(); }}>
             <PlusIcon />
-            {config.wallpaper_path ? "Trocar imagem" : "Escolher imagem"}
+            {config.wallpaper_path ? t("Trocar imagem") : t("Escolher imagem")}
           </button>
         </div>
 
         <div className="pb-settings-section">
-          <h3>Capas dos jogos</h3>
+          <h3>{t("Capas dos jogos")}</h3>
           <button className="pb-settings-btn" onClick={() => { sfx.click(); onSyncCovers(); }} disabled={syncStatus.busy}>
             <RefreshIcon />
-            {syncStatus.busy ? `Sincronizando ${syncStatus.text}...` : "Sincronizar capas (limpa cache)"}
+            {syncStatus.busy ? t("Sincronizando {text}...", { text: syncStatus.text }) : t("Sincronizar capas (limpa cache)")}
           </button>
           <p className="pb-settings-hint">
-            Apaga capas em cache e re-busca pelo IGDB. Use se alguma capa veio errada.
+            {t("Apaga capas em cache e re-busca pelo IGDB. Use se alguma capa veio errada.")}
           </p>
         </div>
 
         <div className="pb-settings-section">
-          <h3>Biblioteca</h3>
+          <h3>{t("Biblioteca")}</h3>
           <button className="pb-settings-btn" onClick={() => { sfx.click(); onRescan(); }} disabled={rescanBusy}>
             <RefreshIcon />
-            {rescanBusy ? "Re-escaneando..." : "Re-escanear pasta de ROMs"}
+            {rescanBusy ? t("Re-escaneando...") : t("Re-escanear pasta de ROMs")}
           </button>
           <p className="pb-settings-hint">
-            Detecta jogos novos sem precisar reabrir o app.
+            {t("Detecta jogos novos sem precisar reabrir o app.")}
           </p>
         </div>
 
         <div className="pb-settings-section">
-          <h3>Switch — Yuzu</h3>
+          <h3>{t("Switch — Yuzu")}</h3>
           <button className="pb-settings-btn" onClick={() => { sfx.click(); onSetupSwitchKeys(); }} disabled={switchKeysStatus.busy}>
             <RefreshIcon />
-            {switchKeysStatus.busy ? "Copiando..." : "Instalar keys + firmware (Yuzu)"}
+            {switchKeysStatus.busy ? t("Copiando...") : t("Instalar keys + firmware (Yuzu)")}
           </button>
           {switchKeysStatus.message && (
             <p className="pb-settings-hint" style={{ color: switchKeysStatus.kind === "error" ? "#fca5a5" : "#86efac" }}>
@@ -464,16 +464,16 @@ export default function SettingsPanel({
             </p>
           )}
           <p className="pb-settings-hint">
-            Copia <code>prod.keys</code>, <code>title.keys</code> e firmware NCA da pasta KEYS pra <code>%APPDATA%\yuzu\</code>.
+            {t("Copia")} <code>prod.keys</code>, <code>title.keys</code> {t("e firmware NCA da pasta KEYS pra")} <code>%APPDATA%\yuzu\</code>.
           </p>
         </div>
 
         {/* v0.9.35: equivalente Wii U */}
         <div className="pb-settings-section">
-          <h3>Wii U — Cemu</h3>
+          <h3>{t("Wii U — Cemu")}</h3>
           <button className="pb-settings-btn" onClick={() => { sfx.click(); onSetupWiiuKeys && onSetupWiiuKeys(); }} disabled={wiiuKeysStatus?.busy}>
             <RefreshIcon />
-            {wiiuKeysStatus?.busy ? "Copiando..." : "Instalar keys (Cemu)"}
+            {wiiuKeysStatus?.busy ? t("Copiando...") : t("Instalar keys (Cemu)")}
           </button>
           {wiiuKeysStatus?.message && (
             <p className="pb-settings-hint" style={{ color: wiiuKeysStatus.kind === "error" ? "#fca5a5" : "#86efac" }}>
@@ -481,16 +481,16 @@ export default function SettingsPanel({
             </p>
           )}
           <p className="pb-settings-hint">
-            Copia <code>keys.txt</code> (+ <code>otp.bin</code> / <code>seeprom.bin</code> opcionais) da pasta <code>roms/KEYS/</code> pra <code>emulators/CEMU/Cemu_2.6/</code>.
+            {t("Copia")} <code>keys.txt</code> ({t("+ {otp} / {seeprom} opcionais", { otp: "otp.bin", seeprom: "seeprom.bin" })}) {t("da pasta")} <code>roms/KEYS/</code> {t("pra")} <code>emulators/CEMU/Cemu_2.6/</code>.
           </p>
         </div>
 
         {/* v0.9.35: equivalente PS Vita */}
         <div className="pb-settings-section">
-          <h3>PS Vita — Vita3K</h3>
+          <h3>{t("PS Vita — Vita3K")}</h3>
           <button className="pb-settings-btn" onClick={() => { sfx.click(); onSetupVitaFirmware && onSetupVitaFirmware(); }} disabled={vitaFwStatus?.busy}>
             <RefreshIcon />
-            {vitaFwStatus?.busy ? "Copiando..." : "Instalar firmware (Vita3K)"}
+            {vitaFwStatus?.busy ? t("Copiando...") : t("Instalar firmware (Vita3K)")}
           </button>
           {vitaFwStatus?.message && (
             <p className="pb-settings-hint" style={{ color: vitaFwStatus.kind === "error" ? "#fca5a5" : "#86efac" }}>
@@ -498,19 +498,19 @@ export default function SettingsPanel({
             </p>
           )}
           <p className="pb-settings-hint">
-            Copia <code>PSVITAUPDAT.PUP</code> da pasta <code>roms/KEYS/</code> pra <code>emulators/VITA/</code>. Depois abra o Vita3K, Welcome wizard, aponte o PUP.
+            {t("Copia")} <code>PSVITAUPDAT.PUP</code> {t("da pasta")} <code>roms/KEYS/</code> {t("pra")} <code>emulators/VITA/</code>. {t("Depois abra o Vita3K, Welcome wizard, aponte o PUP.")}
           </p>
         </div>
 
         <div className="pb-settings-section">
-          <h3>Saves separados por perfil</h3>
+          <h3>{t("Saves separados por perfil")}</h3>
           <button
             className={`pb-settings-btn ${savesStatus.enabled ? "pb-settings-btn-danger" : ""}`}
             onClick={() => { sfx.toggle(); onToggleSavesIsolation(); }}
             disabled={savesStatus.busy || !activeProfile}
           >
             <PowerIcon />
-            {savesStatus.busy ? "Aplicando..." : (savesStatus.enabled ? "Desativar (restaurar pasta unica)" : "Ativar (saves separados)")}
+            {savesStatus.busy ? t("Aplicando...") : (savesStatus.enabled ? t("Desativar (restaurar pasta unica)") : t("Ativar (saves separados)"))}
           </button>
           {savesStatus.message && (
             <p className="pb-settings-hint" style={{ color: savesStatus.kind === "error" ? "#fca5a5" : "#86efac", whiteSpace: "pre-wrap" }}>
@@ -518,18 +518,18 @@ export default function SettingsPanel({
             </p>
           )}
           <p className="pb-settings-hint">
-            Quando ativo, cada perfil tem saves proprios (Yuzu, PCSX2, Dolphin, DuckStation, RPCS3, Project64). Trocar perfil = troca os saves automaticamente. Funciona via junctions Windows (NTFS).
+            {t("Quando ativo, cada perfil tem saves proprios (Yuzu, PCSX2, Dolphin, DuckStation, RPCS3, Project64). Trocar perfil = troca os saves automaticamente. Funciona via junctions Windows (NTFS).")}
           </p>
         </div>
 
         {activeProfile && (
           <div className="pb-settings-section">
-            <h3>Estatisticas — {activeProfile.name}</h3>
+            <h3>{t("Estatisticas — {name}", { name: activeProfile.name })}</h3>
             <div className="pb-stats">
-              <div className="pb-stat"><strong>{activeProfile.total_launches || 0}</strong><span>jogos lancados</span></div>
-              <div className="pb-stat"><strong>{(activeProfile.favorites || []).length}</strong><span>favoritos</span></div>
-              <div className="pb-stat"><strong>{formatPlayTime(totalPlayTime)}</strong><span>tempo total</span></div>
-              <div className="pb-stat"><strong>{Object.keys(activeProfile.play_time || {}).length}</strong><span>jogos abertos</span></div>
+              <div className="pb-stat"><strong>{activeProfile.total_launches || 0}</strong><span>{t("jogos lancados")}</span></div>
+              <div className="pb-stat"><strong>{(activeProfile.favorites || []).length}</strong><span>{t("favoritos")}</span></div>
+              <div className="pb-stat"><strong>{formatPlayTime(totalPlayTime)}</strong><span>{t("tempo total")}</span></div>
+              <div className="pb-stat"><strong>{Object.keys(activeProfile.play_time || {}).length}</strong><span>{t("jogos abertos")}</span></div>
             </div>
             <CollectionStats gameMeta={activeProfile.game_meta || {}} systems={systems} />
             <TopPlayedList playTime={activeProfile.play_time || {}} sessions={activeProfile.sessions || []} systems={systems} />
@@ -539,7 +539,7 @@ export default function SettingsPanel({
 
         {activeProfile && (
           <div className="pb-settings-section">
-            <h3>Conquistas ({unlocked.length}/{ACHIEVEMENTS.length})</h3>
+            <h3>{t("Conquistas ({unlocked}/{total})", { unlocked: unlocked.length, total: ACHIEVEMENTS.length })}</h3>
             <ul className="pb-achievement-list">
               {[...unlocked, ...locked].map((a) => {
                 const isUnlocked = unlocked.includes(a);
@@ -560,13 +560,13 @@ export default function SettingsPanel({
         <LicenseSettingsSection />
 
         <div className="pb-settings-section">
-          <h3>Atualizações</h3>
+          <h3>{t("Atualizações")}</h3>
           <div className="pb-version-line">
-            <span className="pb-version-label">Versão instalada:</span>
+            <span className="pb-version-label">{t("Versão instalada:")}</span>
             <strong className="pb-version-current">v{appVersion || "?"}</strong>
           </div>
           <button className="pb-settings-btn" onClick={() => { sfx.click(); doCheckUpdate(); }} disabled={updateBusy}>
-            <RefreshIcon /> {updateBusy ? "Verificando..." : "Verificar atualização"}
+            <RefreshIcon /> {updateBusy ? t("Verificando...") : t("Verificar atualização")}
           </button>
           {updateStatus && (
             <p className="pb-settings-hint" style={{ color: updateStatus.kind === "error" ? "#fca5a5" : updateStatus.kind === "ok" ? "#86efac" : "#fcd34d" }}>
@@ -574,22 +574,22 @@ export default function SettingsPanel({
             </p>
           )}
           <p className="pb-settings-hint" style={{ marginTop: 6 }}>
-            Verifica novas versões em <code>github.com/EllaeMyApp/ludex</code>. Baixa e reinicia automaticamente.
+            {t("Verifica novas versões em")} <code>github.com/EllaeMyApp/ludex</code>. {t("Baixa e reinicia automaticamente.")}
           </p>
         </div>
 
         {/* v0.9.23: cores libretro — status + auto-download do buildbot oficial */}
         <div className="pb-settings-section">
-          <h3>Cores libretro</h3>
+          <h3>{t("Cores libretro")}</h3>
           {(() => {
             const total = coresStatus.length;
             const installed = coresStatus.filter((c) => c.installed).length;
             const missing = total - installed;
             return (
               <p className="pb-settings-hint" style={{ marginTop: 0 }}>
-                <strong>{installed}/{total}</strong> cores instalados em <code>cores/</code>
-                {missing > 0 ? ` — ${missing} faltando.` : ` — tudo certo!`}
-                {missing > 0 && " Sem o .dll certo, o emulador crasha ou não identifica os jogos."}
+                <strong>{installed}/{total}</strong> {t("cores instalados em")} <code>cores/</code>
+                {missing > 0 ? t(" — {missing} faltando.", { missing }) : t(" — tudo certo!")}
+                {missing > 0 && t(" Sem o .dll certo, o emulador crasha ou não identifica os jogos.")}
               </p>
             );
           })()}
@@ -601,8 +601,8 @@ export default function SettingsPanel({
                 disabled={coresBusy}
               >
                 {coresBusy
-                  ? (coresProgress ? `Baixando ${coresProgress.done + 1}/${coresProgress.total}: ${coresProgress.current || "..."}` : "Baixando...")
-                  : `Baixar ${coresStatus.filter((c) => !c.installed).length} cores faltando`}
+                  ? (coresProgress ? t("Baixando {done}/{total}: {current}", { done: coresProgress.done + 1, total: coresProgress.total, current: coresProgress.current || "..." }) : t("Baixando..."))
+                  : t("Baixar {count} cores faltando", { count: coresStatus.filter((c) => !c.installed).length })}
               </button>
             )}
             {coresStatus.some((c) => c.installed) && (
@@ -610,19 +610,19 @@ export default function SettingsPanel({
                 className="pb-settings-btn"
                 onClick={() => { sfx.click(); updateInstalledCores(); }}
                 disabled={coresBusy}
-                title="Re-baixa cada core instalado pra versão nightly mais recente do buildbot"
+                title={t("Re-baixa cada core instalado pra versão nightly mais recente do buildbot")}
               >
                 {coresBusy && coresProgress?.current
                   ? `${coresProgress.done + 1}/${coresProgress.total}: ${coresProgress.current}`
-                  : `Atualizar ${coresStatus.filter((c) => c.installed).length} cores instalados`}
+                  : t("Atualizar {count} cores instalados", { count: coresStatus.filter((c) => c.installed).length })}
               </button>
             )}
           </div>
           {coresProgress && !coresBusy && (
             <p className="pb-settings-hint" style={{ marginTop: 6, color: coresProgress.fails.length > 0 ? "#fcd34d" : "#86efac" }}>
               {coresProgress.fails.length === 0
-                ? `OK — ${coresProgress.done} cores baixados.`
-                : `${coresProgress.done - coresProgress.fails.length} OK, ${coresProgress.fails.length} falharam (talvez não existam no buildbot pra este target).`}
+                ? t("OK — {done} cores baixados.", { done: coresProgress.done })
+                : t("{ok} OK, {fails} falharam (talvez não existam no buildbot pra este target).", { ok: coresProgress.done - coresProgress.fails.length, fails: coresProgress.fails.length })}
             </p>
           )}
           <button
@@ -630,7 +630,7 @@ export default function SettingsPanel({
             onClick={() => { sfx.click(); setCoresExpanded((v) => !v); }}
             style={{ marginTop: 8 }}
           >
-            {coresExpanded ? "Esconder lista" : "Ver lista completa"}
+            {coresExpanded ? t("Esconder lista") : t("Ver lista completa")}
           </button>
           {coresExpanded && (
             <div style={{ marginTop: 8, maxHeight: 280, overflowY: "auto", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 8 }}>
@@ -640,14 +640,14 @@ export default function SettingsPanel({
                     <strong>{c.system_name}</strong> <code style={{ opacity: 0.7, fontSize: 11 }}>{c.core_filename}</code>
                   </span>
                   <span style={{ fontSize: 11, color: c.installed ? "#86efac" : "#fca5a5", flexShrink: 0 }}>
-                    {c.installed ? "OK" : "FALTANDO"}
+                    {c.installed ? t("OK") : t("FALTANDO")}
                   </span>
                   <button
                     className="pb-settings-btn"
                     style={{ padding: "2px 8px", fontSize: 11, flexShrink: 0 }}
                     disabled={coresBusy}
                     onClick={() => { sfx.click(); c.installed ? updateSingleCore(c.core_filename) : runCoreDownloads([c], false); }}
-                    title={c.installed ? "Re-baixar do buildbot (atualizar)" : "Baixar do buildbot"}
+                    title={c.installed ? t("Re-baixar do buildbot (atualizar)") : t("Baixar do buildbot")}
                   >
                     {c.installed ? "↻" : "↓"}
                   </button>
@@ -660,24 +660,24 @@ export default function SettingsPanel({
             onClick={async () => { sfx.click(); try { await invoke("open_cores_folder"); } catch (e) { console.error(e); } }}
             style={{ marginTop: 8 }}
           >
-            Abrir pasta cores/
+            {t("Abrir pasta cores/")}
           </button>
           <p className="pb-settings-hint" style={{ marginTop: 6 }}>
-            Fonte: <code>buildbot.libretro.com/nightly/windows/x86_64/latest/</code>. Cada core e um .dll dentro de um .zip — Ludex baixa, extrai e instala automaticamente.
+            {t("Fonte:")} <code>buildbot.libretro.com/nightly/windows/x86_64/latest/</code>. {t("Cada core e um .dll dentro de um .zip — Ludex baixa, extrai e instala automaticamente.")}
           </p>
         </div>
 
         {/* v0.9.24: BIOS — status + auto-import (sem download direto: copyright). */}
         <div className="pb-settings-section">
-          <h3>BIOS dos emuladores</h3>
+          <h3>{t("BIOS dos emuladores")}</h3>
           {(() => {
             const sysWithBios = biosStatus.length;
             const sysOK = biosStatus.filter((s) => s.any_present).length;
             const sysMiss = sysWithBios - sysOK;
             return (
               <p className="pb-settings-hint" style={{ marginTop: 0 }}>
-                <strong>{sysOK}/{sysWithBios}</strong> sistemas com BIOS presente
-                {sysMiss > 0 ? ` — ${sysMiss} sem BIOS (PS1, PS2, Dreamcast, Saturn, 3DO, Jaguar etc dependem dela pra rodar).` : ` — tudo certo!`}
+                <strong>{sysOK}/{sysWithBios}</strong> {t("sistemas com BIOS presente")}
+                {sysMiss > 0 ? t(" — {missing} sem BIOS (PS1, PS2, Dreamcast, Saturn, 3DO, Jaguar etc dependem dela pra rodar).", { missing: sysMiss }) : t(" — tudo certo!")}
               </p>
             );
           })()}
@@ -688,41 +688,41 @@ export default function SettingsPanel({
                 sfx.click();
                 try {
                   const n = await invoke("bios_try_auto_import");
-                  if (n > 0) lxAlert(`Importei ${n} BIOS de PCSX2/bios, RetroArch/system, Documents, Downloads etc.`);
-                  else lxAlert("Nada novo. Pra importar automático, cola os .bin em D:\\BIOS, C:\\BIOS, Documents\\PCSX2\\bios, emulators\\PCSX2\\bios ou Downloads\\.");
+                  if (n > 0) lxAlert(t("Importei {n} BIOS de PCSX2/bios, RetroArch/system, Documents, Downloads etc.", { n }));
+                  else lxAlert(t("Nada novo. Pra importar automático, cola os .bin em D:\\BIOS, C:\\BIOS, Documents\\PCSX2\\bios, emulators\\PCSX2\\bios ou Downloads\\."));
                   await refreshBiosStatus();
-                } catch (e) { lxAlert("Falha: " + e); }
+                } catch (e) { lxAlert(t("Falha: {err}", { err: e })); }
               }}
             >
-              Tentar auto-import
+              {t("Tentar auto-import")}
             </button>
             <button
               className="pb-settings-btn"
               onClick={async () => {
                 sfx.click();
-                if (!await lxConfirm("Vou varrer D:\\, E:\\, F:\\, G:\\ e sua pasta de usuário inteira atras de arquivos com nome de BIOS (scph5500.bin, dc_boot.bin, sega_101.bin etc). Pode demorar 30s-2min. Continuar?", { title: "Procurar BIOS no PC inteiro", okText: "Procurar" })) return;
+                if (!await lxConfirm(t("Vou varrer D:\\, E:\\, F:\\, G:\\ e sua pasta de usuário inteira atras de arquivos com nome de BIOS (scph5500.bin, dc_boot.bin, sega_101.bin etc). Pode demorar 30s-2min. Continuar?"), { title: t("Procurar BIOS no PC inteiro"), okText: t("Procurar") })) return;
                 try {
                   const n = await invoke("bios_deep_scan");
-                  if (n > 0) lxAlert(`Deep-scan importou ${n} BIOS pra system\\.`);
-                  else lxAlert("Deep-scan não achou nenhum arquivo com nome de BIOS conhecida. Voce precisa baixar manualmente (BIOS sao copyright).");
+                  if (n > 0) lxAlert(t("Deep-scan importou {n} BIOS pra system\\.", { n }));
+                  else lxAlert(t("Deep-scan não achou nenhum arquivo com nome de BIOS conhecida. Voce precisa baixar manualmente (BIOS sao copyright)."));
                   await refreshBiosStatus();
-                } catch (e) { lxAlert("Falha: " + e); }
+                } catch (e) { lxAlert(t("Falha: {err}", { err: e })); }
               }}
-              title="Varre D:\\, outras unidades e a home do usuário atras de BIOS no PC inteiro"
+              title={t("Varre D:\\, outras unidades e a home do usuário atras de BIOS no PC inteiro")}
             >
-              Procurar BIOS no PC inteiro
+              {t("Procurar BIOS no PC inteiro")}
             </button>
             <button
               className="pb-settings-btn"
               onClick={async () => { sfx.click(); try { await invoke("open_system_folder"); } catch (e) { console.error(e); } }}
             >
-              Abrir pasta system\
+              {t("Abrir pasta system\\")}
             </button>
             <button
               className="pb-settings-btn"
               onClick={() => { sfx.click(); setBiosExpanded((v) => !v); }}
             >
-              {biosExpanded ? "Esconder lista" : "Ver lista detalhada"}
+              {biosExpanded ? t("Esconder lista") : t("Ver lista detalhada")}
             </button>
           </div>
           {biosExpanded && (
@@ -732,7 +732,7 @@ export default function SettingsPanel({
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <strong style={{ fontSize: 13 }}>{s.system_name}</strong>
                     <span style={{ fontSize: 11, color: s.any_present ? "#86efac" : "#fca5a5" }}>
-                      {s.any_present ? "OK" : "FALTANDO"}
+                      {s.any_present ? t("OK") : t("FALTANDO")}
                     </span>
                   </div>
                   <div style={{ marginTop: 4, fontSize: 11, opacity: 0.75 }}>
@@ -747,36 +747,36 @@ export default function SettingsPanel({
             </div>
           )}
           <p className="pb-settings-hint" style={{ marginTop: 6 }}>
-            BIOS sao arquivos protegidos por copyright — Ludex não baixa por você. Cola o .bin em qualquer uma das pastas conhecidas (D:\BIOS, Documents\PCSX2\bios, Downloads, etc) e clica em "Tentar auto-import", ou cola direto em <code>system\</code>.
+            {t("BIOS sao arquivos protegidos por copyright — Ludex não baixa por você. Cola o .bin em qualquer uma das pastas conhecidas (D:\\BIOS, Documents\\PCSX2\\bios, Downloads, etc) e clica em \"Tentar auto-import\", ou cola direto em")} <code>system\</code>.
           </p>
         </div>
 
         <div className="pb-settings-section">
-          <h3>Onde baixar jogos / DLCs / mods</h3>
+          <h3>{t("Onde baixar jogos / DLCs / mods")}</h3>
           <button className="pb-settings-btn" onClick={() => { sfx.click(); onOpenSuggestions && onOpenSuggestions(); }}>
-            <PlusIcon /> Abrir guia de fontes
+            <PlusIcon /> {t("Abrir guia de fontes")}
           </button>
           <p className="pb-settings-hint" style={{ marginTop: 6 }}>
-            Lista de sites populares por categoria (ROMs, traduções PT-BR, mods de FPS/resolução, DLCs). Aviso legal e dicas pra evitar quebrar saves.
+            {t("Lista de sites populares por categoria (ROMs, traduções PT-BR, mods de FPS/resolução, DLCs). Aviso legal e dicas pra evitar quebrar saves.")}
           </p>
         </div>
 
         <div className="pb-settings-section">
-          <h3>Discord Rich Presence</h3>
+          <h3>{t("Discord Rich Presence")}</h3>
           <p className="pb-settings-hint" style={{ marginBottom: 10 }}>
-            Mostra o jogo que você tá jogando no seu perfil do Discord.
-            Crie uma "Application" em <code>discord.com/developers/applications</code> e cole o <strong>Client ID</strong> abaixo.
+            {t("Mostra o jogo que você tá jogando no seu perfil do Discord.")}
+            {t("Crie uma \"Application\" em")} <code>discord.com/developers/applications</code> {t("e cole o")} <strong>Client ID</strong> {t("abaixo.")}
           </p>
           <input
             type="text"
             className="pb-input"
-            placeholder="Discord Application ID (ex: 1234567890123456789)"
+            placeholder={t("Discord Application ID (ex: 1234567890123456789)")}
             value={discordId}
             onChange={(e) => setDiscordId(e.target.value)}
             style={{ marginBottom: 10 }}
           />
           <button className="pb-settings-btn" onClick={() => { sfx.click(); saveDiscord(); }}>
-            <RefreshIcon /> Salvar e conectar
+            <RefreshIcon /> {t("Salvar e conectar")}
           </button>
           {discordStatus && (
             <p className="pb-settings-hint" style={{ color: discordStatus.kind === "error" ? "#fca5a5" : discordStatus.kind === "warn" ? "#fcd34d" : "#86efac" }}>
@@ -786,22 +786,22 @@ export default function SettingsPanel({
         </div>
 
         <div className="pb-settings-section">
-          <h3>RetroAchievements</h3>
+          <h3>{t("RetroAchievements")}</h3>
           {raSummary ? (
             <div className="pb-ra-card">
               <div className="pb-ra-header">
                 <img className="pb-ra-avatar" src={raSummary.avatar_url} alt={raSummary.username} onError={(e) => { e.currentTarget.style.display = "none"; }} />
                 <div className="pb-ra-meta">
                   <strong className="pb-ra-username">{raSummary.username}</strong>
-                  <span className="pb-ra-points">{raSummary.total_points.toLocaleString()} pts</span>
-                  {raSummary.rank > 0 && <span className="pb-ra-rank">Rank #{raSummary.rank.toLocaleString()}{raSummary.total_ranked > 0 ? ` / ${raSummary.total_ranked.toLocaleString()}` : ""}</span>}
+                  <span className="pb-ra-points">{t("{points} pts", { points: raSummary.total_points.toLocaleString() })}</span>
+                  {raSummary.rank > 0 && <span className="pb-ra-rank">{t("Rank #{rank}", { rank: raSummary.rank.toLocaleString() })}{raSummary.total_ranked > 0 ? ` / ${raSummary.total_ranked.toLocaleString()}` : ""}</span>}
                 </div>
               </div>
               {raSummary.last_game_title && (
                 <div className="pb-ra-last">
                   {raSummary.last_game_image_url && <img src={raSummary.last_game_image_url} alt="" />}
                   <div>
-                    <span className="pb-ra-last-label">Último jogo</span>
+                    <span className="pb-ra-last-label">{t("Último jogo")}</span>
                     <strong>{raSummary.last_game_title}</strong>
                     {raSummary.rich_presence_msg && <em>{raSummary.rich_presence_msg}</em>}
                   </div>
@@ -809,7 +809,7 @@ export default function SettingsPanel({
               )}
               {raSummary.recent_achievements.length > 0 && (
                 <>
-                  <h4 className="pb-ra-sub">Conquistas recentes ({raSummary.recent_achievements.length})</h4>
+                  <h4 className="pb-ra-sub">{t("Conquistas recentes ({count})", { count: raSummary.recent_achievements.length })}</h4>
                   <ul className="pb-ra-ach-list">
                     {raSummary.recent_achievements.slice(0, 8).map((a, i) => (
                       <li key={i} className={`pb-ra-ach ${a.hardcore ? "hardcore" : ""}`}>
@@ -817,7 +817,7 @@ export default function SettingsPanel({
                         <div className="pb-ra-ach-body">
                           <div className="pb-ra-ach-row">
                             <strong>{a.title}</strong>
-                            <span className="pb-ra-ach-points">{a.points} pts{a.hardcore ? " · 🔥" : ""}</span>
+                            <span className="pb-ra-ach-points">{t("{points} pts", { points: a.points })}{a.hardcore ? " · 🔥" : ""}</span>
                           </div>
                           <span className="pb-ra-ach-desc">{a.description}</span>
                           <span className="pb-ra-ach-game">{a.game_title} · {a.console_name}</span>
@@ -829,23 +829,23 @@ export default function SettingsPanel({
               )}
               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                 <button className="pb-settings-btn" onClick={() => { sfx.click(); refreshRa(); }} disabled={raBusy}>
-                  <RefreshIcon /> {raBusy ? "..." : "Atualizar"}
+                  <RefreshIcon /> {raBusy ? "..." : t("Atualizar")}
                 </button>
                 <button className="pb-settings-btn pb-settings-btn-danger" onClick={() => { sfx.back(); clearRa(); }}>
-                  <PowerIcon /> Desconectar
+                  <PowerIcon /> {t("Desconectar")}
                 </button>
               </div>
             </div>
           ) : (
             <>
               <p className="pb-settings-hint" style={{ marginBottom: 10 }}>
-                Mostra suas conquistas, pontos e ranking do <code>retroachievements.org</code>.
-                Pegue sua <strong>Web API Key</strong> em <code>retroachievements.org/controlpanel.php</code>.
+                {t("Mostra suas conquistas, pontos e ranking do")} <code>retroachievements.org</code>.
+                {t("Pegue sua")} <strong>Web API Key</strong> {t("em")} <code>retroachievements.org/controlpanel.php</code>.
               </p>
               <input
                 type="text"
                 className="pb-input"
-                placeholder="Username RA"
+                placeholder={t("Username RA")}
                 value={raUser}
                 onChange={(e) => setRaUser(e.target.value)}
                 style={{ marginBottom: 8 }}
@@ -855,7 +855,7 @@ export default function SettingsPanel({
               <input
                 type="password"
                 className="pb-input"
-                placeholder="Web API Key (32 caracteres)"
+                placeholder={t("Web API Key (32 caracteres)")}
                 value={raKey}
                 onChange={(e) => setRaKey(e.target.value)}
                 style={{ marginBottom: 10 }}
@@ -863,7 +863,7 @@ export default function SettingsPanel({
                 spellCheck={false}
               />
               <button className="pb-settings-btn" onClick={() => { sfx.click(); saveRa(); }} disabled={raBusy}>
-                <RefreshIcon /> {raBusy ? "Validando..." : "Conectar"}
+                <RefreshIcon /> {raBusy ? t("Validando...") : t("Conectar")}
               </button>
             </>
           )}
@@ -875,17 +875,17 @@ export default function SettingsPanel({
         </div>
 
         <div className="pb-settings-section">
-          <h3>Pasta de ROMs</h3>
+          <h3>{t("Pasta de ROMs")}</h3>
           <code className="pb-settings-path">{romsRoot}</code>
         </div>
 
         <div className="pb-settings-section">
-          <h3>Pasta dos Emuladores</h3>
+          <h3>{t("Pasta dos Emuladores")}</h3>
           <code className="pb-settings-path">{emulatorsRoot}</code>
         </div>
 
         <div className="pb-settings-section">
-          <h3>Emuladores</h3>
+          <h3>{t("Emuladores")}</h3>
           <ul className="pb-settings-list">
             {systems.map((s) => (
               <li key={s.id}>
@@ -901,53 +901,53 @@ export default function SettingsPanel({
         </div>
 
         <div className="pb-settings-section">
-          <h3>Atalhos</h3>
+          <h3>{t("Atalhos")}</h3>
           <dl className="pb-shortcuts">
-            <dt>← →</dt><dd>Navegar jogo</dd>
-            <dt>↑ ↓</dt><dd>Navegar sistema</dd>
-            <dt>ENTER</dt><dd>Lançar jogo</dd>
-            <dt>F</dt><dd>Marcar favorito</dd>
-            <dt>/</dt><dd>Buscar jogo</dd>
-            <dt>S</dt><dd>Configurações</dd>
-            <dt>P</dt><dd>Trocar perfil</dd>
-            <dt>F11</dt><dd>Tela cheia</dd>
-            <dt>ESC</dt><dd>Voltar / Fechar painel</dd>
+            <dt>← →</dt><dd>{t("Navegar jogo")}</dd>
+            <dt>↑ ↓</dt><dd>{t("Navegar sistema")}</dd>
+            <dt>ENTER</dt><dd>{t("Lançar jogo")}</dd>
+            <dt>F</dt><dd>{t("Marcar favorito")}</dd>
+            <dt>/</dt><dd>{t("Buscar jogo")}</dd>
+            <dt>S</dt><dd>{t("Configurações")}</dd>
+            <dt>P</dt><dd>{t("Trocar perfil")}</dd>
+            <dt>F11</dt><dd>{t("Tela cheia")}</dd>
+            <dt>ESC</dt><dd>{t("Voltar / Fechar painel")}</dd>
           </dl>
           <p className="pb-settings-hint" style={{ marginTop: 12 }}>
-            Controle: D-Pad/Stick = navegar · A = lançar · X = perfil · Y = config · Select+Start (no jogo) = sair pro launcher
+            {t("Controle: D-Pad/Stick = navegar · A = lançar · X = perfil · Y = config · Select+Start (no jogo) = sair pro launcher")}
           </p>
         </div>
 
         <div className="pb-settings-section">
-          <h3>Sistema</h3>
+          <h3>{t("Sistema")}</h3>
           <button className="pb-settings-btn" onClick={() => { sfx.toggle(); onToggleFullscreen(); }}>
             <FullscreenIcon />
-            {isFullscreen ? "Sair da Tela Cheia" : "Entrar em Tela Cheia"}
+            {isFullscreen ? t("Sair da Tela Cheia") : t("Entrar em Tela Cheia")}
           </button>
           <button className="pb-settings-btn pb-settings-btn-danger" onClick={() => { sfx.back(); onQuit(); }}>
-            <PowerIcon /> Sair do Ludex
+            <PowerIcon /> {t("Sair do Ludex")}
           </button>
         </div>
 
         <div className="pb-settings-section">
-          <h3>Diagnóstico</h3>
+          <h3>{t("Diagnóstico")}</h3>
           <button className="pb-settings-btn" onClick={() => { sfx.click(); onShowHealth && onShowHealth(); }}>
-            <CheckIcon /> Health Check dos emuladores
+            <CheckIcon /> {t("Health Check dos emuladores")}
           </button>
-          <p className="pb-settings-hint">Verifica setup de cada emulador (.exe presente, ROMs detectadas, BIOS Xbox, etc).</p>
+          <p className="pb-settings-hint">{t("Verifica setup de cada emulador (.exe presente, ROMs detectadas, BIOS Xbox, etc).")}</p>
           <button className="pb-settings-btn" onClick={() => { sfx.click(); onShowLogs(); }}>
-            <InfoIcon /> Ver logs do app
+            <InfoIcon /> {t("Ver logs do app")}
           </button>
-          <p className="pb-settings-hint">Útil quando algum jogo não abre — mostra as últimas 200 linhas do log.</p>
+          <p className="pb-settings-hint">{t("Útil quando algum jogo não abre — mostra as últimas 200 linhas do log.")}</p>
         </div>
 
         {/* v0.9.34: re-abrir tour spotlight pra rever cada feature do launcher */}
         <div className="pb-settings-section">
-          <h3>Tutorial</h3>
+          <h3>{t("Tutorial")}</h3>
           <button className="pb-settings-btn" onClick={() => { sfx.click(); onReplayTour && onReplayTour(); }}>
-            <InfoIcon /> Ver tutorial novamente
+            <InfoIcon /> {t("Ver tutorial novamente")}
           </button>
-          <p className="pb-settings-hint">Refaz o passo a passo da home (topbar, busca, sortear, sistemas, grid, ajustes) com destaque em cada elemento.</p>
+          <p className="pb-settings-hint">{t("Refaz o passo a passo da home (topbar, busca, sortear, sistemas, grid, ajustes) com destaque em cada elemento.")}</p>
         </div>
 
         {/* v0.9.1: Sincroniza perfil + conquistas + favoritos + game_meta + recents
@@ -981,14 +981,14 @@ function DesktopBackupRestoreSection({ sfx }) {
       const json = JSON.stringify(cfg, null, 2);
       if (navigator.clipboard) {
         await navigator.clipboard.writeText(json);
-        setMsg({ kind: "ok", text: `Config copiada (${(json.length / 1024).toFixed(1)} KB). Cola no celular > Ajustes > Backup > Importar.` });
+        setMsg({ kind: "ok", text: t("Config copiada ({size} KB). Cola no celular > Ajustes > Backup > Importar.", { size: (json.length / 1024).toFixed(1) }) });
       } else {
-        setMsg({ kind: "info", text: "Clipboard indisponivel. Veja console pra JSON." });
+        setMsg({ kind: "info", text: t("Clipboard indisponivel. Veja console pra JSON.") });
         console.log(json);
       }
       try { sfx.confirm(); } catch {}
     } catch (e) {
-      setMsg({ kind: "error", text: `Falha: ${e}` });
+      setMsg({ kind: "error", text: t("Falha: {err}", { err: e }) });
     }
     setTimeout(() => setMsg(null), 8000);
   };
@@ -998,37 +998,35 @@ function DesktopBackupRestoreSection({ sfx }) {
     let json = "";
     try { json = await navigator.clipboard.readText(); } catch {}
     if (!json || !json.trim().startsWith("{")) {
-      await lxAlert("Copie o JSON da config exportada (do outro PC ou do celular) e clique em Importar de novo — eu leio direto do clipboard.", { title: "Importar config" });
+      await lxAlert(t("Copie o JSON da config exportada (do outro PC ou do celular) e clique em Importar de novo — eu leio direto do clipboard."), { title: t("Importar config") });
       return;
     }
-    if (!await lxConfirm("Importar a config do clipboard? Isso substitui os perfis/conquistas atuais deste PC.", { title: "Importar config", okText: "Importar", danger: true })) return;
+    if (!await lxConfirm(t("Importar a config do clipboard? Isso substitui os perfis/conquistas atuais deste PC."), { title: t("Importar config"), okText: t("Importar"), danger: true })) return;
     try {
       const cfg = JSON.parse(json);
       if (!cfg.profiles || !Array.isArray(cfg.profiles)) {
         throw new Error("JSON invalido — falta 'profiles'");
       }
       await invoke("save_config", { config: cfg });
-      setMsg({ kind: "ok", text: "Config importada! Reinicie o app pra ver perfil/conquistas atualizados." });
+      setMsg({ kind: "ok", text: t("Config importada! Reinicie o app pra ver perfil/conquistas atualizados.") });
       try { sfx.confirm(); } catch {}
     } catch (e) {
-      setMsg({ kind: "error", text: `Falha ao importar: ${e.message || e}` });
+      setMsg({ kind: "error", text: t("Falha ao importar: {err}", { err: e.message || e }) });
     }
     setTimeout(() => setMsg(null), 8000);
   };
 
   return (
     <div className="pb-settings-section">
-      <h3>Backup / Sync com Celular</h3>
+      <h3>{t("Backup / Sync com Celular")}</h3>
       <p className="pb-settings-hint">
-        Exporta perfil + conquistas + favoritos + tempo de jogo como JSON. No
-        celular, abre Ajustes &gt; Backup e cola pra ter o mesmo progresso.
-        (Sync automático via license key exigiria servidor — ainda não implementado.)
+        {t("Exporta perfil + conquistas + favoritos + tempo de jogo como JSON. No celular, abre Ajustes > Backup e cola pra ter o mesmo progresso. (Sync automático via license key exigiria servidor — ainda não implementado.)")}
       </p>
       <button className="pb-settings-btn" onClick={doExport}>
-        Copiar config (Export)
+        {t("Copiar config (Export)")}
       </button>
       <button className="pb-settings-btn" onClick={doImport}>
-        Colar config (Import)
+        {t("Colar config (Import)")}
       </button>
       {msg && (
         <p style={{

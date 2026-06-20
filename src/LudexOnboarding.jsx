@@ -251,12 +251,12 @@ function TourBanner({ step, rect, idx, total, onNext, onPrev, onSkip }) {
   }, [rect, step]);
 
   return (
-    <div className="lx-tour-banner" style={style} role="dialog" aria-label={step.title}>
+    <div className="lx-tour-banner" style={style} role="dialog" aria-label={t(step.title)}>
       <div className="lx-tour-banner-step">
-        Passo {idx + 1} de {total}
+        {t("Passo {n} de {total}", { n: idx + 1, total })}
       </div>
-      <h2 className="lx-tour-banner-title">{step.title}</h2>
-      <p className="lx-tour-banner-body">{step.body}</p>
+      <h2 className="lx-tour-banner-title">{t(step.title)}</h2>
+      <p className="lx-tour-banner-body">{t(step.body)}</p>
       <div className="lx-tour-banner-actions">
         <button className="lx-tour-btn lx-tour-btn-ghost" onClick={onSkip}>
           {t("Pular tour")}
@@ -273,7 +273,7 @@ function TourBanner({ step, rect, idx, total, onNext, onPrev, onSkip }) {
         </div>
       </div>
       <div className="lx-tour-banner-step" style={{ marginTop: 10, opacity: 0.75 }}>
-        🎮 <b>A</b> próximo · <b>B</b> anterior · <b>Start</b> pular
+        🎮 <b>A</b> {t("próximo")} · <b>B</b> {t("anterior")} · <b>Start</b> {t("pular")}
       </div>
     </div>
   );
@@ -379,10 +379,10 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
                 key={av.id}
                 type="button"
                 className={`lx-avatar-tile ${selected ? "selected" : ""}`}
-                title={av.label}
+                title={t(av.label)}
                 onClick={() => { setAvatarId(av.id); setCustomPhotoPath(null); }}
               >
-                <img src={avatarUrl(av)} alt={av.label} />
+                <img src={avatarUrl(av)} alt={t(av.label)} />
               </button>
             );
           })}
@@ -391,12 +391,12 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
             className={`lx-avatar-tile lx-avatar-custom ${customPhotoPath ? "selected" : ""}`}
             onClick={pickPhoto}
             disabled={pickingPhoto}
-            title="Escolher imagem do PC"
+            title={t("Escolher imagem do PC")}
           >
             {customPhotoPath ? (
-              <img src={convertFileSrc(customPhotoPath)} alt="Sua foto" />
+              <img src={convertFileSrc(customPhotoPath)} alt={t("Sua foto")} />
             ) : (
-              <span>+ Foto</span>
+              <span>{t("+ Foto")}</span>
             )}
           </button>
         </div>
@@ -419,7 +419,7 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
       {!canContinue && (
         <p className="lx-firstrun-hint">{t("Digite pelo menos 2 letras pra continuar.")}</p>
       )}
-      <p className="lx-firstrun-hint">🎮 No controle: <b>A</b> digitar nome / Entrar · <b>←/→</b> trocar avatar · <b>Start</b> Entrar</p>
+      <p className="lx-firstrun-hint">🎮 {t("No controle:")} <b>A</b> {t("digitar nome / Entrar")} · <b>←/→</b> {t("trocar avatar")} · <b>Start</b> {t("Entrar")}</p>
     </div>
   );
 }
@@ -507,7 +507,7 @@ export default function LudexOnboarding({ onComplete, tourOnly = false }) {
               {t("Ver tour guiado (opcional)")}
             </button>
           </div>
-          <p className="lx-firstrun-hint" style={{ marginTop: 16 }}>🎮 No controle: <b>A</b> continuar · <b>Y</b> ver tour</p>
+          <p className="lx-firstrun-hint" style={{ marginTop: 16 }}>🎮 {t("No controle:")} <b>A</b> {t("continuar")} · <b>Y</b> {t("ver tour")}</p>
         </div>
       </div>
     );

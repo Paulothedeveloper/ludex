@@ -6,6 +6,7 @@ import {
   remapPadButton, clearPadMap, padIdxLabel, padIdxForLibretroBtn,
   FRONTEND_OPTION_KEYS, requiresRestart,
 } from "./ludexSystemOptions";
+import { t } from "./ludexI18n";
 
 /* SVG icons inline — sem emoji em UI de producao. Stroke 1.6, 18x18 default. */
 const ic = (size = 18) => ({
@@ -55,29 +56,29 @@ export function EmptyStateSystem({ system, onOpenSuggestions, onOpenControls }) 
 
   return (
     <div className="lx-empty-system">
-      <h3 className="lx-empty-title">Sem jogos do {system.name} ainda</h3>
+      <h3 className="lx-empty-title">{t("Sem jogos do {name} ainda", { name: system.name })}</h3>
       <p className="lx-empty-body">
-        Coloque suas ROMs na pasta certa e o Ludex vai detectar automaticamente. DLCs ficam em <code>_DLC/</code>, mods e patches em <code>_MODS/</code> dentro da mesma pasta do console — o Ludex cria essas subpastas pra você.
+        {t("Coloque suas ROMs na pasta certa e o Ludex vai detectar automaticamente.")} {t("DLCs ficam em")} <code>_DLC/</code>, {t("mods e patches em")} <code>_MODS/</code> {t("dentro da mesma pasta do console — o Ludex cria essas subpastas pra você.")}
       </p>
       <div className="lx-empty-actions">
         <button className="lx-empty-btn lx-empty-btn-primary" onClick={() => openKind("roms")} disabled={busy}>
-          <FolderIcon /> Abrir pasta de ROMs
+          <FolderIcon /> {t("Abrir pasta de ROMs")}
         </button>
         <button className="lx-empty-btn" onClick={() => openKind("dlc")} disabled={busy}>
-          <GiftIcon /> Abrir pasta de DLCs
+          <GiftIcon /> {t("Abrir pasta de DLCs")}
         </button>
         <button className="lx-empty-btn" onClick={() => openKind("mods")} disabled={busy}>
-          <ToolsIcon /> Abrir pasta de Mods/Patches
+          <ToolsIcon /> {t("Abrir pasta de Mods/Patches")}
         </button>
         <button className="lx-empty-btn" onClick={() => onOpenSuggestions && onOpenSuggestions(system)}>
-          <GlobeIcon /> Onde baixar
+          <GlobeIcon /> {t("Onde baixar")}
         </button>
         <button className="lx-empty-btn" onClick={() => onOpenControls && onOpenControls(system)}>
-          <GamepadIcon /> Configurar controle
+          <GamepadIcon /> {t("Configurar controle")}
         </button>
       </div>
       <p className="lx-empty-warn">
-        <WarningIcon size={14} /> Use ROMs, DLCs e patches que você possui legalmente. Mods de tradução e patches de FPS/resolução podem corromper saves antigos — faça backup antes.
+        <WarningIcon size={14} /> {t("Use ROMs, DLCs e patches que você possui legalmente. Mods de tradução e patches de FPS/resolução podem corromper saves antigos — faça backup antes.")}
       </p>
       {err && <p className="lx-empty-warn" style={{ color: "#fca5a5" }}>{err}</p>}
     </div>
@@ -93,46 +94,46 @@ export function EmptyStateSystem({ system, onOpenSuggestions, onOpenControls }) 
  */
 const SUGG_DATA = {
   roms: {
-    title: "ROMs (jogos)",
-    intro: "Sites populares pra baixar ROMs por console. Use só pra jogos que você possui legalmente.",
+    title: t("ROMs (jogos)"),
+    intro: t("Sites populares pra baixar ROMs por console. Use só pra jogos que você possui legalmente."),
     items: [
-      { name: "Vimm's Lair", desc: "Clássico. Cobertura ampla de retrô (NES, SNES, GBA, PS1, GC, Wii).", url: "https://vimm.net/vault/" },
-      { name: "Myrient", desc: "Mirror público de no-intro/redump. Sets organizados por região, hashes verificados.", url: "https://myrient.erista.me/" },
-      { name: "CDRomance", desc: "PSP, PS1, PS2, GBA, Switch. Inclui versões pré-patcheadas (PT-BR, undub).", url: "https://cdromance.org/" },
-      { name: "r/Roms megathread", desc: "Lista mantida pela comunidade do Reddit. Mais atualizada para Switch/PS3/Xbox.", url: "https://r-roms.github.io/" },
-      { name: "NoPayStation (NPS)", desc: "PSP / PSV / PS3. Use o NPS Browser pra baixar PKGs oficiais + DLCs + updates.", url: "https://nopaystation.com/" },
-      { name: "Hshop (3DS)", desc: "Loja alternativa de .cia (jogos, DLCs, updates) pra Citra ou 3DS modificado.", url: "https://hshop.erista.me/" },
-      { name: "Internet Archive", desc: "Abandonware legal: arcade, MS-DOS, console antigo. 100% público.", url: "https://archive.org/details/softwarelibrary" },
+      { name: "Vimm's Lair", desc: t("Clássico. Cobertura ampla de retrô (NES, SNES, GBA, PS1, GC, Wii)."), url: "https://vimm.net/vault/" },
+      { name: "Myrient", desc: t("Mirror público de no-intro/redump. Sets organizados por região, hashes verificados."), url: "https://myrient.erista.me/" },
+      { name: "CDRomance", desc: t("PSP, PS1, PS2, GBA, Switch. Inclui versões pré-patcheadas (PT-BR, undub)."), url: "https://cdromance.org/" },
+      { name: "r/Roms megathread", desc: t("Lista mantida pela comunidade do Reddit. Mais atualizada para Switch/PS3/Xbox."), url: "https://r-roms.github.io/" },
+      { name: "NoPayStation (NPS)", desc: t("PSP / PSV / PS3. Use o NPS Browser pra baixar PKGs oficiais + DLCs + updates."), url: "https://nopaystation.com/" },
+      { name: "Hshop (3DS)", desc: t("Loja alternativa de .cia (jogos, DLCs, updates) pra Citra ou 3DS modificado."), url: "https://hshop.erista.me/" },
+      { name: "Internet Archive", desc: t("Abandonware legal: arcade, MS-DOS, console antigo. 100% público."), url: "https://archive.org/details/softwarelibrary" },
     ],
   },
   mods: {
-    title: "Mods, Tradução PT-BR e Patches IPS/UPS",
-    intro: "Patches de tradução, undub, PT-BR, mods de gameplay. Aplique no rom original (.smc/.gba/.iso) com Floating IPS ou xdelta.",
+    title: t("Mods, Tradução PT-BR e Patches IPS/UPS"),
+    intro: t("Patches de tradução, undub, PT-BR, mods de gameplay. Aplique no rom original (.smc/.gba/.iso) com Floating IPS ou xdelta."),
     items: [
-      { name: "Romhacking.net", desc: "Maior banco de patches IPS/UPS/xdelta. Traduções, hacks de dificuldade, undub.", url: "https://www.romhacking.net/" },
-      { name: "Tradu-Roms", desc: "Patches PT-BR de fan tradutores brasileiros. RPGs, JRPGs.", url: "https://www.tradu-roms.com/" },
-      { name: "GameBanana", desc: "Mods modernos: Switch (Yuzu), PC, retroarch shaders. Texturas HD.", url: "https://gamebanana.com/" },
-      { name: "GBAtemp", desc: "Hub da comunidade. CFW guides, mods de Switch/3DS/Wii U.", url: "https://gbatemp.net/" },
+      { name: "Romhacking.net", desc: t("Maior banco de patches IPS/UPS/xdelta. Traduções, hacks de dificuldade, undub."), url: "https://www.romhacking.net/" },
+      { name: "Tradu-Roms", desc: t("Patches PT-BR de fan tradutores brasileiros. RPGs, JRPGs."), url: "https://www.tradu-roms.com/" },
+      { name: "GameBanana", desc: t("Mods modernos: Switch (Yuzu), PC, retroarch shaders. Texturas HD."), url: "https://gamebanana.com/" },
+      { name: "GBAtemp", desc: t("Hub da comunidade. CFW guides, mods de Switch/3DS/Wii U."), url: "https://gbatemp.net/" },
     ],
   },
   patches: {
-    title: "Patches de FPS / Resolução / Performance",
-    intro: "Mods que destravam framerate, melhoram resolução interna ou removem fog/blur. Apenas pra emuladores específicos.",
+    title: t("Patches de FPS / Resolução / Performance"),
+    intro: t("Mods que destravam framerate, melhoram resolução interna ou removem fog/blur. Apenas pra emuladores específicos."),
     items: [
-      { name: "PCSX2 Cheat Database", desc: "PNACH files com 60FPS unlock + widescreen patches pra PS2.", url: "https://forums.pcsx2.net/Forum-PCSX2-cheats-and-game-fixes" },
-      { name: "RPCS3 Patch List", desc: "Patches oficiais embutidos no RPCS3 (FPS, resolução). Atualize via Manager.", url: "https://wiki.rpcs3.net/index.php?title=Help:Patches" },
-      { name: "Dolphin Wiki (per-game)", desc: "Notas por jogo: gráficos, hacks, savestates compatíveis.", url: "https://wiki.dolphin-emu.org/" },
-      { name: "Yuzu Mods (GameBanana)", desc: "Mods de Switch: 60FPS, 4K, gameplay. Coloque em load/<TitleID>/.", url: "https://gamebanana.com/games/7237" },
-      { name: "Citra Patches", desc: "Texture packs HD, mods, undub de 3DS. Coloque em load/mods/<TitleID>/.", url: "https://citra-emu.org/wiki/" },
+      { name: "PCSX2 Cheat Database", desc: t("PNACH files com 60FPS unlock + widescreen patches pra PS2."), url: "https://forums.pcsx2.net/Forum-PCSX2-cheats-and-game-fixes" },
+      { name: "RPCS3 Patch List", desc: t("Patches oficiais embutidos no RPCS3 (FPS, resolução). Atualize via Manager."), url: "https://wiki.rpcs3.net/index.php?title=Help:Patches" },
+      { name: "Dolphin Wiki (per-game)", desc: t("Notas por jogo: gráficos, hacks, savestates compatíveis."), url: "https://wiki.dolphin-emu.org/" },
+      { name: "Yuzu Mods (GameBanana)", desc: t("Mods de Switch: 60FPS, 4K, gameplay. Coloque em load/<TitleID>/."), url: "https://gamebanana.com/games/7237" },
+      { name: "Citra Patches", desc: t("Texture packs HD, mods, undub de 3DS. Coloque em load/mods/<TitleID>/."), url: "https://citra-emu.org/wiki/" },
     ],
   },
   dlcs: {
-    title: "DLCs e Updates",
-    intro: "Conteúdo extra (mapas, personagens, expansões) e atualizações de versão. Atenção à região (USA/EUR/JPN deve casar com a ROM base).",
+    title: t("DLCs e Updates"),
+    intro: t("Conteúdo extra (mapas, personagens, expansões) e atualizações de versão. Atenção à região (USA/EUR/JPN deve casar com a ROM base)."),
     items: [
-      { name: "NoPayStation", desc: "PSP, PSV, PS3 — DLCs e updates oficiais via NPS Browser.", url: "https://nopaystation.com/" },
-      { name: "NSWDB.com", desc: "Banco de dados de Switch — IDs, regiões, atualizações compatíveis.", url: "https://nswdb.com/" },
-      { name: "Hshop (3DS)", desc: "DLCs e updates de jogos 3DS em .cia.", url: "https://hshop.erista.me/" },
+      { name: "NoPayStation", desc: t("PSP, PSV, PS3 — DLCs e updates oficiais via NPS Browser."), url: "https://nopaystation.com/" },
+      { name: "NSWDB.com", desc: t("Banco de dados de Switch — IDs, regiões, atualizações compatíveis."), url: "https://nswdb.com/" },
+      { name: "Hshop (3DS)", desc: t("DLCs e updates de jogos 3DS em .cia."), url: "https://hshop.erista.me/" },
     ],
   },
 };
@@ -153,39 +154,39 @@ export function SuggestionsModal({ open, onClose, defaultTab = "roms" }) {
     <div className="lx-modal-overlay" onClick={onClose}>
       <div className="lx-modal lx-modal-large" onClick={(e) => e.stopPropagation()} role="dialog">
         <div className="lx-modal-header">
-          <h2>Onde baixar — guia de fontes</h2>
-          <button className="lx-modal-close" onClick={onClose} aria-label="Fechar"><CloseIconLx /></button>
+          <h2>{t("Onde baixar — guia de fontes")}</h2>
+          <button className="lx-modal-close" onClick={onClose} aria-label={t("Fechar")}><CloseIconLx /></button>
         </div>
 
         <div className="lx-sugg-warn">
-          <strong>Aviso:</strong> O Ludex apenas referencia esses sites. O conteúdo lá hospedado pode infringir direitos autorais — você é responsável por baixar somente jogos que possui legalmente. Mods e patches podem corromper saves; faça backup antes de aplicar. DLCs precisam ser da mesma região da sua ROM base.
+          <strong>{t("Aviso:")}</strong> {t("O Ludex apenas referencia esses sites. O conteúdo lá hospedado pode infringir direitos autorais — você é responsável por baixar somente jogos que possui legalmente. Mods e patches podem corromper saves; faça backup antes de aplicar. DLCs precisam ser da mesma região da sua ROM base.")}
         </div>
 
         <div className="pb-sort-pills" style={{ marginTop: 14 }}>
-          {tabs.map((t) => (
+          {tabs.map((tk) => (
             <button
-              key={t}
-              className={`pb-sort-pill ${tab === t ? "active" : ""}`}
-              onClick={() => setTab(t)}
+              key={tk}
+              className={`pb-sort-pill ${tab === tk ? "active" : ""}`}
+              onClick={() => setTab(tk)}
             >
-              {SUGG_DATA[t].title}
+              {t(SUGG_DATA[tk].title)}
             </button>
           ))}
         </div>
 
         <div className="lx-suggestions">
           <div className="lx-sugg-section">
-            <h4>{data.title}</h4>
-            <p>{data.intro}</p>
+            <h4>{t(data.title)}</h4>
+            <p>{t(data.intro)}</p>
             <div className="lx-sugg-list">
               {data.items.map((it) => (
                 <div key={it.name} className="lx-sugg-item">
                   <div className="lx-sugg-item-info">
                     <span className="lx-sugg-item-name">{it.name}</span>
-                    <span className="lx-sugg-item-desc">{it.desc}</span>
+                    <span className="lx-sugg-item-desc">{t(it.desc)}</span>
                   </div>
                   <button className="lx-sugg-item-link" onClick={() => openLink(it.url)}>
-                    Abrir →
+                    {t("Abrir")} →
                   </button>
                 </div>
               ))}
@@ -203,66 +204,66 @@ export function SuggestionsModal({ open, onClose, defaultTab = "roms" }) {
  */
 const CONTROL_TIPS = {
   switch: {
-    label: "Yuzu (Switch)",
+    label: t("Yuzu (Switch)"),
     pads: ["Xbox One/Series", "DualSense (PS5)", "DualShock 4 (PS4)", "Switch Pro", "8BitDo Pro 2"],
     steps: [
-      "Conecte o controle ANTES de abrir o jogo (USB ou Bluetooth).",
-      "Abra Yuzu standalone (executável fora do Ludex) → Emulation → Configure → Controls.",
-      "Em Player 1 escolha 'Pro Controller' como handheld, depois clique em cada botão e pressione no controle.",
-      "DualSense/DS4: ative o adapter via 'Use SDL Controller'. Switch Pro: funciona nativo.",
-      "Salve. Da próxima vez que rodar pelo Ludex, vai usar essa config.",
+      t("Conecte o controle ANTES de abrir o jogo (USB ou Bluetooth)."),
+      t("Abra Yuzu standalone (executável fora do Ludex) → Emulation → Configure → Controls."),
+      t("Em Player 1 escolha 'Pro Controller' como handheld, depois clique em cada botão e pressione no controle."),
+      t("DualSense/DS4: ative o adapter via 'Use SDL Controller'. Switch Pro: funciona nativo."),
+      t("Salve. Da próxima vez que rodar pelo Ludex, vai usar essa config."),
     ],
   },
   ps2: {
-    label: "PCSX2 (PS2)",
+    label: t("PCSX2 (PS2)"),
     pads: ["DualShock 4", "DualSense", "Xbox", "8BitDo SN30 Pro"],
     steps: [
-      "Conecte o controle antes de abrir.",
-      "Abra PCSX2 standalone → Settings → Controllers → Pad 1.",
-      "Em 'Type' escolha 'DualShock 2', depois 'Automatic Mapping' e selecione seu controle.",
-      "Verifique sticks e pressão dos triggers no Settings.",
-      "Salve. Funciona depois pelo Ludex.",
+      t("Conecte o controle antes de abrir."),
+      t("Abra PCSX2 standalone → Settings → Controllers → Pad 1."),
+      t("Em 'Type' escolha 'DualShock 2', depois 'Automatic Mapping' e selecione seu controle."),
+      t("Verifique sticks e pressão dos triggers no Settings."),
+      t("Salve. Funciona depois pelo Ludex."),
     ],
   },
   gc: {
-    label: "Dolphin (GC)",
+    label: t("Dolphin (GC)"),
     pads: ["GameCube Controller adapter", "Xbox", "DualSense", "DS4"],
     steps: [
-      "Dolphin → Controllers → Standard Controller, clique 'Configure' do Port 1.",
-      "Em 'Device' escolha XInput/0 (Xbox/8BitDo) ou DInput/0 (DS4/DualSense).",
-      "Clique em cada botão e pressione no controle. C-Stick vai pro analógico direito.",
-      "Pressione 'Background Input' pra funcionar mesmo sem foco da janela.",
-      "Salve.",
+      t("Dolphin → Controllers → Standard Controller, clique 'Configure' do Port 1."),
+      t("Em 'Device' escolha XInput/0 (Xbox/8BitDo) ou DInput/0 (DS4/DualSense)."),
+      t("Clique em cada botão e pressione no controle. C-Stick vai pro analógico direito."),
+      t("Pressione 'Background Input' pra funcionar mesmo sem foco da janela."),
+      t("Salve."),
     ],
   },
   wii: {
-    label: "Dolphin (Wii)",
+    label: t("Dolphin (Wii)"),
     pads: ["Real Wiimote (Bluetooth)", "Xbox/PS como Wiimote emulado", "Switch JoyCons (via DolphinBar)"],
     steps: [
-      "Dolphin → Controllers → 'Emulated Wii Remote' pro Wiimote 1.",
-      "Configure os botões + Motion Input (giroscópio do controle moderno funciona).",
-      "Pra usar Wiimote real: 'Real Wii Remote' + parear via Bluetooth do PC.",
-      "Nunchuck: configure em 'Extension' do Wiimote 1.",
+      t("Dolphin → Controllers → 'Emulated Wii Remote' pro Wiimote 1."),
+      t("Configure os botões + Motion Input (giroscópio do controle moderno funciona)."),
+      t("Pra usar Wiimote real: 'Real Wii Remote' + parear via Bluetooth do PC."),
+      t("Nunchuck: configure em 'Extension' do Wiimote 1."),
     ],
   },
   ps3: {
-    label: "RPCS3 (PS3)",
+    label: t("RPCS3 (PS3)"),
     pads: ["DualSense (recomendado)", "DualShock 4", "Xbox"],
     steps: [
-      "RPCS3 → Pads.",
-      "Em 'Handlers' escolha 'DualShock 4' (ou DualSense). Pra Xbox use 'XInput'.",
-      "Clique em 'Refresh' e selecione seu controle.",
-      "Auto-Map ou configure manualmente. DualSense tem suporte completo (touchpad, vibração).",
+      t("RPCS3 → Pads."),
+      t("Em 'Handlers' escolha 'DualShock 4' (ou DualSense). Pra Xbox use 'XInput'."),
+      t("Clique em 'Refresh' e selecione seu controle."),
+      t("Auto-Map ou configure manualmente. DualSense tem suporte completo (touchpad, vibração)."),
     ],
   },
   xbox: {
-    label: "xemu (Xbox original)",
+    label: t("xemu (Xbox original)"),
     pads: ["DualShock 4", "Xbox (XInput)", "8BitDo"],
     steps: [
-      "Conecte o controle antes do jogo.",
-      "xemu → Machine → Input → Port 1 → 'Bind All' ou bind manual.",
-      "Em alguns jogos o L/R analógico precisa ser configurado nos triggers.",
-      "Salve a config — o Ludex já trava o xemu.toml em read-only pra não perder.",
+      t("Conecte o controle antes do jogo."),
+      t("xemu → Machine → Input → Port 1 → 'Bind All' ou bind manual."),
+      t("Em alguns jogos o L/R analógico precisa ser configurado nos triggers."),
+      t("Salve a config — o Ludex já trava o xemu.toml em read-only pra não perder."),
     ],
   },
 };
@@ -275,40 +276,40 @@ export function ControlsTipModal({ open, onClose, system }) {
     <div className="lx-modal-overlay" onClick={onClose}>
       <div className="lx-modal" onClick={(e) => e.stopPropagation()} role="dialog">
         <div className="lx-modal-header">
-          <h2>Controle — {system.name}</h2>
-          <button className="lx-modal-close" onClick={onClose} aria-label="Fechar"><CloseIconLx /></button>
+          <h2>{t("Controle — {name}", { name: system.name })}</h2>
+          <button className="lx-modal-close" onClick={onClose} aria-label={t("Fechar")}><CloseIconLx /></button>
         </div>
 
         <div className="lx-controls-tip">
           {tip ? (
             <>
               <div className="lx-controls-section">
-                <h4>Controles testados</h4>
+                <h4>{t("Controles testados")}</h4>
                 <div className="lx-controls-pads">
                   {tip.pads.map((p) => <span key={p} className="lx-controls-pad-pill">{p}</span>)}
                 </div>
               </div>
               <div className="lx-controls-section">
-                <h4>Passo-a-passo — {tip.label}</h4>
+                <h4>{t("Passo-a-passo — {label}", { label: tip.label })}</h4>
                 <ol>
-                  {tip.steps.map((s, i) => <li key={i}>{s}</li>)}
+                  {tip.steps.map((s, i) => <li key={i}>{t(s)}</li>)}
                 </ol>
               </div>
               <div className="lx-controls-section">
-                <h4>Geral pra qualquer console</h4>
+                <h4>{t("Geral pra qualquer console")}</h4>
                 <ul>
-                  <li>Sempre conecte o controle ANTES de abrir o emulador. Conexão depois pode não ser detectada.</li>
-                  <li>DualShock 4 / DualSense: use cabo USB se Bluetooth der atraso (input lag).</li>
-                  <li>Use o atalho Select+Start (ou Select+R1) no controle pra fechar o jogo e voltar ao Ludex.</li>
-                  <li>Se o emulador rodar mas o controle não responder, verifique se a janela do jogo está em foco (clique nela).</li>
+                  <li>{t("Sempre conecte o controle ANTES de abrir o emulador. Conexão depois pode não ser detectada.")}</li>
+                  <li>{t("DualShock 4 / DualSense: use cabo USB se Bluetooth der atraso (input lag).")}</li>
+                  <li>{t("Use o atalho Select+Start (ou Select+R1) no controle pra fechar o jogo e voltar ao Ludex.")}</li>
+                  <li>{t("Se o emulador rodar mas o controle não responder, verifique se a janela do jogo está em foco (clique nela).")}</li>
                 </ul>
               </div>
             </>
           ) : (
             <div className="lx-controls-section">
-              <h4>{system.name} — sem dicas específicas</h4>
+              <h4>{t("{name} — sem dicas específicas", { name: system.name })}</h4>
               <p style={{ margin: 0, fontSize: 13, color: "rgba(229, 222, 244, 0.78)" }}>
-                Esse sistema usa os cores libretro embutidos no Ludex. Os controles são detectados automaticamente pelo SDL2 — basta conectar antes de abrir o jogo e ele já funciona.
+                {t("Esse sistema usa os cores libretro embutidos no Ludex. Os controles são detectados automaticamente pelo SDL2 — basta conectar antes de abrir o jogo e ele já funciona.")}
               </p>
             </div>
           )}
@@ -324,11 +325,11 @@ export function ControlsTipModal({ open, onClose, system }) {
  * Rust via libretro_set_option. Apply real só no próximo load_game.
  */
 const CATEGORY_LABELS = {
-  video: "Vídeo",
-  performance: "Performance",
-  audio: "Áudio",
-  sistema: "Sistema",
-  input: "Controle",
+  video: t("Vídeo"),
+  performance: t("Performance"),
+  audio: t("Áudio"),
+  sistema: t("Sistema"),
+  input: t("Controle"),
 };
 
 export function SystemSettingsModal({ open, onClose, systemId, systemName }) {
@@ -358,8 +359,8 @@ export function SystemSettingsModal({ open, onClose, systemId, systemName }) {
     <div className="lx-modal-overlay" onClick={onClose}>
       <div className="lx-modal" onClick={(e) => e.stopPropagation()} role="dialog" style={{ maxWidth: 680 }}>
         <div className="lx-modal-header">
-          <h2>Configurações — {systemName}</h2>
-          <button className="lx-modal-close" onClick={onClose} aria-label="Fechar"><CloseIconLx /></button>
+          <h2>{t("Configurações — {name}", { name: systemName })}</h2>
+          <button className="lx-modal-close" onClick={onClose} aria-label={t("Fechar")}><CloseIconLx /></button>
         </div>
 
         <div className="lx-settings-tabs">
@@ -367,12 +368,12 @@ export function SystemSettingsModal({ open, onClose, systemId, systemName }) {
             <button
               className={`lx-settings-tab ${activeTab === "opções" ? "active" : ""}`}
               onClick={() => setActiveTab("opções")}
-            >Vídeo / Performance</button>
+            >{t("Vídeo / Performance")}</button>
           )}
           <button
             className={`lx-settings-tab ${activeTab === "controle" ? "active" : ""}`}
             onClick={() => setActiveTab("controle")}
-          >Controle</button>
+          >{t("Controle")}</button>
         </div>
 
         {activeTab === "opções" && hasOpts && (
@@ -386,7 +387,7 @@ export function SystemSettingsModal({ open, onClose, systemId, systemName }) {
         {activeTab === "opções" && !hasOpts && (
           <div className="lx-settings-body">
             <p className="lx-settings-hint">
-              Esse sistema usa defaults canônicos do libretro e ainda não tem opções configuráveis. A aba "Controle" funciona para todos.
+              {t("Esse sistema usa defaults canônicos do libretro e ainda não tem opções configuráveis. A aba \"Controle\" funciona para todos.")}
             </p>
           </div>
         )}
@@ -397,7 +398,7 @@ export function SystemSettingsModal({ open, onClose, systemId, systemName }) {
         <div className="lx-settings-footer">
           <button
             className="lx-settings-btn lx-settings-btn-ghost"
-            title="Abrir pasta onde ficam saves/memory cards desse sistema"
+            title={t("Abrir pasta onde ficam saves/memory cards desse sistema")}
             onClick={async () => {
               try {
                 const folders = await invoke("get_system_folders", { systemId });
@@ -406,8 +407,8 @@ export function SystemSettingsModal({ open, onClose, systemId, systemName }) {
                 }
               } catch (e) { console.error("open saves folder", e); }
             }}
-          >Pasta Saves</button>
-          <button className="lx-settings-btn lx-settings-btn-primary" onClick={onClose}>Fechar</button>
+          >{t("Pasta Saves")}</button>
+          <button className="lx-settings-btn lx-settings-btn-primary" onClick={onClose}>{t("Fechar")}</button>
         </div>
       </div>
     </div>
@@ -460,11 +461,11 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
       }}>
         <div style={{ marginBottom: 4, display: 'flex', alignItems: 'baseline', gap: 7 }}>
           <span style={{ flexShrink: 0, width: 8, height: 8, borderRadius: '50%', background: '#22c55e', transform: 'translateY(1px)' }} />
-          <span><span style={{ color: '#22c55e', fontWeight: 700 }}>TEMPO REAL</span>{' — '}aplica na hora, sem reiniciar o jogo.</span>
+          <span><span style={{ color: '#22c55e', fontWeight: 700 }}>{t("TEMPO REAL")}</span>{' — '}{t("aplica na hora, sem reiniciar o jogo.")}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
           <span style={{ flexShrink: 0, width: 8, height: 8, borderRadius: '50%', background: '#ef4444', transform: 'translateY(1px)' }} />
-          <span><span style={{ color: '#ef4444', fontWeight: 700 }}>REINICIAR JOGO</span>{' — '}o core só aplica essa opção no próximo "Jogar". Fecha o jogo e abre de novo.</span>
+          <span><span style={{ color: '#ef4444', fontWeight: 700 }}>{t("REINICIAR JOGO")}</span>{' — '}{t("o core só aplica essa opção no próximo \"Jogar\". Fecha o jogo e abre de novo.")}</span>
         </div>
       </div>
       {categories.map((cat) => (
@@ -478,9 +479,9 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
               return (
                 <div key={opt.key} className="lx-settings-row">
                   <label className="lx-settings-label" title={opt.key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span>{opt.label}</span>
-                    {isHotReload && <span style={{ fontSize: '0.62em', letterSpacing: '0.04em', padding: '2px 7px', borderRadius: 999, background: 'rgba(34,197,94,0.15)', color: '#22c55e', fontWeight: 800 }} title="Aplica em tempo real">TEMPO REAL</span>}
-                    {needsRestart && <span style={{ fontSize: '0.62em', letterSpacing: '0.04em', padding: '2px 7px', borderRadius: 999, background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontWeight: 800 }} title="Esse core libretro só lê essa opção quando o jogo abre. Reinicie o jogo pra efeito.">REINICIAR</span>}
+                    <span>{t(opt.label)}</span>
+                    {isHotReload && <span style={{ fontSize: '0.62em', letterSpacing: '0.04em', padding: '2px 7px', borderRadius: 999, background: 'rgba(34,197,94,0.15)', color: '#22c55e', fontWeight: 800 }} title={t("Aplica em tempo real")}>{t("TEMPO REAL")}</span>}
+                    {needsRestart && <span style={{ fontSize: '0.62em', letterSpacing: '0.04em', padding: '2px 7px', borderRadius: 999, background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontWeight: 800 }} title={t("Esse core libretro só lê essa opção quando o jogo abre. Reinicie o jogo pra efeito.")}>{t("REINICIAR")}</span>}
                   </label>
                   <select
                     className="lx-settings-select"
@@ -498,7 +499,7 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
         </section>
       ))}
       <button className="lx-settings-btn lx-settings-btn-ghost" onClick={resetAll}
-        style={{ marginTop: 8 }}>Restaurar Defaults</button>
+        style={{ marginTop: 8 }}>{t("Restaurar Defaults")}</button>
 
       {restartToast && (
         <div
@@ -513,15 +514,15 @@ function SystemOptionsPanel({ systemId, options, values, setValues }) {
         >
           <span style={{ flexShrink: 0, width: 10, height: 10, borderRadius: '50%', background: '#fff', opacity: 0.9 }} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, marginBottom: 2 }}>{restartToast.label} — exige reiniciar o jogo</div>
+            <div style={{ fontWeight: 800, marginBottom: 2 }}>{t("{label} — exige reiniciar o jogo", { label: restartToast.label })}</div>
             <div style={{ fontSize: '0.85em', opacity: 0.95 }}>
-              Essa configuração só pega efeito no próximo "Jogar". Feche e abra o jogo pra ver a diferença.
+              {t("Essa configuração só pega efeito no próximo \"Jogar\". Feche e abra o jogo pra ver a diferença.")}
             </div>
           </div>
           <button
             onClick={(e) => { e.stopPropagation(); setRestartToast(null); }}
             style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}
-          >OK</button>
+          >{t("OK")}</button>
         </div>
       )}
     </div>
@@ -622,24 +623,24 @@ function ControllerRemapPanel({ systemId }) {
   return (
     <div className="lx-settings-body">
       <p className="lx-settings-hint">
-        Mapeia cada botão do <b>jogo (libretro)</b> pra um botão do seu controle.
-        Clique em "Remapear" e pressione o botão do controle que quer usar.
+        {t("Mapeia cada botão do")} <b>{t("jogo (libretro)")}</b> {t("pra um botão do seu controle.")}
+        {' '}{t("Clique em \"Remapear\" e pressione o botão do controle que quer usar.")}
       </p>
 
       <div className="lx-pad-style-row">
-        <label>Mostrar nomes pra controle:</label>
+        <label>{t("Mostrar nomes pra controle:")}</label>
         <select className="lx-settings-select" value={padStyle} onChange={(e) => setPadStyle(e.target.value)}>
-          <option value="xbox">Xbox (A/B/X/Y)</option>
-          <option value="ps">PlayStation (×/○/□/△)</option>
-          <option value="switch">Nintendo Switch (B/A/Y/X)</option>
-          <option value="generic">Genérico (btn0–btn3)</option>
+          <option value="xbox">{t("Xbox (A/B/X/Y)")}</option>
+          <option value="ps">{t("PlayStation (×/○/□/△)")}</option>
+          <option value="switch">{t("Nintendo Switch (B/A/Y/X)")}</option>
+          <option value="generic">{t("Genérico (btn0–btn3)")}</option>
         </select>
       </div>
 
       <div className="lx-pad-presets">
-        <button className="lx-settings-btn lx-settings-btn-ghost" onClick={swapAB}>Trocar B ↔ A</button>
-        <button className="lx-settings-btn lx-settings-btn-ghost" onClick={swapXY}>Trocar Y ↔ X</button>
-        <button className="lx-settings-btn lx-settings-btn-ghost" onClick={onReset}>Resetar Default</button>
+        <button className="lx-settings-btn lx-settings-btn-ghost" onClick={swapAB}>{t("Trocar B ↔ A")}</button>
+        <button className="lx-settings-btn lx-settings-btn-ghost" onClick={swapXY}>{t("Trocar Y ↔ X")}</button>
+        <button className="lx-settings-btn lx-settings-btn-ghost" onClick={onReset}>{t("Resetar Default")}</button>
       </div>
 
       <div className="lx-pad-grid">
@@ -650,8 +651,8 @@ function ControllerRemapPanel({ systemId }) {
           return (
             <div key={btn.id} className={`lx-pad-row ${isListening ? "listening" : ""}`}>
               <div className="lx-pad-col-libretro">
-                <div className="lx-pad-libretro-name">{btn.label}</div>
-                {btn.hint && <div className="lx-pad-libretro-hint">{btn.hint}</div>}
+                <div className="lx-pad-libretro-name">{t(btn.label)}</div>
+                {btn.hint && <div className="lx-pad-libretro-hint">{t(btn.hint)}</div>}
               </div>
               <div className="lx-pad-arrow">→</div>
               <div className="lx-pad-col-pad">{padName}</div>
@@ -659,15 +660,15 @@ function ControllerRemapPanel({ systemId }) {
                 className="lx-settings-btn lx-settings-btn-ghost lx-pad-remap-btn"
                 onClick={() => setListening(isListening ? null : btn.id)}
               >
-                {isListening ? "Aguardando..." : "Remapear"}
+                {isListening ? t("Aguardando...") : t("Remapear")}
               </button>
             </div>
           );
         })}
       </div>
       <p className="lx-settings-hint" style={{ marginTop: 14 }}>
-        D-pad (cima/baixo/esquerda/direita) e stick analógico são fixos.
-        Combo <b>Select+Start</b> sai do jogo (não remapeável).
+        {t("D-pad (cima/baixo/esquerda/direita) e stick analógico são fixos.")}
+        {' '}{t("Combo")} <b>Select+Start</b> {t("sai do jogo (não remapeável).")}
       </p>
     </div>
   );

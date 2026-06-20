@@ -150,7 +150,7 @@ export default function GameDetailPanel({
                 title={t("Clique pra ciclar entre os status (sem status → quero jogar → jogando → zerei → platinei → abandonei)")}
               >
                 <span className="pb-status-icon">{GAME_STATUS_EMOJI[curStatus]}</span>
-                <span className="pb-status-label">{GAME_STATUS_LABELS[curStatus]}</span>
+                <span className="pb-status-label">{t(GAME_STATUS_LABELS[curStatus])}</span>
               </button>
               <div className="pb-rating" role="group" aria-label={t("Sua nota")}>
                 {[1,2,3,4,5].map((n) => (

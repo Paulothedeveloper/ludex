@@ -47,6 +47,7 @@ import { DEFAULT_AVATARS, avatarUrl } from "./LudexOnboarding"; // v0.9.1: reusa
 import { hasOptionsForSystem, applySystemOptions, effectivePadMap, loadSystemOptions, saveSystemOptions, SCREEN_LAYOUTS } from "./ludexSystemOptions";
 import { CheatsModal } from "./LudexCheatsModal";
 import { loadCheats as loadGameCheats, applyCheats as applyGameCheats } from "./ludexCheats";
+import { t, LANGUAGES, getLanguage, setLanguage, subscribeLanguage, currentLocale } from "./ludexI18n";
 
 // ============================================================
 // === ICONES SVG (sem emojis, regra Paulo) ===================
@@ -146,6 +147,9 @@ function MobileSplash() {
 // === COMPONENTE PRINCIPAL ===================================
 // ============================================================
 export default function LudexMobile() {
+  // v0.9.40: re-render reativo ao trocar de idioma (sem reload) — assina o i18n.
+  const [, setLangTick] = useState(0);
+  useEffect(() => subscribeLanguage(() => setLangTick((n) => n + 1)), []);
   const [systems, setSystems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState({ profiles: [], active_profile_id: null });
@@ -194,7 +198,7 @@ export default function LudexMobile() {
   const requestFilesAccess = useCallback(async () => {
     try {
       await invoke("android_open_all_files_settings");
-    } catch (e) { mAlert("Nao consegui abrir Configurações: " + e); }
+    } catch (e) { mAlert(t("Não consegui abrir Configurações: {e}", { e })); }
   }, []);
   // Quando user volta de Settings, re-checa
   useEffect(() => {
@@ -437,7 +441,7 @@ export default function LudexMobile() {
   const sessionStartRef = useRef(null);
   const launchGame = useCallback((system, game) => {
     if (!system.libretro_core) {
-      mAlert(`Sistema "${system.name}" não tem core libretro embedded para Android.`);
+      mAlert(t("Sistema \"{name}\" não tem core libretro embedded para Android.", { name: system.name }));
       return;
     }
     playPlatformJingle(system.id);
@@ -598,24 +602,22 @@ export default function LudexMobile() {
         try { hasAccess = await invoke("android_has_all_files_access"); } catch {}
         if (!hasAccess) {
           const ok = await mConfirm(
-            "O Ludex precisa de permissão para acessar seus arquivos.\n\n" +
-            "Vou abrir Configurações -- ative 'Permitir gerenciar todos os arquivos' e volte aqui.\n\nAbrir agora?"
+            t("O Ludex precisa de permissão para acessar seus arquivos.\n\nVou abrir Configurações — ative 'Permitir gerenciar todos os arquivos' e volte aqui.\n\nAbrir agora?")
           );
           if (ok) {
             try { await invoke("android_open_all_files_settings"); } catch (err) {
-              await mAlert("Nao consegui abrir Configurações: " + err);
+              await mAlert(t("Não consegui abrir Configurações: {e}", { e: err }));
             }
           }
         } else {
           await mAlert(
-            "Nenhum jogo encontrado em:\n" + path + "\n\n" +
-            "ROMs supported: .nes .smc .sfc .gba .gb .gbc .iso .bin .cue .z64 .n64 .md .smd .gen .sms .gg .pce .ws .ngc .lnx .a26 .j64 .zip .7z e outras."
+            t("Nenhum jogo encontrado em:\n{path}\n\nROMs suportadas: .nes .smc .sfc .gba .gb .gbc .iso .bin .cue .z64 .n64 .md .smd .gen .sms .gg .pce .ws .ngc .lnx .a26 .j64 .zip .7z e outras.", { path })
           );
         }
       }
     } catch (e) {
       dbg(`setRomsFolder falhou: ${e}`);
-      await mAlert(`Falha: ${e}`);
+      await mAlert(t("Falha: {err}", { err: e }));
     }
   }, [dbg]);
 
@@ -630,11 +632,11 @@ export default function LudexMobile() {
           // v0.9.3: em vez de baixar/instalar dentro do app (instavel no WebView),
           // abre a release no GitHub no NAVEGADOR PADRAO do celular. O user baixa
           // o APK por la e instala. Mais confiavel e e o que o Paulo pediu.
-          setUpdateState({ stage: "installing", msg: "Abrindo a pagina da atualização no navegador..." });
+          setUpdateState({ stage: "installing", msg: t("Abrindo a página da atualização no navegador...") });
           try {
             await invoke("open_url", { url: "https://github.com/EllaeMyApp/ludex/releases/latest" });
           } catch (e) {
-            setUpdateState({ stage: "error", msg: "Nao consegui abrir o navegador. Acesse manualmente: github.com/EllaeMyApp/ludex/releases/latest" });
+            setUpdateState({ stage: "error", msg: t("Não consegui abrir o navegador. Acesse manualmente: github.com/EllaeMyApp/ludex/releases/latest") });
           }
         }}
       />
@@ -685,7 +687,7 @@ export default function LudexMobile() {
         />
         {sysFolderPick && (
           <FolderPickerModal
-            title={`Pasta de ${openSystem.name}`}
+            title={t("Pasta de {name}", { name: openSystem.name })}
             onClose={() => setSysFolderPick(null)}
             onPick={async (folder) => {
               saveSystemFolder(sysFolderPick, folder);
@@ -706,7 +708,7 @@ export default function LudexMobile() {
       {!loading && launching && (
         <div className="lmx-loading-overlay">
           <div className="lmx-spinner" />
-          <div>Abrindo jogo...</div>
+          <div>{t("Abrindo jogo...")}</div>
         </div>
       )}
 
@@ -785,7 +787,7 @@ export default function LudexMobile() {
             </svg>
           </div>
           <div className="lmx-ach-toast-body">
-            <div className="lmx-ach-toast-label">Conquista desbloqueada</div>
+            <div className="lmx-ach-toast-label">{t("Conquista desbloqueada")}</div>
             <div className="lmx-ach-toast-name">{achievementToast.name}</div>
             <div className="lmx-ach-toast-desc">{achievementToast.desc}</div>
           </div>
@@ -819,10 +821,10 @@ export default function LudexMobile() {
       {/* v0.9.11: bottom tab bar FLUTUANTE estilo console (PS5/Xbox) — sem texto,
           icones novos, pilula de destaque no ativo. */}
       <nav className="lmx-tabs lmx-tabs-float" data-tour="tabs">
-        <TabBtn icon={<IconNavHome />} label="Inicio" active={activeTab === "home"} onClick={() => changeTab("home")} />
-        <TabBtn icon={<IconNavLibrary />} label="Sistemas" active={activeTab === "systems"} onClick={() => changeTab("systems")} />
-        <TabBtn icon={<IconNavSearch />} label="Buscar" active={activeTab === "search"} onClick={() => changeTab("search")} />
-        <TabBtn icon={<IconNavSettings />} label="Ajustes" active={activeTab === "settings"} onClick={() => changeTab("settings")} />
+        <TabBtn icon={<IconNavHome />} label={t("Início")} active={activeTab === "home"} onClick={() => changeTab("home")} />
+        <TabBtn icon={<IconNavLibrary />} label={t("Sistemas")} active={activeTab === "systems"} onClick={() => changeTab("systems")} />
+        <TabBtn icon={<IconNavSearch />} label={t("Buscar")} active={activeTab === "search"} onClick={() => changeTab("search")} />
+        <TabBtn icon={<IconNavSettings />} label={t("Ajustes")} active={activeTab === "settings"} onClick={() => changeTab("settings")} />
       </nav>
     </div>
   );
@@ -880,25 +882,25 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
       {/* Hero header */}
       <header className="lmx-home-hero" data-tour="home-hero">
         {/* v0.9.3: avatar do perfil presente na home (toca = abre Ajustes/perfil) */}
-        <button className="lmx-home-avatar" onClick={onOpenProfile} aria-label="Editar perfil" data-tour="home-avatar">
-          <img src={profileImg} alt="Perfil" />
+        <button className="lmx-home-avatar" onClick={onOpenProfile} aria-label={t("Editar perfil")} data-tour="home-avatar">
+          <img src={profileImg} alt={t("Perfil")} />
         </button>
         <div className="lmx-home-greeting">
-          <div className="lmx-home-hello">Olá</div>
+          <div className="lmx-home-hello">{t("Olá")}</div>
           <div className="lmx-home-name">{activeProfile?.name || "Player"}</div>
         </div>
         {androidDemo && !androidDemo.is_admin_unlocked && androidDemo.days_left > 0 && (
           <div className={`lmx-home-demo ${androidDemo.days_left <= 2 ? "warn" : ""}`}>
             <IconClock />
-            <span>{androidDemo.days_left}d demo</span>
+            <span>{t("{n}d demo", { n: androidDemo.days_left })}</span>
           </div>
         )}
         {/* v0.9.15: recarregar capas (ao lado do badge de demo) */}
         <button
           className={`lmx-home-reload ${reloadingCovers ? "spinning" : ""}`}
           onClick={() => onReloadCovers && onReloadCovers()}
-          aria-label="Recarregar capas"
-          title="Recarregar capas"
+          aria-label={t("Recarregar capas")}
+          title={t("Recarregar capas")}
           data-tour="home-reload"
         >
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -910,14 +912,14 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
       {loading && (
         <div className="lmx-msg">
           <div className="lmx-spinner-small" />
-          Procurando seus jogos...
+          {t("Procurando seus jogos...")}
         </div>
       )}
 
       {/* v0.9.14: "Mais jogados" — distinto de "Adicionados recentemente" abaixo
           (antes duplicava). Some sozinho se não ha tempo de jogo nem capa. */}
       <div data-tour="home-mais-jogados">
-        <FeaturedCarousel title="Mais jogados" items={mostPlayed} covers={covers} onPick={onPickGame} />
+        <FeaturedCarousel title={t("Mais jogados")} items={mostPlayed} covers={covers} onPick={onPickGame} />
       </div>
 
       {/* v0.8.22: Continue onde parou (recents) */}
@@ -930,27 +932,25 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
       {!loading && nonEmptySystems.length === 0 && (
         <div className="lmx-empty-state">
           <div className="lmx-empty-icon"><IconGrid /></div>
-          <h2>Nenhum jogo ainda</h2>
+          <h2>{t("Nenhum jogo ainda")}</h2>
           {!hasFilesAccess ? (
             <>
               <p>
-                O Ludex precisa de permissão pra acessar suas ROMs no celular.
+                {t("O Ludex precisa de permissão pra acessar suas ROMs no celular.")}
                 <br /><br />
-                Apos clicar, ative o switch do <b>Ludex</b> em <b>"Acesso a todos os arquivos"</b> e volte aqui.
+                {t("Após clicar, ative o switch do Ludex em \"Acesso a todos os arquivos\" e volte aqui.")}
               </p>
               <button className="lmx-settings-btn primary" onClick={onRequestAccess} style={{ maxWidth: 280, margin: "16px auto 0" }}>
-                Permitir acesso aos arquivos
+                {t("Permitir acesso aos arquivos")}
               </button>
             </>
           ) : (
             <>
               <p>
-                Escolha a pasta no seu celular onde tem as ROMs.
-                Pode ser <code>/Download</code>, <code>/Ludex/roms</code>,
-                ou qualquer outra que você ja tenha jogos.
+                {t("Escolha a pasta no seu celular onde tem as ROMs. Pode ser /Download, /Ludex/roms, ou qualquer outra que você já tenha jogos.")}
               </p>
               <button className="lmx-settings-btn primary" onClick={onPickFolder} style={{ maxWidth: 280, margin: "16px auto 0" }}>
-                Escolher pasta de ROMs
+                {t("Escolher pasta de ROMs")}
               </button>
             </>
           )}
@@ -960,7 +960,7 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
       {/* Adicionados recentemente (por modified_at do filesystem) */}
       {recentByMtime.length > 0 && (
         <section className="lmx-section">
-          <h3 className="lmx-section-title">Adicionados recentemente</h3>
+          <h3 className="lmx-section-title">{t("Adicionados recentemente")}</h3>
           <div className="lmx-carousel">
             {recentByMtime.map(({ system, game }) => (
               <GameCard
@@ -1007,7 +1007,7 @@ function HomeTab({ systems, covers, activeProfile, androidDemo, loading, recents
 // recentes que JA tem capa baixada (some inteiro enquanto não ha capa, pra não
 // mostrar placeholders feios). Scroll-snap horizontal premium.
 // ============================================================
-function FeaturedCarousel({ items, covers, onPick, title = "Destaques" }) {
+function FeaturedCarousel({ items, covers, onPick, title = t("Destaques") }) {
   const withCover = (items || []).filter(
     ({ game }) => typeof covers[game.path] === "string" && covers[game.path].length > 0
   );
@@ -1077,7 +1077,7 @@ function SystemsTab({ systems, onPickSystem }) {
   return (
     <div className="lmx-systems" data-tour="tab-systems">
       <header className="lmx-page-header">
-        <h1>Sistemas</h1>
+        <h1>{t("Sistemas")}</h1>
       </header>
       <div className="lmx-systems-wheel">
         {ordered.map((sys) => (
@@ -1093,7 +1093,7 @@ function SystemsTab({ systems, onPickSystem }) {
             <div className="lmx-wheel-text">
               <div className="lmx-wheel-name">{sys.name}</div>
               <div className="lmx-wheel-count">
-                {sys.games.length === 0 ? "Sem jogos" : `${sys.games.length} jogo${sys.games.length === 1 ? "" : "s"}`}
+                {sys.games.length === 0 ? t("Sem jogos") : (sys.games.length === 1 ? t("{n} jogo", { n: sys.games.length }) : t("{n} jogos", { n: sys.games.length }))}
               </div>
             </div>
             <div className="lmx-wheel-arrow">›</div>
@@ -1133,14 +1133,14 @@ function SearchTab({ systems, covers, search, setSearch, onPickGame }) {
   return (
     <div className="lmx-search" data-tour="tab-search">
       <header className="lmx-page-header">
-        <h1>Buscar</h1>
+        <h1>{t("Buscar")}</h1>
       </header>
       <div className="lmx-search-input-wrap" data-tour="search-input">
         <IconSearch />
         <input
           type="text"
           className="lmx-search-input"
-          placeholder="Nome do jogo..."
+          placeholder={t("Nome do jogo...")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           autoFocus
@@ -1152,10 +1152,10 @@ function SearchTab({ systems, covers, search, setSearch, onPickGame }) {
         )}
       </div>
       {trimmed.length < 2 && (
-        <div className="lmx-search-hint">Digite pelo menos 2 letras pra buscar</div>
+        <div className="lmx-search-hint">{t("Digite pelo menos 2 letras pra buscar")}</div>
       )}
       {trimmed.length >= 2 && results.length === 0 && (
-        <div className="lmx-search-hint">Nenhum jogo encontrado</div>
+        <div className="lmx-search-hint">{t("Nenhum jogo encontrado")}</div>
       )}
       <div className="lmx-search-results">
         {results.map(({ system, game }) => (
@@ -1200,7 +1200,7 @@ function UpdateRequiredScreen({ info, state, onInstall }) {
             <polyline points="14 7 21 7 21 14" />
           </svg>
         </div>
-        <h1>Atualização disponível</h1>
+        <h1>{t("Atualização disponível")}</h1>
         <div className="lmx-update-version">
           <span>v{info.current}</span>
           <span className="lmx-update-arrow">→</span>
@@ -1208,8 +1208,8 @@ function UpdateRequiredScreen({ info, state, onInstall }) {
         </div>
         {info.notes && <p className="lmx-update-notes">{info.notes}</p>}
         <p className="lmx-update-required-text">
-          Toque em "Atualizar agora" para abrir a página de download no navegador.<br />
-          A versão Windows é gratuita pra quem comprou.
+          {t("Toque em \"Atualizar agora\" para abrir a página de download no navegador.")}<br />
+          {t("A versão Windows é gratuita pra quem comprou.")}
         </p>
         {state.stage === "downloading" && (
           <div className="lmx-update-loading">
@@ -1228,7 +1228,7 @@ function UpdateRequiredScreen({ info, state, onInstall }) {
         )}
         {state.stage !== "downloading" && state.stage !== "installing" && (
           <button className="lmx-settings-btn primary" onClick={onInstall}>
-            Atualizar agora
+            {t("Atualizar agora")}
           </button>
         )}
       </div>
@@ -1244,22 +1244,21 @@ function UpdateChecker() {
     try {
       const info = await invoke("check_update_info");
       if (info?.available) {
-        setMsg({ kind: "info", text: `Nova versão v${info.latest} disponível! Reinicie o app pra ver o prompt de atualização.` });
+        setMsg({ kind: "info", text: t("Nova versão v{v} disponível! Reinicie o app pra ver o prompt de atualização.", { v: info.latest }) });
       } else {
-        setMsg({ kind: "ok", text: `Voce ja esta na versão mais recente (v${info?.current || "?"}).` });
+        setMsg({ kind: "ok", text: t("Você já está na versão mais recente (v{v}).", { v: info?.current || "?" }) });
       }
     } catch (e) {
-      setMsg({ kind: "error", text: `Erro: ${e}` });
+      setMsg({ kind: "error", text: t("Erro: {err}", { err: e }) });
     } finally { setBusy(false); }
   };
   return (
     <>
       <p className="lmx-settings-hint">
-        O Ludex verifica automaticamente no início. Se houver versão nova, aparece
-        prompt obrigatorio pra atualizar.
+        {t("O Ludex verifica automaticamente no início. Se houver versão nova, aparece prompt obrigatório pra atualizar.")}
       </p>
       <button className="lmx-settings-btn primary" onClick={check} disabled={busy}>
-        {busy ? "Verificando..." : "Verificar atualização"}
+        {busy ? t("Verificando...") : t("Verificar atualização")}
       </button>
       {msg && <p className={`lmx-settings-msg ${msg.kind}`}>{msg.text}</p>}
     </>
@@ -1271,8 +1270,7 @@ function SoundToggle() {
   return (
     <>
       <p className="lmx-settings-hint">
-        Sons curtos ao trocar de aba, abrir jogo, jingles por sistema. Som do
-        emulador (audio do jogo) e independente.
+        {t("Sons curtos ao trocar de aba, abrir jogo, jingles por sistema. Som do emulador (áudio do jogo) é independente.")}
       </p>
       <button className="lmx-settings-btn primary" onClick={() => {
         const next = !muted;
@@ -1280,7 +1278,7 @@ function SoundToggle() {
         setMutedState(next);
         if (!next) sfx.confirm();
       }}>
-        {muted ? "Ativar sons UI" : "Desativar sons UI"}
+        {muted ? t("Ativar sons UI") : t("Desativar sons UI")}
       </button>
     </>
   );
@@ -1296,7 +1294,7 @@ function ExternalControllerCard() {
       const pads = navigator.getGamepads ? navigator.getGamepads() : [];
       let found = null;
       for (const p of pads) { if (p) { found = p; break; } }
-      setPadName(found ? (found.id || "Controle") : null);
+      setPadName(found ? (found.id || t("Controle")) : null);
     };
     tick();
     const id = setInterval(tick, 900);
@@ -1311,15 +1309,13 @@ function ExternalControllerCard() {
   }, []);
   return (
     <section className="lmx-settings-card" data-tour="settings-controle">
-      <div className="lmx-settings-label">Controle externo</div>
+      <div className="lmx-settings-label">{t("Controle externo")}</div>
       <div className="lmx-ctrl-status">
         <span className={`lmx-ctrl-dot ${padName ? "on" : ""}`} />
-        <span>{padName ? `Conectado: ${padName.slice(0, 42)}` : "Nenhum controle conectado"}</span>
+        <span>{padName ? t("Conectado: {name}", { name: padName.slice(0, 42) }) : t("Nenhum controle conectado")}</span>
       </div>
       <p className="lmx-settings-hint">
-        Controles Bluetooth/USB funcionam automaticamente dentro do jogo. Para
-        remapear os botões, abra um jogo → menu (engrenagem) → Opcoes do Emulador →
-        aba Controle (por sistema, igual ao launcher do PC).
+        {t("Controles Bluetooth/USB funcionam automaticamente dentro do jogo. Para remapear os botões, abra um jogo → menu (engrenagem) → Opções do Emulador → aba Controle (por sistema, igual ao launcher do PC).")}
       </p>
     </section>
   );
@@ -1333,26 +1329,25 @@ function BiosDeepScanCard() {
   const [msg, setMsg] = useState(null);
   const run = useCallback(async () => {
     if (busy) return;
-    setBusy(true); setMsg({ kind: "info", text: "Varrendo storage do celular... (30s-2min)" });
+    setBusy(true); setMsg({ kind: "info", text: t("Varrendo storage do celular... (30s-2min)") });
     try {
       const n = await invoke("bios_deep_scan");
-      if (n > 0) setMsg({ kind: "ok", text: `Importei ${n} BIOS pra Ludex/system/.` });
-      else setMsg({ kind: "warn", text: "Não achei nenhum .bin com nome de BIOS conhecida. Coloque na pasta Download ou Ludex/system/ manualmente." });
+      if (n > 0) setMsg({ kind: "ok", text: t("Importei {n} BIOS pra Ludex/system/.", { n }) });
+      else setMsg({ kind: "warn", text: t("Não achei nenhum .bin com nome de BIOS conhecida. Coloque na pasta Download ou Ludex/system/ manualmente.") });
     } catch (e) {
-      setMsg({ kind: "error", text: `Falha: ${e}` });
+      setMsg({ kind: "error", text: t("Falha: {err}", { err: e }) });
     } finally {
       setBusy(false);
     }
   }, [busy]);
   return (
     <section className="lmx-settings-card" data-tour="settings-bios">
-      <div className="lmx-settings-label">BIOS dos emuladores</div>
+      <div className="lmx-settings-label">{t("BIOS dos emuladores")}</div>
       <p className="lmx-settings-hint">
-        PS1, PS2, Dreamcast, Saturn e 3DO precisam de BIOS pra rodar. Sem ela, o emulador trava ao abrir.
-        Coloque seus .bin em Download e clique abaixo — o app varre o celular inteiro e copia tudo certinho.
+        {t("PS1, PS2, Dreamcast, Saturn e 3DO precisam de BIOS pra rodar. Sem ela, o emulador trava ao abrir. Coloque seus .bin em Download e clique abaixo — o app varre o celular inteiro e copia tudo certinho.")}
       </p>
       <button className="lmx-settings-btn primary" onClick={run} disabled={busy} style={{ marginTop: 8 }}>
-        {busy ? "Procurando..." : "Procurar BIOS no celular inteiro"}
+        {busy ? t("Procurando...") : t("Procurar BIOS no celular inteiro")}
       </button>
       {msg && (
         <p className={`lmx-settings-msg ${msg.kind}`} style={{ marginTop: 8 }}>{msg.text}</p>
@@ -1376,11 +1371,11 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
       if (ok) {
         const newDemo = await invoke("android_demo_status");
         onAdminUnlock(newDemo);
-        setMsg({ kind: "ok", text: "Destravado! Demo removida." });
+        setMsg({ kind: "ok", text: t("Destravado! Demo removida.") });
         setShowKeyInput(false);
         setKeyInput("");
       } else {
-        setMsg({ kind: "error", text: "License não destravou (não e admin)" });
+        setMsg({ kind: "error", text: t("License não destravou (não é admin)") });
       }
     } catch (e) {
       setMsg({ kind: "error", text: String(e) });
@@ -1392,15 +1387,32 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
   return (
     <div className="lmx-settings" data-tour="tab-settings">
       <header className="lmx-page-header">
-        <h1>Ajustes</h1>
+        <h1>{t("Ajustes")}</h1>
       </header>
 
       <section className="lmx-settings-card" data-tour="settings-profile">
         <div className="lmx-settings-row">
           <div>
-            <div className="lmx-settings-label">Perfil ativo</div>
+            <div className="lmx-settings-label">{t("Perfil ativo")}</div>
             <div className="lmx-settings-value">{activeProfile?.name || "—"}</div>
           </div>
+        </div>
+      </section>
+
+      <section className="lmx-settings-card">
+        <div className="lmx-settings-label">{t("Idioma")}</div>
+        <div className="lmx-lang-row">
+          {LANGUAGES.map((lng) => (
+            <button
+              key={lng.code}
+              className={`lmx-lang-btn ${getLanguage() === lng.code ? "on" : ""}`}
+              onClick={() => { setLanguage(lng.code); sfx.confirm(); haptic(8); }}
+              aria-label={lng.label}
+            >
+              <span className="lmx-lang-flag">{lng.flag}</span>
+              <span className="lmx-lang-name">{lng.label}</span>
+            </button>
+          ))}
         </div>
       </section>
 
@@ -1409,7 +1421,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
       <BiosDeepScanCard />
 
       <section className="lmx-settings-card" data-tour="settings-theme">
-        <div className="lmx-settings-label">Tema do app</div>
+        <div className="lmx-settings-label">{t("Tema do app")}</div>
         <div className="lmx-theme-grid">
           {APP_THEMES.map(([id, lbl]) => (
             <button
@@ -1419,7 +1431,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
               onClick={() => onSetTheme && onSetTheme(id)}
             >
               <span className="lmx-theme-swatch" />
-              <span className="lmx-theme-name">{lbl}</span>
+              <span className="lmx-theme-name">{t(lbl)}</span>
             </button>
           ))}
         </div>
@@ -1429,37 +1441,37 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
         <section className="lmx-settings-card">
           <div className="lmx-settings-row">
             <div>
-              <div className="lmx-settings-label">Status da licenca</div>
+              <div className="lmx-settings-label">{t("Status da licença")}</div>
               <div className="lmx-settings-value">
                 {androidDemo.is_admin_unlocked
-                  ? "Admin desbloqueado (vitalicio)"
+                  ? t("Admin desbloqueado (vitalício)")
                   : androidDemo.days_left > 0
-                    ? `Demo: ${androidDemo.days_left} dia${androidDemo.days_left === 1 ? "" : "s"} restantes`
-                    : "Demo expirada"}
+                    ? (androidDemo.days_left === 1 ? t("Demo: {n} dia restante", { n: androidDemo.days_left }) : t("Demo: {n} dias restantes", { n: androidDemo.days_left }))
+                    : t("Demo expirada")}
               </div>
             </div>
           </div>
           {!androidDemo.is_admin_unlocked && (
             <>
               <button className="lmx-settings-btn primary" onClick={() => invoke("open_url", { url: "https://pauloadriel98.gumroad.com/l/ludex" }).catch(() => {})}>
-                Comprar versão Windows (R$ 49,90)
+                {t("Comprar versão Windows (R$ 49,90)")}
               </button>
               {!showKeyInput ? (
                 <button className="lmx-settings-btn ghost" onClick={() => setShowKeyInput(true)}>
-                  Sou admin / tenho license
+                  {t("Sou admin / tenho license")}
                 </button>
               ) : (
                 <div className="lmx-settings-key">
                   <input
                     type="text"
-                    placeholder="Cole sua license key"
+                    placeholder={t("Cole sua license key")}
                     value={keyInput}
                     onChange={(e) => setKeyInput(e.target.value)}
                     autoFocus
                     disabled={busy}
                   />
                   <button className="lmx-settings-btn primary" onClick={tryUnlock} disabled={busy || !keyInput.trim()}>
-                    {busy ? "Verificando..." : "Destravar"}
+                    {busy ? t("Verificando...") : t("Destravar")}
                   </button>
                   {msg && (
                     <p className={`lmx-settings-msg ${msg.kind}`}>{msg.text}</p>
@@ -1473,39 +1485,38 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
 
       {/* v0.9.34: re-abrir tutorial */}
       <section className="lmx-settings-card" data-tour="settings-tutorial">
-        <div className="lmx-settings-label">Tutorial</div>
+        <div className="lmx-settings-label">{t("Tutorial")}</div>
         <p className="lmx-settings-hint">
-          Ver o passo a passo de cada função do app de novo (com destaque visual em cada elemento).
+          {t("Ver o passo a passo de cada função do app de novo (com destaque visual em cada elemento).")}
         </p>
         <button
           className="lmx-settings-btn ghost"
           onClick={() => onRestartTutorial && onRestartTutorial()}
           style={{ marginTop: 8 }}
         >
-          Ver tutorial novamente
+          {t("Ver tutorial novamente")}
         </button>
       </section>
 
       <section className="lmx-settings-card" data-tour="settings-folder">
-        <div className="lmx-settings-label">Pasta de ROMs</div>
+        <div className="lmx-settings-label">{t("Pasta de ROMs")}</div>
         <div className="lmx-settings-paths">
-          <code>{currentRomsRoot || "(padrão: /storage/emulated/0/Ludex/roms/)"}</code>
+          <code>{currentRomsRoot || t("(padrão: /storage/emulated/0/Ludex/roms/)")}</code>
         </div>
         <button className="lmx-settings-btn primary" onClick={onPickFolder}>
-          Escolher pasta no celular
+          {t("Escolher pasta no celular")}
         </button>
         <p className="lmx-settings-hint">
-          Apos escolher, o Ludex varre subpastas automaticamente. Cada sistema
-          aparece quando você tem ROMs com extensão reconhecida (snes, gba, gb, iso, etc).
+          {t("Após escolher, o Ludex varre subpastas automaticamente. Cada sistema aparece quando você tem ROMs com extensão reconhecida (snes, gba, gb, iso, etc).")}
         </p>
       </section>
 
       <section className="lmx-settings-card">
-        <div className="lmx-settings-label">BIOS, Mods e Traducoes</div>
+        <div className="lmx-settings-label">{t("BIOS, Mods e Traduções")}</div>
         <div className="lmx-settings-paths">
-          <div><strong>BIOS:</strong> <code>Ludex/system/</code> (Saturn/PSP/PS1/Dreamcast)</div>
-          <div><strong>Saves:</strong> <code>Ludex/saves-libretro/</code></div>
-          <div><strong>Mods/traducoes:</strong> <code>Ludex/mods/&lt;sistema&gt;/</code></div>
+          <div><strong>{t("BIOS:")}</strong> <code>Ludex/system/</code> (Saturn/PSP/PS1/Dreamcast)</div>
+          <div><strong>{t("Saves:")}</strong> <code>Ludex/saves-libretro/</code></div>
+          <div><strong>{t("Mods/traduções:")}</strong> <code>Ludex/mods/&lt;sistema&gt;/</code></div>
         </div>
         <button className="lmx-settings-btn primary" onClick={async () => {
           // v0.9.5: abrir uma pasta especifica e instavel entre gerenciadores de
@@ -1516,21 +1527,19 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
           try { await invoke("android_open_folder", { absPath: base }); opened = true; } catch {}
           if (!opened) {
             await mAlert(
-              "Abra o app de Arquivos (Meus Arquivos) do seu celular e vá até:\n\n" + base +
-              "\n\nColoque BIOS em " + base + "/system/ e mods em " + base + "/mods/<sistema>/"
+              t("Abra o app de Arquivos (Meus Arquivos) do seu celular e vá até:\n\n{base}\n\nColoque BIOS em {base}/system/ e mods em {base}/mods/<sistema>/", { base })
             );
           }
         }}>
-          Abrir pasta Ludex no Files
+          {t("Abrir pasta Ludex no Files")}
         </button>
         <p className="lmx-settings-hint">
-          Coloca BIOS na pasta <code>system/</code>. Mods/traducoes do mesmo jeito que no Windows:
-          renomeia o ROM ou patcha antes de colocar em <code>roms/</code>.
+          {t("Coloca BIOS na pasta system/. Mods/traduções do mesmo jeito que no Windows: renomeia o ROM ou patcha antes de colocar em roms/.")}
         </p>
       </section>
 
       <section className="lmx-settings-card">
-        <div className="lmx-settings-label">Atualizacao</div>
+        <div className="lmx-settings-label">{t("Atualização")}</div>
         <UpdateChecker />
       </section>
 
@@ -1546,15 +1555,15 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
       <BackupRestoreCard />
 
       <section className="lmx-settings-card">
-        <div className="lmx-settings-label">Sons</div>
+        <div className="lmx-settings-label">{t("Sons")}</div>
         <SoundToggle />
       </section>
 
       <section className="lmx-settings-card">
-        <div className="lmx-settings-label">Sobre</div>
-        <div className="lmx-settings-value">Ludex Android v0.8.23</div>
+        <div className="lmx-settings-label">{t("Sobre")}</div>
+        <div className="lmx-settings-value">{t("Ludex Android v{v}", { v: "0.8.23" })}</div>
         <p className="lmx-settings-hint">
-          A versão Windows tem auto-update, gamepad nativo, todos os sistemas embedded + Switch/Wii U/PS3/Xbox 360/PS Vita via emulador externo.
+          {t("A versão Windows tem auto-update, gamepad nativo, todos os sistemas embedded + Switch/Wii U/PS3/Xbox 360/PS Vita via emulador externo.")}
         </p>
       </section>
     </div>
@@ -1568,13 +1577,13 @@ function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder, onPick
   const [guideOpen, setGuideOpen] = useState(false); // v0.9.15: sites por sistema
   const showInstallGuide = useCallback(() => {
     mAlert(
-      `Como colocar jogos de ${system.name} no Ludex:\n\n` +
-      "1) Baixe a ROM no celular (veja 'Onde baixar' aqui embaixo).\n" +
-      "2) Coloque o arquivo na pasta de ROMs (geral ou a pasta só deste sistema).\n" +
-      "3) Volte aqui — o Ludex detecta pela extensão (ex: .gba, .sfc, .nes, .z64).\n" +
-      "4) Traduções/hacks: aplique o patch na ROM antes (ou use a ROM já traduzida).\n" +
-      "5) BIOS (Saturn/PSP/PS1/Dreamcast): pasta Ludex/system/.\n\n" +
-      "Use jogos que você possui."
+      t("Como colocar jogos de {name} no Ludex:", { name: system.name }) + "\n\n" +
+      t("1) Baixe a ROM no celular (veja 'Onde baixar' aqui embaixo).") + "\n" +
+      t("2) Coloque o arquivo na pasta de ROMs (geral ou a pasta só deste sistema).") + "\n" +
+      t("3) Volte aqui — o Ludex detecta pela extensão (ex: .gba, .sfc, .nes, .z64).") + "\n" +
+      t("4) Traduções/hacks: aplique o patch na ROM antes (ou use a ROM já traduzida).") + "\n" +
+      t("5) BIOS (Saturn/PSP/PS1/Dreamcast): pasta Ludex/system/.") + "\n\n" +
+      t("Use jogos que você possui.")
     );
   }, [system.name]);
   return (
@@ -1585,50 +1594,49 @@ function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder, onPick
           <div className="lmx-systemview-icon" style={{ background: system.color }}><SysGlyph id={system.id} /></div>
           <div>
             <h1>{system.name}</h1>
-            <div className="lmx-systemview-count">{system.games.length} jogo{system.games.length === 1 ? "" : "s"}</div>
+            <div className="lmx-systemview-count">{system.games.length === 1 ? t("{n} jogo", { n: system.games.length }) : t("{n} jogos", { n: system.games.length })}</div>
           </div>
         </div>
         {/* v0.9.15: guia de download (sites de ROMs/traducoes/mods) por sistema */}
-        <button className="lmx-sysfolder-btn" onClick={() => { sfx.confirm(); setGuideOpen(true); }} title="Onde baixar jogos / traduções" aria-label="Onde baixar">
+        <button className="lmx-sysfolder-btn" onClick={() => { sfx.confirm(); setGuideOpen(true); }} title={t("Onde baixar jogos / traduções")} aria-label={t("Onde baixar")}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
         </button>
         {/* v0.9.5: pasta exclusiva deste sistema */}
         {onPickSystemFolder && (
-          <button className="lmx-sysfolder-btn" onClick={onPickSystemFolder} title="Escolher pasta só deste sistema" aria-label="Pasta deste sistema">
+          <button className="lmx-sysfolder-btn" onClick={onPickSystemFolder} title={t("Escolher pasta só deste sistema")} aria-label={t("Pasta deste sistema")}>
             <IconFolder withRoms={!!currentSystemFolder} />
           </button>
         )}
       </header>
       {currentSystemFolder && (
         <div className="lmx-sysfolder-bar">
-          <span>Pasta deste sistema: <code>{currentSystemFolder}</code></span>
-          <button onClick={onPickSystemFolder}>Trocar</button>
+          <span>{t("Pasta deste sistema:")} <code>{currentSystemFolder}</code></span>
+          <button onClick={onPickSystemFolder}>{t("Trocar")}</button>
         </div>
       )}
       {system.games.length === 0 ? (
         <div className="lmx-empty-state">
           <div className="lmx-empty-icon"><IconGrid /></div>
-          <h2>Sem jogos de {system.name}</h2>
+          <h2>{t("Sem jogos de {name}", { name: system.name })}</h2>
           <p>
-            Escolha uma pasta SÓ pra {system.name} — assim cada emulador pode ter
-            a sua. O Ludex detecta as ROMs pela extensão.
+            {t("Escolha uma pasta SÓ pra {name} — assim cada emulador pode ter a sua. O Ludex detecta as ROMs pela extensão.", { name: system.name })}
           </p>
           {onPickSystemFolder && (
             <button className="lmx-settings-btn primary" onClick={onPickSystemFolder} style={{ maxWidth: 280, margin: "16px auto 8px" }}>
-              Escolher pasta de {system.name}
+              {t("Escolher pasta de {name}", { name: system.name })}
             </button>
           )}
           {onPickFolder && (
             <button className="lmx-settings-btn ghost" onClick={onPickFolder} style={{ maxWidth: 280, margin: "0 auto" }}>
-              Usar a pasta geral de ROMs
+              {t("Usar a pasta geral de ROMs")}
             </button>
           )}
           <div style={{ display: "flex", gap: 8, maxWidth: 280, margin: "16px auto 0" }}>
             <button className="lmx-settings-btn ghost" onClick={showInstallGuide} style={{ flex: 1, marginTop: 0 }}>
-              Como instalar
+              {t("Como instalar")}
             </button>
             <button className="lmx-settings-btn primary" onClick={() => { sfx.confirm(); setGuideOpen(true); }} style={{ flex: 1, marginTop: 0 }}>
-              Onde baixar
+              {t("Onde baixar")}
             </button>
           </div>
         </div>
@@ -1689,11 +1697,11 @@ function GameDetailScreen({ system, game, coverSrc, onClose, onLaunch }) {
   };
   const openGameFolder = async () => {
     try { await invoke("android_open_folder", { absPath: gameDir }); }
-    catch (e) { mAlert("Nao consegui abrir a pasta: " + e); }
+    catch (e) { mAlert(t("Não consegui abrir a pasta: {e}", { e })); }
   };
   const openModsFolder = async () => {
     try { await invoke("android_open_folder", { absPath: modsDir }); }
-    catch (e) { mAlert("Nao consegui abrir a pasta de mods: " + e); }
+    catch (e) { mAlert(t("Não consegui abrir a pasta de mods: {e}", { e })); }
   };
 
   const heroSrc = details?.cover_path ? convertFileSrc(details.cover_path) : coverSrc;
@@ -1702,7 +1710,7 @@ function GameDetailScreen({ system, game, coverSrc, onClose, onLaunch }) {
 
   return (
     <div className="lmx-detail">
-      <button className="lmx-detail-close" onClick={onClose}><IconArrowLeft /></button>
+      <button className="lmx-detail-close" onClick={onClose} aria-label={t("Voltar")}><IconArrowLeft /></button>
 
       <div className="lmx-detail-hero">
         {youtubeId ? (
@@ -1738,20 +1746,20 @@ function GameDetailScreen({ system, game, coverSrc, onClose, onLaunch }) {
         {details?.rating != null && (
           <div className="lmx-detail-webrating">
             <span className="lmx-detail-webrating-score">{Math.round(details.rating)}</span>
-            <span className="lmx-detail-webrating-label">Nota web<br />(usuários IGDB)</span>
+            <span className="lmx-detail-webrating-label">{t("Nota web")}<br />{t("(usuários IGDB)")}</span>
           </div>
         )}
 
         <button className="lmx-detail-play" onClick={onLaunch}>
-          <IconPlay /> JOGAR
+          <IconPlay /> {t("JOGAR")}
         </button>
 
         {/* v0.9.3: nota do usuário (estrelas) */}
         <div className="lmx-detail-rating">
-          <span className="lmx-detail-rating-label">Sua nota</span>
+          <span className="lmx-detail-rating-label">{t("Sua nota")}</span>
           <div className="lmx-detail-stars">
             {[1, 2, 3, 4, 5].map((n) => (
-              <button key={n} className={"lmx-detail-star" + (n <= rating ? " on" : "")} onClick={() => setStars(n === rating ? 0 : n)} aria-label={`${n} estrelas`}>
+              <button key={n} className={"lmx-detail-star" + (n <= rating ? " on" : "")} onClick={() => setStars(n === rating ? 0 : n)} aria-label={t("{n} estrelas", { n })}>
                 <IconStar filled={n <= rating} />
               </button>
             ))}
@@ -1762,18 +1770,18 @@ function GameDetailScreen({ system, game, coverSrc, onClose, onLaunch }) {
         <div className="lmx-detail-files">
           <button className="lmx-detail-filebtn" onClick={openGameFolder}>
             <IconFolder withRoms={false} />
-            <span>Abrir pasta do jogo</span>
+            <span>{t("Abrir pasta do jogo")}</span>
           </button>
           <button className="lmx-detail-filebtn" onClick={openModsFolder}>
             <IconFolder withRoms={modCount > 0} />
-            <span>Mods{modCount != null ? ` (${modCount})` : ""}</span>
+            <span>{modCount != null ? t("Mods ({n})", { n: modCount }) : t("Mods")}</span>
           </button>
         </div>
         <p className="lmx-detail-files-hint">
-          Coloque traduções/hacks em <code>Ludex/mods/{system.id}/</code> — renomeie ou aplique o patch na ROM antes de jogar.
+          {t("Coloque traduções/hacks em Ludex/mods/{id}/ — renomeie ou aplique o patch na ROM antes de jogar.", { id: system.id })}
         </p>
 
-        {loading && <div className="lmx-detail-loading">Buscando info...</div>}
+        {loading && <div className="lmx-detail-loading">{t("Buscando info...")}</div>}
         {summary && <p className="lmx-detail-summary">{summary}</p>}
 
         {details?.genres?.length > 0 && (
@@ -1869,14 +1877,14 @@ function FolderPickerModal({ onClose, onPick, mode = "folder", title }) {
       <div className="lmx-folder-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="lmx-sheet-handle" />
         <div className="lmx-sheet-header">
-          <h3>{title || (isImage ? "Escolher foto" : "Escolher pasta de ROMs")}</h3>
-          <button className="lmx-back-btn" onClick={onClose} aria-label="Fechar"><IconClose /></button>
+          <h3>{title || (isImage ? t("Escolher foto") : t("Escolher pasta de ROMs"))}</h3>
+          <button className="lmx-back-btn" onClick={onClose} aria-label={t("Fechar")}><IconClose /></button>
         </div>
 
         {/* Atalhos rapidos */}
         <div className="lmx-fb-shortcuts">
           {(isImage ? IMG_SHORTCUTS : QUICK_SHORTCUTS).map((s) => (
-            <button key={s.path} className="lmx-fb-chip" onClick={() => load(s.path)}>{s.label}</button>
+            <button key={s.path} className="lmx-fb-chip" onClick={() => load(s.path)}>{t(s.label)}</button>
           ))}
         </div>
 
@@ -1886,7 +1894,7 @@ function FolderPickerModal({ onClose, onPick, mode = "folder", title }) {
             className="lmx-fb-up"
             disabled={!listing?.parent}
             onClick={() => listing?.parent && load(listing.parent)}
-            aria-label="Subir um nível"
+            aria-label={t("Subir um nível")}
           ><IconUp /></button>
           <div className="lmx-fb-crumbs">
             {crumbs.length === 0 ? <span className="lmx-fb-crumb">/</span> : crumbs.map((c, i) => (
@@ -1900,16 +1908,16 @@ function FolderPickerModal({ onClose, onPick, mode = "folder", title }) {
 
         {/* Conteudo */}
         <div className="lmx-fb-list">
-          {loading && <div className="lmx-fb-status">Carregando…</div>}
+          {loading && <div className="lmx-fb-status">{t("Carregando…")}</div>}
           {err && <div className="lmx-fb-status lmx-fb-err">{err}</div>}
           {!loading && !err && folders.length === 0 && files.length === 0 && (
-            <div className="lmx-fb-status">Pasta vazia</div>
+            <div className="lmx-fb-status">{t("Pasta vazia")}</div>
           )}
           {!loading && !err && folders.map((f) => (
             <button key={f.path} className="lmx-fb-item" onClick={() => load(f.path)}>
               <span className={"lmx-fb-icon" + (f.rom_count > 0 ? " has-roms" : "")}><IconFolder withRoms={f.rom_count > 0} /></span>
               <span className="lmx-fb-name">{f.name}</span>
-              {f.rom_count > 0 && <span className="lmx-fb-badge">{f.rom_count} ROM{f.rom_count > 1 ? "s" : ""}</span>}
+              {f.rom_count > 0 && <span className="lmx-fb-badge">{f.rom_count > 1 ? t("{n} ROMs", { n: f.rom_count }) : t("{n} ROM", { n: f.rom_count })}</span>}
             </button>
           ))}
           {!loading && !err && files.map((f) => {
@@ -1934,19 +1942,19 @@ function FolderPickerModal({ onClose, onPick, mode = "folder", title }) {
         {/* Acao: usar pasta atual (so no modo pasta) */}
         {isImage ? (
           <div className="lmx-fb-footer">
-            <div className="lmx-fb-foundhint">Toque numa imagem para usar como foto</div>
+            <div className="lmx-fb-foundhint">{t("Toque numa imagem para usar como foto")}</div>
           </div>
         ) : (
           <div className="lmx-fb-footer">
             {romsHere > 0 && (
-              <div className="lmx-fb-foundhint">{romsHere} ROM{romsHere > 1 ? "s" : ""} nesta pasta</div>
+              <div className="lmx-fb-foundhint">{romsHere > 1 ? t("{n} ROMs nesta pasta", { n: romsHere }) : t("{n} ROM nesta pasta", { n: romsHere })}</div>
             )}
             <button
               className="lmx-settings-btn primary"
               disabled={!cwd || loading}
               onClick={() => onPick(cwd)}
             >
-              Usar esta pasta
+              {t("Usar esta pasta")}
             </button>
           </div>
         )}
@@ -1983,9 +1991,9 @@ function ProfileEditorModal({ config, activeProfile, onConfigChange, onClose }) 
     try {
       const saved = await invoke("save_profile_photo_from_path", { profileId: activeProfile.id, sourcePath: srcPath });
       setPhotoPath(saved); setBust((v) => v + 1);
-      setMsg({ kind: "ok", text: "Foto pronta. Toque em Salvar." });
+      setMsg({ kind: "ok", text: t("Foto pronta. Toque em Salvar.") });
     } catch (e) {
-      setMsg({ kind: "error", text: "Falha na foto: " + String(e) });
+      setMsg({ kind: "error", text: t("Falha na foto: {e}", { e: String(e) }) });
     } finally { setBusy(false); }
   };
 
@@ -1996,7 +2004,7 @@ function ProfileEditorModal({ config, activeProfile, onConfigChange, onClose }) 
 
   const save = async () => {
     const n = name.trim();
-    if (n.length < 2) { setMsg({ kind: "error", text: "Nome muito curto (mínimo 2 letras)" }); return; }
+    if (n.length < 2) { setMsg({ kind: "error", text: t("Nome muito curto (mínimo 2 letras)") }); return; }
     const updated = {
       ...config,
       profiles: (config.profiles || []).map(p => p.id === activeProfile.id ? { ...p, name: n, avatar_id: avatarId, photo_path: photoPath || null } : p),
@@ -2008,13 +2016,13 @@ function ProfileEditorModal({ config, activeProfile, onConfigChange, onClose }) 
       sfx.confirm(); haptic(12);
       onClose();
     } catch (e) {
-      setMsg({ kind: "error", text: "Falha ao salvar: " + String(e) });
+      setMsg({ kind: "error", text: t("Falha ao salvar: {e}", { e: String(e) }) });
       setBusy(false);
     }
   };
 
   if (picking) {
-    return <FolderPickerModal mode="image" title="Escolher foto do perfil" onClose={() => setPicking(false)} onPick={onPickImage} />;
+    return <FolderPickerModal mode="image" title={t("Escolher foto do perfil")} onClose={() => setPicking(false)} onPick={onPickImage} />;
   }
 
   const previewSrc = photoPath
@@ -2026,23 +2034,23 @@ function ProfileEditorModal({ config, activeProfile, onConfigChange, onClose }) 
       <div className="lmx-folder-sheet" onClick={(e) => e.stopPropagation()} style={{ paddingBottom: "calc(24px + var(--lmx-safe-bottom))" }}>
         <div className="lmx-sheet-handle" />
         <div className="lmx-sheet-header">
-          <h3>Editar perfil</h3>
-          <button className="lmx-back-btn" onClick={onClose} aria-label="Fechar"><IconClose /></button>
+          <h3>{t("Editar perfil")}</h3>
+          <button className="lmx-back-btn" onClick={onClose} aria-label={t("Fechar")}><IconClose /></button>
         </div>
         <div style={{ padding: "4px 18px 0", overflowY: "auto" }}>
           <div style={{ textAlign: "center", marginBottom: 14 }}>
             <img src={previewSrc} alt="" style={{ width: 96, height: 96, borderRadius: 26, objectFit: "cover", border: "2px solid rgba(124,92,255,0.55)", background: "rgba(0,0,0,0.3)" }} />
             <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 12 }}>
-              <button className="lmx-settings-btn primary" onClick={() => setPicking(true)} disabled={busy} style={{ width: "auto", padding: "9px 18px" }}>Escolher foto</button>
-              {photoPath && <button className="lmx-settings-btn ghost" onClick={removePhoto} style={{ width: "auto", padding: "9px 18px" }}>Remover</button>}
+              <button className="lmx-settings-btn primary" onClick={() => setPicking(true)} disabled={busy} style={{ width: "auto", padding: "9px 18px" }}>{t("Escolher foto")}</button>
+              {photoPath && <button className="lmx-settings-btn ghost" onClick={removePhoto} style={{ width: "auto", padding: "9px 18px" }}>{t("Remover")}</button>}
             </div>
           </div>
-          <label style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", display: "block", marginBottom: 6 }}>Nome</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={28} placeholder="Seu nome" autoFocus
+          <label style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", display: "block", marginBottom: 6 }}>{t("Nome")}</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={28} placeholder={t("Seu nome")} autoFocus
             style={{ width: "100%", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(124,92,255,0.4)", color: "#fff", padding: "11px 13px", borderRadius: 9, fontSize: 15, boxSizing: "border-box", marginBottom: 14 }} />
           {!photoPath && (
             <>
-              <label style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", display: "block", marginBottom: 6 }}>Ou um avatar</label>
+              <label style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", display: "block", marginBottom: 6 }}>{t("Ou um avatar")}</label>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6, marginBottom: 14 }}>
                 {DEFAULT_AVATARS.map(a => (
                   <button key={a.id} onClick={() => setAvatarId(a.id)} style={{ aspectRatio: "1/1", borderRadius: 8, border: `2px solid ${avatarId === a.id ? "#fff" : "transparent"}`, padding: 0, overflow: "hidden", background: "rgba(0,0,0,0.3)" }}>
@@ -2053,7 +2061,7 @@ function ProfileEditorModal({ config, activeProfile, onConfigChange, onClose }) 
             </>
           )}
           {msg && <p className={`lmx-settings-msg ${msg.kind}`}>{msg.text}</p>}
-          <button className="lmx-settings-btn primary" onClick={save} disabled={busy} style={{ marginTop: 4 }}>{busy ? "Salvando..." : "Salvar"}</button>
+          <button className="lmx-settings-btn primary" onClick={save} disabled={busy} style={{ marginTop: 4 }}>{busy ? t("Salvando...") : t("Salvar")}</button>
         </div>
       </div>
     </div>
@@ -2079,7 +2087,7 @@ function DemoExpiredScreen({ demo, onUnlock }) {
         const newDemo = await invoke("android_demo_status");
         onUnlock(newDemo);
       } else {
-        setMsg({ kind: "error", text: "License não e admin" });
+        setMsg({ kind: "error", text: t("License não é admin") });
       }
     } catch (e) {
       setMsg({ kind: "error", text: String(e) });
@@ -2092,30 +2100,29 @@ function DemoExpiredScreen({ demo, onUnlock }) {
     <div className="lmx-demo-expired">
       <div className="lmx-demo-expired-card">
         <div className="lmx-demo-expired-icon"><IconClock /></div>
-        <h1>Demo expirou</h1>
+        <h1>{t("Demo expirou")}</h1>
         <p>
-          Voce usou os {demo.demo_days_total} dias da versão Android gratuita.
-          Pra continuar, compre a versão Windows.
+          {t("Você usou os {n} dias da versão Android gratuita. Pra continuar, compre a versão Windows.", { n: demo.demo_days_total })}
         </p>
         <button className="lmx-settings-btn primary" onClick={() => invoke("open_url", { url: "https://pauloadriel98.gumroad.com/l/ludex" }).catch(() => {})}>
-          Comprar Windows (R$ 49,90)
+          {t("Comprar Windows (R$ 49,90)")}
         </button>
         {!showKeyInput ? (
           <button className="lmx-settings-btn ghost" onClick={() => setShowKeyInput(true)}>
-            Sou admin / tenho license
+            {t("Sou admin / tenho license")}
           </button>
         ) : (
           <div className="lmx-settings-key">
             <input
               type="text"
-              placeholder="Cole sua license key"
+              placeholder={t("Cole sua license key")}
               value={keyInput}
               onChange={(e) => setKeyInput(e.target.value)}
               autoFocus
               disabled={busy}
             />
             <button className="lmx-settings-btn primary" onClick={tryUnlock} disabled={busy || !keyInput.trim()}>
-              {busy ? "Verificando..." : "Destravar"}
+              {busy ? t("Verificando...") : t("Destravar")}
             </button>
             {msg && <p className={`lmx-settings-msg ${msg.kind}`}>{msg.text}</p>}
           </div>
@@ -2386,7 +2393,7 @@ function MobileEmulatorView({ system, game, onClose }) {
     const cur = { ...loadSystemOptions(system.id), [key]: value };
     saveSystemOptions(system.id, cur);
     setScreenLayoutVals(cur);
-    setStateMsg("Aplicando layout...");
+    setStateMsg(t("Aplicando layout..."));
     try {
       try { await invoke("libretro_save_state", { romPath: game.path, slot: 98 }); } catch {}
       await invoke("libretro_set_option", { key, value });
@@ -2396,9 +2403,9 @@ function MobileEmulatorView({ system, game, onClose }) {
       setInfo(result);
       audioRateRef.current = result.sample_rate || 32040;
       try { await invoke("libretro_load_state", { romPath: game.path, slot: 98 }); } catch {}
-      setStateMsg("Layout aplicado");
+      setStateMsg(t("Layout aplicado"));
     } catch (e) {
-      setStateMsg("Falha no layout: " + e);
+      setStateMsg(t("Falha no layout: {e}", { e }));
     }
     setTimeout(() => setStateMsg(null), 1600);
   }, [system.id, game.path, system.libretro_core]);
@@ -2426,7 +2433,7 @@ function MobileEmulatorView({ system, game, onClose }) {
     (async () => {
       try {
         const coreFile = system.libretro_core;
-        if (!coreFile) { setError(`Sistema "${system.name}" sem core libretro`); return; }
+        if (!coreFile) { setError(t("Sistema \"{name}\" sem core libretro", { name: system.name })); return; }
         // v0.8.38: aplica opções salvas do user antes de carregar
         try { await applySystemOptions(system.id); } catch {}
         const result = await invoke("libretro_load_game", { coreFilename: coreFile, romPath: game.path });
@@ -2803,15 +2810,15 @@ function MobileEmulatorView({ system, game, onClose }) {
         }
       } catch {}
       try { unlockAchievement("first_save", () => {}); } catch {}
-      setStateMsg(`Salvo no slot ${slot}`);
-    } catch (e) { setStateMsg(`Falha ao salvar: ${e}`); }
+      setStateMsg(t("Salvo no slot {slot}", { slot }));
+    } catch (e) { setStateMsg(t("Falha ao salvar: {e}", { e })); }
     setTimeout(() => setStateMsg(null), 2500);
   }, [system.id, game.path]);
   const loadState = useCallback(async (slot) => {
     try {
       await invoke("libretro_load_state", { romPath: game.path, slot });
-      setStateMsg(`Carregado slot ${slot}`);
-    } catch (e) { setStateMsg(`Falha ao carregar: ${e}`); }
+      setStateMsg(t("Carregado slot {slot}", { slot }));
+    } catch (e) { setStateMsg(t("Falha ao carregar: {e}", { e })); }
     setTimeout(() => setStateMsg(null), 2500);
   }, [game.path]);
 
@@ -2821,7 +2828,7 @@ function MobileEmulatorView({ system, game, onClose }) {
       const idleMs = Date.now() - lastInputRef.current;
       if (idleMs > 30 * 60 * 1000 && !autoPaused) {
         setAutoPaused(true);
-        setStateMsg("Pausado (30min sem input). Toque pra retomar.");
+        setStateMsg(t("Pausado (30min sem input). Toque pra retomar."));
       }
     }, 60_000);
     return () => clearInterval(t);
@@ -2847,7 +2854,7 @@ function MobileEmulatorView({ system, game, onClose }) {
       if (!canvasRef.current) return;
       const data = canvasRef.current.toDataURL("image/jpeg", 0.7);
       addScreenshot(system.id, game.name, data);
-      setStateMsg("Screenshot salva (Ajustes -> Galeria)");
+      setStateMsg(t("Screenshot salva (Ajustes -> Galeria)"));
       sfx.confirm(); haptic(15);
       setTimeout(() => setStateMsg(null), 2500);
     } catch {}
@@ -2868,37 +2875,37 @@ function MobileEmulatorView({ system, game, onClose }) {
     return (
       <div className="lmx-emu-root">
         <div className="lmx-emu-error">
-          <h2>Erro ao carregar jogo</h2>
+          <h2>{t("Erro ao carregar jogo")}</h2>
           <pre>{error}</pre>
           {(isBios || isPanic) && (
             <div style={{ marginTop: 12, padding: 12, background: "rgba(255,255,255,0.05)", borderRadius: 10 }}>
               <p style={{ margin: "0 0 10px 0", fontSize: 13 }}>
                 {isBios
-                  ? "Provavel: BIOS do sistema falta em Ludex/system/."
-                  : "Provavel: BIOS ou config invalida do core."}
-                {" "}Va em Ajustes &rarr; <b>Procurar BIOS no celular inteiro</b>.
+                  ? t("Provável: BIOS do sistema falta em Ludex/system/.")
+                  : t("Provável: BIOS ou config inválida do core.")}
+                {" "}{t("Vá em Ajustes → Procurar BIOS no celular inteiro.")}
               </p>
               <button className="lmx-settings-btn primary" style={{ width: "100%" }}
                 onClick={async () => {
                   try {
                     const n = await invoke("bios_deep_scan");
                     mAlert(n > 0
-                      ? `Importei ${n} BIOS. Tente abrir o jogo de novo.`
-                      : "Nenhuma BIOS encontrada no storage. Coloque os .bin em Download e tente novamente.");
-                  } catch (e) { mAlert(`Falha: ${e}`); }
+                      ? t("Importei {n} BIOS. Tente abrir o jogo de novo.", { n })
+                      : t("Nenhuma BIOS encontrada no storage. Coloque os .bin em Download e tente novamente."));
+                  } catch (e) { mAlert(t("Falha: {err}", { err: e })); }
                 }}>
-                Procurar BIOS agora
+                {t("Procurar BIOS agora")}
               </button>
             </div>
           )}
           {isCoreMissing && (
             <div style={{ marginTop: 12, padding: 12, background: "rgba(255,255,255,0.05)", borderRadius: 10 }}>
               <p style={{ margin: 0, fontSize: 13 }}>
-                Core libretro <b>{system?.libretro_core || "?"}</b> não esta dentro do APK pra este sistema no Android. Suporte vai chegar em versão futura — por enquanto use o launcher no PC.
+                {t("Core libretro {core} não está dentro do APK pra este sistema no Android. Suporte vai chegar em versão futura — por enquanto use o launcher no PC.", { core: system?.libretro_core || "?" })}
               </p>
             </div>
           )}
-          <button className="lmx-settings-btn primary" onClick={onClose} style={{ marginTop: 12 }}>Voltar</button>
+          <button className="lmx-settings-btn primary" onClick={onClose} style={{ marginTop: 12 }}>{t("Voltar")}</button>
         </div>
       </div>
     );
@@ -2906,8 +2913,8 @@ function MobileEmulatorView({ system, game, onClose }) {
 
   return (
     <div className="lmx-emu-root" data-orient={orient}>
-      <button className="lmx-emu-back" onClick={onClose} aria-label="Voltar"><IconArrowLeft /></button>
-      <button className="lmx-emu-menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu">
+      <button className="lmx-emu-back" onClick={onClose} aria-label={t("Voltar")}><IconArrowLeft /></button>
+      <button className="lmx-emu-menu-btn" onClick={() => setMenuOpen(true)} aria-label={t("Menu")}>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
       </button>
       {/* v0.9.15: Fast-forward agora e TAP-TOGGLE (segurar/touch-hold era flaky no
@@ -2915,21 +2922,21 @@ function MobileEmulatorView({ system, game, onClose }) {
       <button
         className={`lmx-emu-ff-btn ${ffActive || ffSpeed > 1 ? "active" : ""}`}
         onClick={() => { setFfActive((a) => !a); haptic(10); }}
-        aria-label="Fast forward (liga/desliga)"
+        aria-label={t("Fast forward (liga/desliga)")}
       >
         {ffActive ? `${Math.max(ffSpeed, 2)}x` : (ffSpeed > 1 ? `${ffSpeed}x` : "FF")}
       </button>
       <div className={`lmx-emu-canvas-wrap lmx-emu-scale-${scaleMode}`}>
         <canvas ref={canvasRef} className="lmx-emu-canvas" />
         {/* Corner tap zones: TL=quick save, TR=quick load (double tap) */}
-        <div className="lmx-emu-corner lmx-emu-corner-tl" onTouchEnd={cornerTap("tl")} onClick={cornerTap("tl")} aria-label="Tap duplo: save state 0" />
-        <div className="lmx-emu-corner lmx-emu-corner-tr" onTouchEnd={cornerTap("tr")} onClick={cornerTap("tr")} aria-label="Tap duplo: load state 0" />
+        <div className="lmx-emu-corner lmx-emu-corner-tl" onTouchEnd={cornerTap("tl")} onClick={cornerTap("tl")} aria-label={t("Tap duplo: save state 0")} />
+        <div className="lmx-emu-corner lmx-emu-corner-tr" onTouchEnd={cornerTap("tr")} onClick={cornerTap("tr")} aria-label={t("Tap duplo: load state 0")} />
         {/* Watermark "Ludex Desktop" (paywall hint) */}
-        <div className="lmx-emu-watermark">Versão prévia — a versão Desktop tem mais consoles</div>
+        <div className="lmx-emu-watermark">{t("Versão prévia — a versão Desktop tem mais consoles")}</div>
         {autoPaused && (
           <div className="lmx-emu-autopause">
-            <h3>Pausado</h3>
-            <p>30min sem input. Toque pra retomar.</p>
+            <h3>{t("Pausado")}</h3>
+            <p>{t("30min sem input. Toque pra retomar.")}</p>
           </div>
         )}
       </div>
@@ -2937,15 +2944,15 @@ function MobileEmulatorView({ system, game, onClose }) {
       {menuOpen && (
         <div className="lmx-emu-menu-overlay" onClick={() => setMenuOpen(false)}>
           <div className="lmx-emu-menu" onClick={(e) => e.stopPropagation()}>
-            <h3>Opcoes</h3>
+            <h3>{t("Opções")}</h3>
 
             <div className="lmx-emu-menu-section">
-              <div className="lmx-emu-menu-label">Escala da tela</div>
+              <div className="lmx-emu-menu-label">{t("Escala da tela")}</div>
               <div className="lmx-emu-menu-row">
                 {[
-                  ["contain", "Encaixar"],
-                  ["cover",   "Preencher"],
-                  ["integer", "Integer (pixel-perfect)"],
+                  ["contain", t("Encaixar")],
+                  ["cover",   t("Preencher")],
+                  ["integer", t("Integer (pixel-perfect)")],
                 ].map(([k, lbl]) => (
                   <button
                     key={k}
@@ -2957,62 +2964,62 @@ function MobileEmulatorView({ system, game, onClose }) {
             </div>
 
             <div className="lmx-emu-menu-section">
-              <div className="lmx-emu-menu-label">Save states</div>
+              <div className="lmx-emu-menu-label">{t("Save states")}</div>
               <div className="lmx-emu-menu-row">
                 {[1,2,3].map(s => (
-                  <button key={`s${s}`} className="lmx-emu-menu-pill" onClick={() => { saveState(s); setMenuOpen(false); }}>Salvar {s}</button>
+                  <button key={`s${s}`} className="lmx-emu-menu-pill" onClick={() => { saveState(s); setMenuOpen(false); }}>{t("Salvar {slot}", { slot: s })}</button>
                 ))}
               </div>
               <div className="lmx-emu-menu-row">
                 {[1,2,3].map(s => (
-                  <button key={`l${s}`} className="lmx-emu-menu-pill" onClick={() => { loadState(s); setMenuOpen(false); }}>Carregar {s}</button>
+                  <button key={`l${s}`} className="lmx-emu-menu-pill" onClick={() => { loadState(s); setMenuOpen(false); }}>{t("Carregar {slot}", { slot: s })}</button>
                 ))}
               </div>
             </div>
 
             <div className="lmx-emu-menu-section">
-              <div className="lmx-emu-menu-label">Controle virtual</div>
+              <div className="lmx-emu-menu-label">{t("Controle virtual")}</div>
               <button className="lmx-emu-menu-pill" onClick={() => { setEditMode(true); setMenuOpen(false); }}>
-                Editar layout (arrastar + tamanho)
+                {t("Editar layout (arrastar + tamanho)")}
               </button>
               <button className="lmx-emu-menu-pill" onClick={resetLayout} style={{marginTop:6}}>
-                Resetar posicoes
+                {t("Resetar posições")}
               </button>
               <div className="lmx-emu-menu-row" style={{ marginTop: 8 }}>
                 <button className={`lmx-emu-menu-pill ${ctrlPrefs.vibration ? "on" : ""}`}
                         onClick={() => updateCtrlPrefs({ vibration: !ctrlPrefs.vibration })}>
-                  Vibracao: {ctrlPrefs.vibration ? "ligada" : "desligada"}
+                  {ctrlPrefs.vibration ? t("Vibração: ligada") : t("Vibração: desligada")}
                 </button>
                 <button className={`lmx-emu-menu-pill ${ctrlPrefs.hideWhenGamepad ? "on" : ""}`}
                         onClick={() => updateCtrlPrefs({ hideWhenGamepad: !ctrlPrefs.hideWhenGamepad })}>
-                  Esconder c/ controle: {ctrlPrefs.hideWhenGamepad ? "sim" : "não"}
+                  {ctrlPrefs.hideWhenGamepad ? t("Esconder c/ controle: sim") : t("Esconder c/ controle: não")}
                 </button>
               </div>
-              <div className="lmx-emu-menu-sublabel">Tamanho geral</div>
+              <div className="lmx-emu-menu-sublabel">{t("Tamanho geral")}</div>
               <div className="lmx-emu-menu-row">
                 <button className="lmx-emu-menu-pill" onClick={() => updateCtrlPrefs({ scale: Math.max(0.6, +(ctrlPrefs.scale - 0.1).toFixed(2)) })}>−</button>
                 <span className="lmx-emu-menu-val">{Math.round(ctrlPrefs.scale * 100)}%</span>
                 <button className="lmx-emu-menu-pill" onClick={() => updateCtrlPrefs({ scale: Math.min(1.6, +(ctrlPrefs.scale + 0.1).toFixed(2)) })}>+</button>
               </div>
-              <div className="lmx-emu-menu-sublabel">Tema do controle</div>
+              <div className="lmx-emu-menu-sublabel">{t("Tema do controle")}</div>
               <div className="lmx-emu-menu-row" style={{ flexWrap: "wrap" }}>
                 {CONTROL_THEMES.map(([id, lbl]) => (
                   <button key={id} className={`lmx-emu-menu-pill ${ctrlPrefs.theme === id ? "on" : ""}`}
-                          onClick={() => updateCtrlPrefs({ theme: id })}>{lbl}</button>
+                          onClick={() => updateCtrlPrefs({ theme: id })}>{t(lbl)}</button>
                 ))}
               </div>
             </div>
 
             {SCREEN_LAYOUTS[system.id] && (
               <div className="lmx-emu-menu-section">
-                <div className="lmx-emu-menu-label">Telas (portátil de 2 telas)</div>
+                <div className="lmx-emu-menu-label">{t("Telas (portátil de 2 telas)")}</div>
                 <div className="lmx-emu-menu-row">
                   {SCREEN_LAYOUTS[system.id].options.map(([val, lbl]) => {
                     const cfg = SCREEN_LAYOUTS[system.id];
                     const active = (screenLayoutVals[cfg.key] ?? cfg.def) === val;
                     return (
                       <button key={val} className={`lmx-emu-menu-pill ${active ? "on" : ""}`}
-                              onClick={() => setCoreOptionLive(cfg.key, val)}>{lbl}</button>
+                              onClick={() => setCoreOptionLive(cfg.key, val)}>{t(lbl)}</button>
                     );
                   })}
                 </div>
@@ -3023,19 +3030,19 @@ function MobileEmulatorView({ system, game, onClose }) {
                       const active = (screenLayoutVals[sw.key] ?? sw.def) === val;
                       return (
                         <button key={val} className={`lmx-emu-menu-pill ${active ? "on" : ""}`}
-                                onClick={() => setCoreOptionLive(sw.key, val)}>{lbl}</button>
+                                onClick={() => setCoreOptionLive(sw.key, val)}>{t(lbl)}</button>
                       );
                     })}
                   </div>
                 )}
                 <p className="lmx-settings-hint" style={{ marginTop: 6 }}>
-                  Aplica na hora. Cima/baixo principal, lado a lado, ou uma menor no canto.
+                  {t("Aplica na hora. Cima/baixo principal, lado a lado, ou uma menor no canto.")}
                 </p>
               </div>
             )}
 
             <div className="lmx-emu-menu-section">
-              <div className="lmx-emu-menu-label">Velocidade (fast-forward)</div>
+              <div className="lmx-emu-menu-label">{t("Velocidade (fast-forward)")}</div>
               <div className="lmx-emu-menu-row">
                 {[
                   [1, "1x"],
@@ -3051,51 +3058,50 @@ function MobileEmulatorView({ system, game, onClose }) {
                 ))}
               </div>
               <p className="lmx-settings-hint" style={{ marginTop: 6 }}>
-                Sustenta botão FF no canto pra acelerar so enquanto segura, ou trava
-                velocidade aqui (ótimo pra Pokemon e RPGs lentos).
+                {t("Sustenta botão FF no canto pra acelerar só enquanto segura, ou trava velocidade aqui (ótimo pra Pokémon e RPGs lentos).")}
               </p>
             </div>
 
             <div className="lmx-emu-menu-section">
-              <div className="lmx-emu-menu-label">Captura</div>
+              <div className="lmx-emu-menu-label">{t("Captura")}</div>
               <button className="lmx-emu-menu-pill" onClick={() => { takeScreenshot(); setMenuOpen(false); }}>
-                Tirar screenshot
+                {t("Tirar screenshot")}
               </button>
             </div>
 
             <div className="lmx-emu-menu-section">
               <button className="lmx-emu-menu-pill" onClick={() => setMuted(m => !m)}>
-                {muted ? "Ativar som" : "Mutar som"}
+                {muted ? t("Ativar som") : t("Mutar som")}
               </button>
             </div>
 
             {hasOptionsForSystem(system.id) && (
               <div className="lmx-emu-menu-section">
-                <div className="lmx-emu-menu-label">Opções do Emulador</div>
+                <div className="lmx-emu-menu-label">{t("Opções do Emulador")}</div>
                 <button
                   className="lmx-emu-menu-pill"
                   onClick={() => { setEmuSettingsOpen(true); setMenuOpen(false); }}
                 >
-                  Resolução, Performance, etc
+                  {t("Resolução, Performance, etc")}
                 </button>
                 <p className="lmx-settings-hint" style={{ marginTop: 6 }}>
-                  Mudanças aplicam ao abrir o jogo de novo.
+                  {t("Mudanças aplicam ao abrir o jogo de novo.")}
                 </p>
               </div>
             )}
 
             <div className="lmx-emu-menu-section">
-              <div className="lmx-emu-menu-label">Cheats</div>
+              <div className="lmx-emu-menu-label">{t("Cheats")}</div>
               <button
                 className="lmx-emu-menu-pill"
                 onClick={() => { setCheatsOpen(true); setMenuOpen(false); }}
               >
-                Buscar / gerenciar cheats
+                {t("Buscar / gerenciar cheats")}
               </button>
             </div>
 
-            <button className="lmx-settings-btn primary" onClick={() => setMenuOpen(false)}>Fechar</button>
-            <button className="lmx-settings-btn ghost" onClick={() => { onClose(); }} style={{marginTop: 8}}>Sair do jogo</button>
+            <button className="lmx-settings-btn primary" onClick={() => setMenuOpen(false)}>{t("Fechar")}</button>
+            <button className="lmx-settings-btn ghost" onClick={() => { onClose(); }} style={{marginTop: 8}}>{t("Sair do jogo")}</button>
           </div>
         </div>
       )}
@@ -3118,15 +3124,15 @@ function MobileEmulatorView({ system, game, onClose }) {
           </div>
           <div className="lmx-emu-boot-foot">
             <div className="lmx-emu-boot-track"><span /></div>
-            <div className="lmx-emu-boot-hint">Carregando…</div>
+            <div className="lmx-emu-boot-hint">{t("Carregando…")}</div>
           </div>
         </div>
       )}
       {/* Indicador gamepad fisico conectado */}
       {gamepadConnected && !editMode && (
-        <div className="lmx-emu-gamepad-badge" title="Gamepad conectado">
+        <div className="lmx-emu-gamepad-badge" title={t("Gamepad conectado")}>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ marginRight: 5, verticalAlign: "-2px" }}><line x1="6" y1="11" x2="10" y2="11" /><line x1="8" y1="9" x2="8" y2="13" /><line x1="15" y1="12" x2="15.01" y2="12" /><line x1="18" y1="10" x2="18.01" y2="10" /><rect x="2" y="6" width="20" height="12" rx="2" /></svg>
-          GAMEPAD
+          {t("GAMEPAD")}
         </div>
       )}
       {/* Touch controls — layout customizado por sistema. Esconde se gamepad ativo */}
@@ -3205,12 +3211,12 @@ function MobileEmulatorView({ system, game, onClose }) {
       {/* Banner edit mode */}
       {editMode && (
         <div className="lmx-emu-edit-banner">
-          <span>Arraste pra mover. Ajuste o tamanho de cada grupo:</span>
+          <span>{t("Arraste pra mover. Ajuste o tamanho de cada grupo:")}</span>
           <div className="lmx-emu-edit-sizes">
             {[
-              ["dpad", "Direcional"],
-              ...(layout.analog ? [["analog", "Analógico"]] : []),
-              ["face", "Acoes"],
+              ["dpad", t("Direcional")],
+              ...(layout.analog ? [["analog", t("Analógico")]] : []),
+              ["face", t("Ações")],
               ...(layout.shoulders ? [["shoulders", "L/R"]] : []),
               ...(layout.selectStart ? [["system", "Select/Start"]] : []),
             ].map(([key, lbl]) => (
@@ -3223,8 +3229,8 @@ function MobileEmulatorView({ system, game, onClose }) {
             ))}
           </div>
           <div className="lmx-emu-edit-actions">
-            <button className="lmx-settings-btn ghost" onClick={resetLayout}>Resetar posicao</button>
-            <button className="lmx-settings-btn primary" onClick={() => setEditMode(false)}>OK</button>
+            <button className="lmx-settings-btn ghost" onClick={resetLayout}>{t("Resetar posição")}</button>
+            <button className="lmx-settings-btn primary" onClick={() => setEditMode(false)}>{t("OK")}</button>
           </div>
         </div>
       )}
@@ -3242,7 +3248,7 @@ function RecentsBanner({ recents, covers, onResume }) {
   const stats = statsFor(top.gamePath);
   return (
     <section className="lmx-recents">
-      <h3 className="lmx-section-title">Continue onde parou</h3>
+      <h3 className="lmx-section-title">{t("Continue onde parou")}</h3>
       <button className="lmx-recents-card" onClick={() => onResume(top)} style={{ "--sys-color": top.systemColor }}>
         {cover ? (
           <img className="lmx-recents-bg" src={cover} alt="" aria-hidden />
@@ -3254,10 +3260,10 @@ function RecentsBanner({ recents, covers, onResume }) {
           <span className="lmx-recents-sys">{top.systemName}</span>
           <h2 className="lmx-recents-name">{top.gameName}</h2>
           <div className="lmx-recents-meta">
-            {stats.totalSec > 0 && <span>{formatPlayTime(stats.totalSec)} jogado</span>}
+            {stats.totalSec > 0 && <span>{t("{time} jogado", { time: formatPlayTime(stats.totalSec) })}</span>}
             <span>{formatRelative(top.timestamp)}</span>
           </div>
-          <span className="lmx-recents-cta">Continuar</span>
+          <span className="lmx-recents-cta">{t("Continuar")}</span>
         </div>
       </button>
       {recents.length > 1 && (
@@ -3383,15 +3389,15 @@ function TutorialBanner({ step, rect, idx, total, onNext, onPrev, onSkip }) {
 
   return (
     <div className="lmx-tour-banner" style={style} role="dialog" aria-label={step.title}>
-      <div className="lmx-tour-step">Passo {idx + 1} de {total}</div>
-      <h2 className="lmx-tour-title">{step.title}</h2>
-      <p className="lmx-tour-body">{step.body}</p>
+      <div className="lmx-tour-step">{t("Passo {n} de {total}", { n: idx + 1, total })}</div>
+      <h2 className="lmx-tour-title">{t(step.title)}</h2>
+      <p className="lmx-tour-body">{t(step.body)}</p>
       <div className="lmx-tour-actions">
-        <button className="lmx-tour-btn lmx-tour-btn-ghost" onClick={onSkip}>Pular</button>
+        <button className="lmx-tour-btn lmx-tour-btn-ghost" onClick={onSkip}>{t("Pular")}</button>
         <div className="lmx-tour-nav">
-          {idx > 0 && <button className="lmx-tour-btn lmx-tour-btn-ghost" onClick={onPrev}>Voltar</button>}
+          {idx > 0 && <button className="lmx-tour-btn lmx-tour-btn-ghost" onClick={onPrev}>{t("Voltar")}</button>}
           <button className="lmx-tour-btn lmx-tour-btn-primary" onClick={onNext}>
-            {idx === total - 1 ? "Concluir" : "Proximo"}
+            {idx === total - 1 ? t("Concluir") : t("Próximo")}
           </button>
         </div>
       </div>
@@ -3448,18 +3454,18 @@ function TutorialOverlay({ activeTab, setActiveTab, onDone }) {
 function WhyWindowsCard() {
   return (
     <section className="lmx-settings-card lmx-why-windows">
-      <div className="lmx-settings-label">Por que comprar a versão Windows?</div>
+      <div className="lmx-settings-label">{t("Por que comprar a versão Windows?")}</div>
       <ul className="lmx-why-list">
-        <li>27+ sistemas embedded: PS2, GameCube, Wii, 3DS, Saturn, Dreamcast e mais</li>
-        <li>Switch, PS3, Xbox 360, PS Vita, Wii U via emuladores nativos</li>
-        <li>RetroAchievements (conquistas reais por jogo)</li>
-        <li>Save states com slot multiplo + resume automático</li>
-        <li>Discord Rich Presence (mostra o jogo no seu perfil)</li>
-        <li>Musica ambiente com playlist + crossfade</li>
-        <li>Wallpapers customizados, perfis ilimitados</li>
-        <li>Gamepad nativo sem latencia + remap por emulador</li>
-        <li>Notificacao quando controle conecta/desconecta</li>
-        <li>Auto-update do app + cores libretro</li>
+        <li>{t("27+ sistemas embedded: PS2, GameCube, Wii, 3DS, Saturn, Dreamcast e mais")}</li>
+        <li>{t("Switch, PS3, Xbox 360, PS Vita, Wii U via emuladores nativos")}</li>
+        <li>{t("RetroAchievements (conquistas reais por jogo)")}</li>
+        <li>{t("Save states com slot múltiplo + resume automático")}</li>
+        <li>{t("Discord Rich Presence (mostra o jogo no seu perfil)")}</li>
+        <li>{t("Música ambiente com playlist + crossfade")}</li>
+        <li>{t("Wallpapers customizados, perfis ilimitados")}</li>
+        <li>{t("Gamepad nativo sem latência + remap por emulador")}</li>
+        <li>{t("Notificação quando controle conecta/desconecta")}</li>
+        <li>{t("Auto-update do app + cores libretro")}</li>
       </ul>
       {/* v0.9.5: botão de compra removido daqui — ja existe no card de status da
           licenca acima (estava aparecendo 2x). */}
@@ -3474,7 +3480,7 @@ function AchievementsCard() {
   const unlocked = loadAchievements();
   return (
     <section className="lmx-settings-card">
-      <div className="lmx-settings-label">Conquistas Ludex ({unlocked.length}/{ACHIEVEMENTS.length})</div>
+      <div className="lmx-settings-label">{t("Conquistas Ludex ({unlocked}/{total})", { unlocked: unlocked.length, total: ACHIEVEMENTS.length })}</div>
       <div className="lmx-ach-grid">
         {ACHIEVEMENTS.map(a => {
           const got = unlocked.includes(a.id);
@@ -3509,7 +3515,7 @@ function ChildModeCard() {
   const [disablePin, setDisablePin] = useState("");
   const [err, setErr] = useState(null);
   const enable = () => {
-    if (pinInput.length !== 4) { setErr("PIN deve ter 4 digitos"); return; }
+    if (pinInput.length !== 4) { setErr(t("PIN deve ter 4 dígitos")); return; }
     setChildModeStore(true, pinInput);
     setOnState(true);
     setPinInput("");
@@ -3518,7 +3524,7 @@ function ChildModeCard() {
     sfx.confirm();
   };
   const doDisable = () => {
-    if (!verifyChildPin(disablePin)) { setErr("PIN incorreto"); return; }
+    if (!verifyChildPin(disablePin)) { setErr(t("PIN incorreto")); return; }
     setChildModeStore(false);
     setOnState(false);
     setDisableOpen(false);
@@ -3528,34 +3534,33 @@ function ChildModeCard() {
   };
   return (
     <section className="lmx-settings-card">
-      <div className="lmx-settings-label">Modo crianca</div>
+      <div className="lmx-settings-label">{t("Modo criança")}</div>
       <p className="lmx-settings-hint">
-        Esconde ROMs com nomes contendo palavras-chave adultas (GTA, Resident Evil, Doom, etc).
-        Precisa PIN de 4 digitos pra desativar.
+        {t("Esconde ROMs com nomes contendo palavras-chave adultas (GTA, Resident Evil, Doom, etc). Precisa PIN de 4 dígitos pra desativar.")}
       </p>
       {on ? (
         !disableOpen ? (
-          <button className="lmx-settings-btn ghost" onClick={() => { setDisableOpen(true); setErr(null); }}>Desativar Modo crianca</button>
+          <button className="lmx-settings-btn ghost" onClick={() => { setDisableOpen(true); setErr(null); }}>{t("Desativar Modo criança")}</button>
         ) : (
           <div className="lmx-settings-key">
             <input
-              type="tel" inputMode="numeric" maxLength={4} placeholder="PIN pra desativar"
+              type="tel" inputMode="numeric" maxLength={4} placeholder={t("PIN pra desativar")}
               value={disablePin} onChange={(e) => setDisablePin(e.target.value.replace(/\D/g, ""))}
               autoFocus
             />
-            <button className="lmx-settings-btn primary" onClick={doDisable} disabled={disablePin.length !== 4}>Confirmar</button>
+            <button className="lmx-settings-btn primary" onClick={doDisable} disabled={disablePin.length !== 4}>{t("Confirmar")}</button>
           </div>
         )
       ) : !setupOpen ? (
-        <button className="lmx-settings-btn primary" onClick={() => setSetupOpen(true)}>Ativar Modo crianca</button>
+        <button className="lmx-settings-btn primary" onClick={() => setSetupOpen(true)}>{t("Ativar Modo criança")}</button>
       ) : (
         <div className="lmx-settings-key">
           <input
-            type="tel" inputMode="numeric" maxLength={4} placeholder="PIN 4 digitos"
+            type="tel" inputMode="numeric" maxLength={4} placeholder={t("PIN 4 dígitos")}
             value={pinInput} onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ""))}
             autoFocus
           />
-          <button className="lmx-settings-btn primary" onClick={enable} disabled={pinInput.length !== 4}>Confirmar</button>
+          <button className="lmx-settings-btn primary" onClick={enable} disabled={pinInput.length !== 4}>{t("Confirmar")}</button>
         </div>
       )}
       {err && <p className="lmx-settings-msg error">{err}</p>}
@@ -3586,35 +3591,35 @@ function BackupRestoreCard() {
     const json = importText.trim();
     if (!json) return;
     if (importConfig(json)) {
-      setMsg({ kind: "ok", text: "Config importada. Reabra o app pra aplicar — perfil, conquistas, recents, favoritos e capas custom vieram do outro dispositivo." });
+      setMsg({ kind: "ok", text: t("Config importada. Reabra o app pra aplicar — perfil, conquistas, recents, favoritos e capas custom vieram do outro dispositivo.") });
       setImportOpen(false); setImportText("");
     } else {
-      setMsg({ kind: "error", text: "Falha ao importar. Verifica se o JSON ta completo." });
+      setMsg({ kind: "error", text: t("Falha ao importar. Verifica se o JSON tá completo.") });
     }
     setTimeout(() => setMsg(null), 8000);
   };
   return (
     <section className="lmx-settings-card">
-      <div className="lmx-settings-label">Backup / restore</div>
+      <div className="lmx-settings-label">{t("Backup / restore")}</div>
       <p className="lmx-settings-hint">
-        Exporta recents, conquistas, stats, cheats e capas custom em JSON.
+        {t("Exporta recents, conquistas, stats, cheats e capas custom em JSON.")}
       </p>
-      <button className="lmx-settings-btn primary" onClick={doExport}>Exportar config</button>
+      <button className="lmx-settings-btn primary" onClick={doExport}>{t("Exportar config")}</button>
       {exportText && (
         <>
           <p className="lmx-settings-hint" style={{ marginTop: 8 }}>
-            Tentei copiar pro clipboard. Se não colar, segura no texto abaixo, "Selecionar tudo" e copia:
+            {t("Tentei copiar pro clipboard. Se não colar, segura no texto abaixo, \"Selecionar tudo\" e copia:")}
           </p>
           <textarea readOnly value={exportText} onFocus={(e) => e.target.select()} style={taStyle} />
         </>
       )}
       <button className="lmx-settings-btn ghost" onClick={() => { setImportOpen(o => !o); setMsg(null); }} style={{ marginTop: 8 }}>
-        {importOpen ? "Cancelar import" : "Importar config"}
+        {importOpen ? t("Cancelar import") : t("Importar config")}
       </button>
       {importOpen && (
         <>
-          <textarea value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="Cola aqui o JSON exportado do outro dispositivo" style={taStyle} />
-          <button className="lmx-settings-btn primary" onClick={doImport} disabled={!importText.trim()} style={{ marginTop: 8 }}>Aplicar import</button>
+          <textarea value={importText} onChange={(e) => setImportText(e.target.value)} placeholder={t("Cola aqui o JSON exportado do outro dispositivo")} style={taStyle} />
+          <button className="lmx-settings-btn primary" onClick={doImport} disabled={!importText.trim()} style={{ marginTop: 8 }}>{t("Aplicar import")}</button>
         </>
       )}
       {msg && <p className={`lmx-settings-msg ${msg.kind}`}>{msg.text}</p>}
@@ -3662,11 +3667,13 @@ function AmbientMusicToggle() {
 
   return (
     <section className="lmx-settings-card">
-      <div className="lmx-settings-label">Música ambiente</div>
+      <div className="lmx-settings-label">{t("Música ambiente")}</div>
       <p className="lmx-settings-hint">
         {count > 0
-          ? `${count} MP3${count > 1 ? "s" : ""} em Ludex/music/ — toca no app todo (shuffle + crossfade, igual o Windows). Pausa dentro do jogo.`
-          : "Chiptune sintético (Web Audio). Pra ter as mesmas faixas do Windows, copia MP3s pra /storage/emulated/0/Ludex/music/"}
+          ? (count > 1
+              ? t("{n} MP3s em Ludex/music/ — toca no app todo (shuffle + crossfade, igual o Windows). Pausa dentro do jogo.", { n: count })
+              : t("{n} MP3 em Ludex/music/ — toca no app todo (shuffle + crossfade, igual o Windows). Pausa dentro do jogo.", { n: count }))
+          : t("Chiptune sintético (Web Audio). Pra ter as mesmas faixas do Windows, copia MP3s pra /storage/emulated/0/Ludex/music/")}
       </p>
       {on && trackName && (
         <div style={{ marginBottom: 8, padding: "8px 10px", borderRadius: 8, background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.25)", fontSize: 12, color: "#c4b5fd", display: "flex", alignItems: "center", gap: 8 }}>
@@ -3678,10 +3685,10 @@ function AmbientMusicToggle() {
       )}
       <div style={{ display: "flex", gap: 6 }}>
         <button className="lmx-settings-btn primary" onClick={toggle} style={{ flex: 1 }}>
-          {on ? "Desligar música" : "Ligar música"}
+          {on ? t("Desligar música") : t("Ligar música")}
         </button>
         {on && count > 1 && (
-          <button className="lmx-settings-btn ghost" onClick={skip} title="Próxima faixa" style={{ minWidth: 56 }}>
+          <button className="lmx-settings-btn ghost" onClick={skip} title={t("Próxima faixa")} style={{ minWidth: 56 }}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <polygon points="5 4 15 12 5 20 5 4" /><line x1="19" y1="5" x2="19" y2="19" />
             </svg>
@@ -3717,13 +3724,13 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
       onConfigChange && onConfigChange(updatedConfig);
       sfx.confirm();
     } catch (e) {
-      setMsg({ kind: "error", text: "Falha ao salvar: " + e });
+      setMsg({ kind: "error", text: t("Falha ao salvar: {e}", { e }) });
     }
   };
 
   const create = async () => {
     const n = newName.trim();
-    if (n.length < 2) { setMsg({ kind: "error", text: "Nome muito curto (mínimo 2 letras)" }); return; }
+    if (n.length < 2) { setMsg({ kind: "error", text: t("Nome muito curto (mínimo 2 letras)") }); return; }
     const newProfile = {
       id: `p${Math.random().toString(36).slice(2, 10)}`,
       name: n,
@@ -3739,7 +3746,7 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
     await save(updated);
     setCreating(false);
     setNewName("");
-    setMsg({ kind: "ok", text: `Profile "${n}" criado e ativado.` });
+    setMsg({ kind: "ok", text: t("Perfil \"{name}\" criado e ativado.", { name: n }) });
     setTimeout(() => setMsg(null), 3000);
   };
 
@@ -3747,14 +3754,14 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
     if (id === config?.active_profile_id) return;
     await save({ ...config, active_profile_id: id });
     const p = profiles.find(x => x.id === id);
-    setMsg({ kind: "ok", text: `Trocou pro profile "${p?.name}".` });
+    setMsg({ kind: "ok", text: t("Trocou pro perfil \"{name}\".", { name: p?.name }) });
     setTimeout(() => setMsg(null), 3000);
   };
 
   // v0.9.3: salva nome E avatar (antes so nome, com onBlur que quebrava no mobile)
   const saveEdit = async (id) => {
     const n = editName.trim();
-    if (n.length < 2) { setMsg({ kind: "error", text: "Nome muito curto (mínimo 2 letras)" }); return; }
+    if (n.length < 2) { setMsg({ kind: "error", text: t("Nome muito curto (mínimo 2 letras)") }); return; }
     const updated = {
       ...config,
       profiles: profiles.map(p => p.id === id ? { ...p, name: n, avatar_id: editAvatarId || p.avatar_id } : p),
@@ -3763,13 +3770,13 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
     setEditingId(null);
     setEditName("");
     setEditAvatarId(null);
-    setMsg({ kind: "ok", text: "Perfil atualizado." });
+    setMsg({ kind: "ok", text: t("Perfil atualizado.") });
     setTimeout(() => setMsg(null), 2500);
   };
 
   const del = async (id) => {
-    if (profiles.length <= 1) { setMsg({ kind: "error", text: "Não pode deletar o único profile." }); return; }
-    if (!(await mConfirm("Deletar esse profile? Tempo/conquistas locais ficam (são por dispositivo)."))) return;
+    if (profiles.length <= 1) { setMsg({ kind: "error", text: t("Não pode deletar o único perfil.") }); return; }
+    if (!(await mConfirm(t("Deletar esse perfil? Tempo/conquistas locais ficam (são por dispositivo).")))) return;
     const newProfiles = profiles.filter(p => p.id !== id);
     const newActive = config.active_profile_id === id ? newProfiles[0].id : config.active_profile_id;
     await save({ ...config, profiles: newProfiles, active_profile_id: newActive });
@@ -3777,10 +3784,9 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
 
   return (
     <section className="lmx-settings-card">
-      <div className="lmx-settings-label">Perfis ({profiles.length})</div>
+      <div className="lmx-settings-label">{t("Perfis ({n})", { n: profiles.length })}</div>
       <p className="lmx-settings-hint">
-        Múltiplos perfis: cada um com nome + avatar. Use Backup/Sync (acima) pra trazer
-        conquistas e favoritos de outro dispositivo.
+        {t("Múltiplos perfis: cada um com nome + avatar. Use Backup/Sync (acima) pra trazer conquistas e favoritos de outro dispositivo.")}
       </p>
 
       {profiles.map(p => {
@@ -3792,16 +3798,16 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
           // (sem onBlur, que fechava antes de trocar o avatar no celular)
           return (
             <div key={p.id} style={{ padding: 12, marginBottom: 6, borderRadius: 10, background: "rgba(124,58,237,0.10)", border: "1px solid rgba(124,58,237,0.3)" }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#c4b5fd", marginBottom: 8 }}>Editar perfil</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#c4b5fd", marginBottom: 8 }}>{t("Editar perfil")}</div>
               <input
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
-                placeholder="Nome do perfil"
+                placeholder={t("Nome do perfil")}
                 maxLength={28}
                 autoFocus
                 style={{ width: "100%", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(124,58,237,0.4)", color: "#fff", padding: "8px 10px", borderRadius: 6, fontSize: 14, marginBottom: 8, boxSizing: "border-box" }}
               />
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 6 }}>Avatar</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 6 }}>{t("Avatar")}</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginBottom: 8 }}>
                 {DEFAULT_AVATARS.map(a => (
                   <button key={a.id} onClick={() => setEditAvatarId(a.id)} title={a.label}
@@ -3811,8 +3817,8 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
                 ))}
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                <button className="lmx-settings-btn primary" onClick={() => saveEdit(p.id)} style={{ flex: 1 }}>Salvar</button>
-                <button className="lmx-settings-btn ghost" onClick={() => { setEditingId(null); setEditName(""); setEditAvatarId(null); }} style={{ flex: 1 }}>Cancelar</button>
+                <button className="lmx-settings-btn primary" onClick={() => saveEdit(p.id)} style={{ flex: 1 }}>{t("Salvar")}</button>
+                <button className="lmx-settings-btn ghost" onClick={() => { setEditingId(null); setEditName(""); setEditAvatarId(null); }} style={{ flex: 1 }}>{t("Cancelar")}</button>
               </div>
             </div>
           );
@@ -3830,19 +3836,19 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
             />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
-              {isActive && <div style={{ fontSize: 10, color: "#c4b5fd", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Ativo</div>}
+              {isActive && <div style={{ fontSize: 10, color: "#c4b5fd", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>{t("Ativo")}</div>}
             </div>
             {!isActive && (
               <button onClick={() => switchTo(p.id)} style={{ background: "#7c3aed", border: "none", color: "#fff", padding: "6px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600 }}>
-                Usar
+                {t("Usar")}
               </button>
             )}
             <button onClick={() => { setEditingId(p.id); setEditName(p.name); setEditAvatarId(p.avatar_id); }} style={{ background: "rgba(255,255,255,0.08)", border: "none", color: "#fff", padding: "6px 8px", borderRadius: 6, fontSize: 11 }}>
-              Editar
+              {t("Editar")}
             </button>
             {profiles.length > 1 && !isActive && (
               <button onClick={() => del(p.id)} style={{ background: "rgba(239,68,68,0.15)", border: "none", color: "#ef4444", padding: "6px 8px", borderRadius: 6, fontSize: 11 }}>
-                Excluir
+                {t("Excluir")}
               </button>
             )}
           </div>
@@ -3851,14 +3857,14 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
 
       {!creating ? (
         <button className="lmx-settings-btn primary" onClick={() => setCreating(true)} style={{ marginTop: 8 }}>
-          + Novo perfil
+          {t("+ Novo perfil")}
         </button>
       ) : (
         <div style={{ marginTop: 8, padding: 10, borderRadius: 10, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.25)" }}>
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="Nome do perfil"
+            placeholder={t("Nome do perfil")}
             maxLength={28}
             autoFocus
             style={{ width: "100%", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(124,58,237,0.4)", color: "#fff", padding: "8px 10px", borderRadius: 6, fontSize: 14, marginBottom: 8, boxSizing: "border-box" }}
@@ -3881,8 +3887,8 @@ function ProfileSwitcherCard({ config, activeProfile, onConfigChange }) {
             ))}
           </div>
           <div style={{ display: "flex", gap: 6 }}>
-            <button className="lmx-settings-btn primary" onClick={create} style={{ flex: 1 }}>Criar</button>
-            <button className="lmx-settings-btn ghost" onClick={() => { setCreating(false); setNewName(""); }} style={{ flex: 1 }}>Cancelar</button>
+            <button className="lmx-settings-btn primary" onClick={create} style={{ flex: 1 }}>{t("Criar")}</button>
+            <button className="lmx-settings-btn ghost" onClick={() => { setCreating(false); setNewName(""); }} style={{ flex: 1 }}>{t("Cancelar")}</button>
           </div>
         </div>
       )}
@@ -3929,7 +3935,7 @@ function StatsDashboardCard({ systems }) {
   const last7 = [];
   for (let d = 6; d >= 0; d--) {
     const dayStart = now - d * dayMs;
-    const dayLabel = new Date(dayStart).toLocaleDateString("pt-BR", { weekday: "short" }).slice(0, 3);
+    const dayLabel = new Date(dayStart).toLocaleDateString(currentLocale(), { weekday: "short" }).slice(0, 3);
     let dayTotal = 0;
     for (const s of Object.values(stats)) {
       if (s.lastSession && s.lastSession >= dayStart - dayMs && s.lastSession <= dayStart) {
@@ -3942,39 +3948,39 @@ function StatsDashboardCard({ systems }) {
 
   return (
     <section className="lmx-settings-card">
-      <div className="lmx-settings-label">Estatísticas</div>
-      <p className="lmx-settings-hint">Sua atividade no Ludex Mobile (local, este dispositivo).</p>
+      <div className="lmx-settings-label">{t("Estatísticas")}</div>
+      <p className="lmx-settings-hint">{t("Sua atividade no Ludex Mobile (local, este dispositivo).")}</p>
 
       {/* Overview cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, marginTop: 10 }}>
         <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.25)" }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: "#c4b5fd" }}>{formatPlayTime(totalSec)}</div>
-          <div style={{ fontSize: 11, color: "#a78bfa", textTransform: "uppercase", letterSpacing: 1 }}>Tempo total</div>
+          <div style={{ fontSize: 11, color: "#a78bfa", textTransform: "uppercase", letterSpacing: 1 }}>{t("Tempo total")}</div>
         </div>
         <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.25)" }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: "#86efac" }}>{totalGames}</div>
-          <div style={{ fontSize: 11, color: "#4ade80", textTransform: "uppercase", letterSpacing: 1 }}>Jogos</div>
+          <div style={{ fontSize: 11, color: "#4ade80", textTransform: "uppercase", letterSpacing: 1 }}>{t("Jogos")}</div>
         </div>
         <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(236,72,153,0.12)", border: "1px solid rgba(236,72,153,0.25)" }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: "#f9a8d4" }}>{totalSessions}</div>
-          <div style={{ fontSize: 11, color: "#f472b6", textTransform: "uppercase", letterSpacing: 1 }}>Sessões</div>
+          <div style={{ fontSize: 11, color: "#f472b6", textTransform: "uppercase", letterSpacing: 1 }}>{t("Sessões")}</div>
         </div>
         <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)" }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: "#93c5fd" }}>{sysSet.size}</div>
-          <div style={{ fontSize: 11, color: "#60a5fa", textTransform: "uppercase", letterSpacing: 1 }}>Sistemas</div>
+          <div style={{ fontSize: 11, color: "#60a5fa", textTransform: "uppercase", letterSpacing: 1 }}>{t("Sistemas")}</div>
         </div>
       </div>
 
       {/* Top 5 mais jogados */}
       {topGames.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#c4b5fd", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Mais jogados</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#c4b5fd", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>{t("Mais jogados")}</div>
           {topGames.map((g, idx) => (
             <div key={g.path} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: idx < topGames.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
               <div style={{ width: 4, height: 28, background: g.systemColor, borderRadius: 2 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.name}</div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>{g.sessions} sessão{g.sessions !== 1 ? "ões" : ""}</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>{g.sessions !== 1 ? t("{n} sessões", { n: g.sessions }) : t("{n} sessão", { n: g.sessions })}</div>
               </div>
               <strong style={{ fontSize: 13, color: "#c4b5fd", whiteSpace: "nowrap" }}>{formatPlayTime(g.totalSec)}</strong>
             </div>
@@ -3984,7 +3990,7 @@ function StatsDashboardCard({ systems }) {
 
       {/* Últimos 7 dias - barras simples */}
       <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#c4b5fd", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Últimos 7 dias</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#c4b5fd", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>{t("Últimos 7 dias")}</div>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 60 }}>
           {last7.map((d, i) => (
             <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
@@ -4015,14 +4021,12 @@ function SourcesGuideCard() {
   return (
     <>
       <section className="lmx-settings-card">
-        <div className="lmx-settings-label">Onde baixar jogos / DLCs / Mods</div>
+        <div className="lmx-settings-label">{t("Onde baixar jogos / DLCs / Mods")}</div>
         <p className="lmx-settings-hint">
-          Lista de sites populares por categoria — ROMs (Vimm's, Myrient,
-          CDRomance), patches PT-BR (Tradu-Roms, Romhacking), DLCs (NoPayStation,
-          Hshop). Mesma lista do Windows.
+          {t("Lista de sites populares por categoria — ROMs (Vimm's, Myrient, CDRomance), patches PT-BR (Tradu-Roms, Romhacking), DLCs (NoPayStation, Hshop). Mesma lista do Windows.")}
         </p>
         <button className="lmx-settings-btn primary" onClick={() => { sfx.confirm(); setOpen(true); }}>
-          Abrir guia de fontes
+          {t("Abrir guia de fontes")}
         </button>
       </section>
       <SuggestionsModal open={open} onClose={() => setOpen(false)} defaultTab="roms" />
@@ -4037,47 +4041,47 @@ function SourcesGuideCard() {
 // ou app trava - copia o log e me manda. Backend ja tem read_app_logs.
 function LogsViewerCard() {
   const [open, setOpen] = useState(false);
-  const [text, setText] = useState("Carregando...");
+  const [text, setText] = useState(t("Carregando..."));
   const [busy, setBusy] = useState(false);
   const load = async () => {
     setBusy(true);
     try {
-      const t = await invoke("read_app_logs", { maxLines: 200 });
-      setText(t || "(log vazio)");
+      const logs = await invoke("read_app_logs", { maxLines: 200 });
+      setText(logs || t("(log vazio)"));
     } catch (e) {
-      setText("Erro: " + String(e));
+      setText(t("Erro: {err}", { err: String(e) }));
     } finally { setBusy(false); }
   };
   // v0.9.2: clipboard pode falhar no WebView Android. Tenta, e dá feedback;
   // se falhar, o usuário segura no <pre> e seleciona manual.
   const copy = async () => {
     try {
-      if (navigator.clipboard) { await navigator.clipboard.writeText(text); mAlert("Log copiado."); return; }
+      if (navigator.clipboard) { await navigator.clipboard.writeText(text); mAlert(t("Log copiado.")); return; }
       throw new Error("sem clipboard");
     } catch {
-      mAlert("Nao consegui copiar automático. Segura no texto do log e seleciona/copia manual.");
+      mAlert(t("Não consegui copiar automático. Segura no texto do log e seleciona/copia manual."));
     }
   };
   return (
     <section className="lmx-settings-card">
-      <div className="lmx-settings-label">Logs do app</div>
+      <div className="lmx-settings-label">{t("Logs do app")}</div>
       <p className="lmx-settings-hint">
-        Ultimas 200 linhas. Util quando algum jogo não abre — copia e me manda.
+        {t("Últimas 200 linhas. Útil quando algum jogo não abre — copia e me manda.")}
       </p>
       <button className="lmx-settings-btn primary" onClick={() => { sfx.click(); load(); setOpen(true); }}>
-        Abrir logs
+        {t("Abrir logs")}
       </button>
       {open && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 9999, padding: 16, display: "flex", flexDirection: "column" }} onClick={() => setOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{ flex: 1, background: "#0a0420", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", maxHeight: "90vh" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-              <strong style={{ color: "#c4b5fd" }}>Logs do Ludex</strong>
+              <strong style={{ color: "#c4b5fd" }}>{t("Logs do Ludex")}</strong>
               <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "#fff", fontSize: 24, cursor: "pointer" }}>×</button>
             </div>
             <pre style={{ flex: 1, overflow: "auto", fontSize: 10, color: "#ddd", whiteSpace: "pre-wrap", margin: 0 }}>{text}</pre>
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button className="lmx-settings-btn" onClick={load} disabled={busy}>{busy ? "Recarregando..." : "Recarregar"}</button>
-              <button className="lmx-settings-btn primary" onClick={copy}>Copiar tudo</button>
+              <button className="lmx-settings-btn" onClick={load} disabled={busy}>{busy ? t("Recarregando...") : t("Recarregar")}</button>
+              <button className="lmx-settings-btn primary" onClick={copy}>{t("Copiar tudo")}</button>
             </div>
           </div>
         </div>
