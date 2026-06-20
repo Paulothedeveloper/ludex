@@ -90,6 +90,6 @@ App code MIT. Libretro cores keep their own licenses. Console logos/marks belong
 
 <div align="center">
 
-📧 [paulothedeveloper@protonmail.com](mailto:paulothedeveloper@protonmail.com) · 📸 [Instagram](https://instagram.com/) · 💼 [LinkedIn](https://www.linkedin.com/in/paulo-adriel/) · 🐙 [github.com/Paulothedeveloper](https://github.com/Paulothedeveloper)
+📧 [paulothedeveloper@protonmail.com](mailto:paulothedeveloper@protonmail.com) · 📸 [Instagram](https://instagram.com/paulo.videodev) · 💼 [LinkedIn](https://www.linkedin.com/in/paulo-adriel/) · 🐙 [github.com/Paulothedeveloper](https://github.com/Paulothedeveloper)
 
 </div>
