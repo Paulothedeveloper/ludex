@@ -7,6 +7,7 @@ import {
   loadCheats, saveCheats, fetchOnlineCheats, applyCheats,
   supportsOnlineCheats, cleanGameName,
 } from "./ludexCheats";
+import { t } from "./ludexI18n";
 
 const ACCENT = "#7c5cff";
 
@@ -27,7 +28,7 @@ export function CheatsModal({ systemId, gamePath, onClose }) {
   const reapply = useCallback(async (list) => {
     try {
       const n = await applyCheats(list);
-      setMsg({ kind: "ok", text: n > 0 ? `${n} cheat(s) ativo(s)` : "Nenhum cheat ativo" });
+      setMsg({ kind: "ok", text: n > 0 ? t("{n} cheat(s) ativo(s)", { n }) : t("Nenhum cheat ativo") });
     } catch (e) {
       setMsg({ kind: "err", text: String(e) });
     }
@@ -47,7 +48,7 @@ export function CheatsModal({ systemId, gamePath, onClose }) {
 
   const addManual = () => {
     if (!newCode.trim()) return;
-    const next = [...cheats, { desc: newDesc.trim() || "Cheat manual", code: newCode.trim(), enabled: true }];
+    const next = [...cheats, { desc: newDesc.trim() || t("Cheat manual"), code: newCode.trim(), enabled: true }];
     persist(next);
     setNewDesc(""); setNewCode("");
     reapply(next);
@@ -58,7 +59,7 @@ export function CheatsModal({ systemId, gamePath, onClose }) {
     try {
       const found = await fetchOnlineCheats(systemId, gamePath);
       if (!found || found.length === 0) {
-        setMsg({ kind: "err", text: "Nenhum cheat encontrado." });
+        setMsg({ kind: "err", text: t("Nenhum cheat encontrado.") });
       } else {
         // mescla sem duplicar por code
         const existing = new Set(cheats.map((c) => c.code));
@@ -68,7 +69,7 @@ export function CheatsModal({ systemId, gamePath, onClose }) {
           if (!existing.has(f.code)) { merged.push({ ...f, enabled: false }); added++; }
         }
         persist(merged);
-        setMsg({ kind: "ok", text: `${added} cheat(s) adicionado(s). Ative os que quiser.` });
+        setMsg({ kind: "ok", text: t("{added} cheat(s) adicionado(s). Ative os que quiser.", { added }) });
       }
     } catch (e) {
       setMsg({ kind: "err", text: String(e) });
@@ -112,10 +113,10 @@ export function CheatsModal({ systemId, gamePath, onClose }) {
       <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
         <div style={S.header}>
           <div>
-            <h3 style={S.title}>Cheats</h3>
+            <h3 style={S.title}>{t("Cheats")}</h3>
             <p style={S.sub}>{cleanGameName(gamePath)}</p>
           </div>
-          <button style={S.close} onClick={onClose} aria-label="Fechar">×</button>
+          <button style={S.close} onClick={onClose} aria-label={t("Fechar")}>×</button>
         </div>
         <div style={S.body}>
           {msg && <div style={S.msg(msg.kind)}>{msg.text}</div>}
@@ -125,28 +126,28 @@ export function CheatsModal({ systemId, gamePath, onClose }) {
             disabled={busy || !online}
             onClick={search}
           >
-            {busy ? "Buscando…" : online ? "Buscar cheats online" : "Busca online indisponível p/ este sistema"}
+            {busy ? t("Buscando…") : online ? t("Buscar cheats online") : t("Busca online indisponível p/ este sistema")}
           </button>
 
-          <div style={S.section}>Lista de cheats</div>
-          {cheats.length === 0 && <div style={S.empty}>Nenhum cheat ainda. Busque online ou adicione abaixo.</div>}
+          <div style={S.section}>{t("Lista de cheats")}</div>
+          {cheats.length === 0 && <div style={S.empty}>{t("Nenhum cheat ainda. Busque online ou adicione abaixo.")}</div>}
           {cheats.map((c, i) => (
             <div key={i} style={S.item}>
               <div style={S.itemText}>
                 <div style={S.itemDesc}>{c.desc}</div>
                 <div style={S.itemCode}>{c.code.replace(/\n/g, " ")}</div>
               </div>
-              <button style={S.sw(c.enabled)} onClick={() => toggle(i)} aria-label="Ativar cheat">
+              <button style={S.sw(c.enabled)} onClick={() => toggle(i)} aria-label={t("Ativar cheat")}>
                 <span style={S.knob(c.enabled)} />
               </button>
-              <button style={S.del} onClick={() => remove(i)} aria-label="Remover">×</button>
+              <button style={S.del} onClick={() => remove(i)} aria-label={t("Remover")}>×</button>
             </div>
           ))}
 
-          <div style={S.section}>Adicionar manualmente</div>
-          <input style={S.input} placeholder="Descrição (ex: Vidas infinitas)" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
-          <input style={S.input} placeholder="Código (Game Genie / PAR / raw)" value={newCode} onChange={(e) => setNewCode(e.target.value)} />
-          <button style={{ ...S.btn, ...S.btnGhost }} onClick={addManual} disabled={!newCode.trim()}>Adicionar cheat</button>
+          <div style={S.section}>{t("Adicionar manualmente")}</div>
+          <input style={S.input} placeholder={t("Descrição (ex: Vidas infinitas)")} value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
+          <input style={S.input} placeholder={t("Código (Game Genie / PAR / raw)")} value={newCode} onChange={(e) => setNewCode(e.target.value)} />
+          <button style={{ ...S.btn, ...S.btnGhost }} onClick={addManual} disabled={!newCode.trim()}>{t("Adicionar cheat")}</button>
         </div>
       </div>
     </div>

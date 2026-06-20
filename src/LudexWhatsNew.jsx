@@ -2,6 +2,7 @@
 // igual no app (LudexMobile) e no launcher do PC (LudexLauncher).
 
 import React, { useEffect } from "react";
+import { t } from "./ludexI18n";
 
 const ACCENT = "#7c5cff";
 
@@ -36,9 +37,9 @@ export function WhatsNewModal({ data, onClose }) {
       <style>{`@keyframes lmxwn-in{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}`}</style>
       <div style={S.sheet} onClick={(e) => e.stopPropagation()}>
         <div style={S.header}>
-          <span style={S.badge}>NOVIDADES</span>
-          <h2 style={S.title}>O que mudou {multi ? "" : `na v${data.current}`}</h2>
-          <p style={S.sub}>{multi ? `Você atualizou e chegou na v${data.current}. Resumo das mudanças:` : "Resumo rápido desta atualização."}</p>
+          <span style={S.badge}>{t("NOVIDADES")}</span>
+          <h2 style={S.title}>{multi ? t("O que mudou") : t("O que mudou na v{v}", { v: data.current })}</h2>
+          <p style={S.sub}>{multi ? t("Você atualizou e chegou na v{v}. Resumo das mudanças:", { v: data.current }) : t("Resumo rápido desta atualização.")}</p>
         </div>
         <div style={S.body}>
           {data.entries.map((e) => (
@@ -51,7 +52,7 @@ export function WhatsNewModal({ data, onClose }) {
           ))}
         </div>
         <div style={S.footer}>
-          <button style={S.btn} onClick={onClose}>Entendi</button>
+          <button style={S.btn} onClick={onClose}>{t("Entendi")}</button>
         </div>
       </div>
     </div>

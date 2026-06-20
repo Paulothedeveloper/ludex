@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { lxConfirm } from "./LudexDialog";
+import { t } from "./ludexI18n";
 
 /**
  * Painel admin (modal fullscreen) que so abre se a license atual eh marcada
@@ -38,12 +39,12 @@ export default function LudexAdminPanel({ onClose }) {
   useEffect(() => { load(page); }, [page]);
 
   async function forceDeactivate(licenseKey, email) {
-    if (!await lxConfirm(`Liberar 1 slot da license de ${email || licenseKey}?\n\nIsso decrementa o uses_count no Gumroad. O cliente vai poder ativar em outro PC.`, { title: "Liberar slot", okText: "Liberar" })) return;
+    if (!await lxConfirm(t("Liberar 1 slot da license de {who}?\n\nIsso decrementa o uses_count no Gumroad. O cliente vai poder ativar em outro PC.", { who: email || licenseKey }), { title: t("Liberar slot"), okText: t("Liberar") })) return;
     setActioning(licenseKey);
     setActionMsg(null);
     try {
       await invoke("admin_force_deactivate", { licenseKey });
-      setActionMsg({ kind: "ok", text: `Slot liberado pra ${email || licenseKey}` });
+      setActionMsg({ kind: "ok", text: t("Slot liberado pra {who}", { who: email || licenseKey }) });
       await load(page);
     } catch (e) {
       setActionMsg({ kind: "error", text: String(e) });
@@ -89,27 +90,27 @@ export default function LudexAdminPanel({ onClose }) {
       <div className="lx-adminpanel-card">
         <header className="lx-adminpanel-header">
           <div>
-            <h2>Painel Admin · Ludex</h2>
-            <p className="lx-adminpanel-sub">Vendas via Gumroad</p>
+            <h2>{t("Painel Admin · Ludex")}</h2>
+            <p className="lx-adminpanel-sub">{t("Vendas via Gumroad")}</p>
           </div>
-          <button className="lx-adminpanel-close" onClick={onClose} aria-label="Fechar">×</button>
+          <button className="lx-adminpanel-close" onClick={onClose} aria-label={t("Fechar")}>×</button>
         </header>
 
         <div className="lx-adminpanel-stats">
           <div className="lx-stat-pill">
-            <span className="lx-stat-label">Vendas (página)</span>
+            <span className="lx-stat-label">{t("Vendas (página)")}</span>
             <strong>{stats.total}</strong>
           </div>
           <div className="lx-stat-pill">
-            <span className="lx-stat-label">Faturamento</span>
+            <span className="lx-stat-label">{t("Faturamento")}</span>
             <strong>R$ {(stats.totalRevenue / 100).toFixed(2)}</strong>
           </div>
           <div className="lx-stat-pill">
-            <span className="lx-stat-label">Ativadas</span>
+            <span className="lx-stat-label">{t("Ativadas")}</span>
             <strong>{stats.activated}</strong>
           </div>
           <div className="lx-stat-pill" style={{ color: stats.refunded > 0 ? "#fca5a5" : undefined }}>
-            <span className="lx-stat-label">Refunds</span>
+            <span className="lx-stat-label">{t("Refunds")}</span>
             <strong>{stats.refunded}</strong>
           </div>
         </div>
@@ -118,16 +119,16 @@ export default function LudexAdminPanel({ onClose }) {
           <input
             className="lx-adminpanel-search"
             type="text"
-            placeholder="Buscar por email, nome ou license key..."
+            placeholder={t("Buscar por email, nome ou license key...")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <div className="lx-adminpanel-toolbar-actions">
             <button className="lx-adminpanel-btn" onClick={() => load(page)} disabled={busy}>
-              {busy ? "..." : "Atualizar"}
+              {busy ? "..." : t("Atualizar")}
             </button>
             <button className="lx-adminpanel-btn lx-adminpanel-btn-ghost" onClick={openDashboard}>
-              Gumroad ↗
+              {t("Gumroad ↗")}
             </button>
           </div>
         </div>
@@ -142,14 +143,14 @@ export default function LudexAdminPanel({ onClose }) {
 
         <div className="lx-adminpanel-list">
           {busy && filtered.length === 0 && (
-            <div className="lx-adminpanel-empty">Carregando vendas...</div>
+            <div className="lx-adminpanel-empty">{t("Carregando vendas...")}</div>
           )}
           {!busy && filtered.length === 0 && (
             <div className="lx-adminpanel-empty">
-              {search ? "Nenhuma venda bate com a busca." : "Nenhuma venda nessa página ainda."}
+              {search ? t("Nenhuma venda bate com a busca.") : t("Nenhuma venda nessa página ainda.")}
               {!search && (
                 <p className="lx-adminpanel-empty-hint">
-                  Compras de teste do creator podem não aparecer aqui — só vendas reais de clientes externos.
+                  {t("Compras de teste do creator podem não aparecer aqui — só vendas reais de clientes externos.")}
                 </p>
               )}
             </div>
@@ -159,15 +160,15 @@ export default function LudexAdminPanel({ onClose }) {
             const price = `R$ ${(Number(s.price || 0) / 100).toFixed(2)}`;
             const uses = s.license_uses_count || 0;
             const maxPC = 2;
-            const status = s.refunded ? { label: "Refund", cls: "danger" }
-                       : s.disputed ? { label: "Disputa", cls: "warn" }
-                       : uses > 0 ? { label: "Ativa", cls: "ok" }
-                       : { label: "Não ativada", cls: "" };
+            const status = s.refunded ? { label: t("Refund"), cls: "danger" }
+                       : s.disputed ? { label: t("Disputa"), cls: "warn" }
+                       : uses > 0 ? { label: t("Ativa"), cls: "ok" }
+                       : { label: t("Não ativada"), cls: "" };
             return (
               <div key={s.id} className="lx-sale-card">
                 <div className="lx-sale-header">
                   <div className="lx-sale-identity">
-                    <strong>{s.full_name || s.email || "Sem nome"}</strong>
+                    <strong>{s.full_name || s.email || t("Sem nome")}</strong>
                     {s.email && s.email !== s.full_name && (
                       <span className="lx-sale-email">{s.email}</span>
                     )}
@@ -180,12 +181,12 @@ export default function LudexAdminPanel({ onClose }) {
                   <span><b>{price}</b></span>
                   <span>·</span>
                   <span style={{ color: uses >= maxPC ? "#fca5a5" : undefined }}>
-                    <b>{uses}/{maxPC}</b> PCs
+                    <b>{uses}/{maxPC}</b> {t("PCs")}
                   </span>
                 </div>
                 {s.license_key && (
                   <div className="lx-sale-key" title={s.license_key}>
-                    <span className="lx-sale-key-label">License:</span>
+                    <span className="lx-sale-key-label">{t("License:")}</span>
                     <code>{s.license_key}</code>
                   </div>
                 )}
@@ -196,7 +197,7 @@ export default function LudexAdminPanel({ onClose }) {
                       onClick={() => forceDeactivate(s.license_key, s.email)}
                       disabled={actioning === s.license_key}
                     >
-                      {actioning === s.license_key ? "Liberando..." : "Liberar 1 slot"}
+                      {actioning === s.license_key ? t("Liberando...") : t("Liberar 1 slot")}
                     </button>
                   </div>
                 )}
@@ -211,21 +212,21 @@ export default function LudexAdminPanel({ onClose }) {
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1 || busy}
           >
-            ← Anterior
+            {t("← Anterior")}
           </button>
-          <span className="lx-adminpanel-pageinfo">Página {page}</span>
+          <span className="lx-adminpanel-pageinfo">{t("Página {page}", { page })}</span>
           <button
             className="lx-adminpanel-btn"
             onClick={() => setPage(p => p + 1)}
             disabled={busy || sales.length === 0}
           >
-            Próxima →
+            {t("Próxima →")}
           </button>
         </div>
 
         <p className="lx-adminpanel-foot">
-          Pra <strong>refund</strong> ou <strong>banir</strong>, abra o
-          <button className="lx-adminpanel-link" onClick={openDashboard}>Dashboard Gumroad</button>.
+          {t("Pra")} <strong>{t("refund")}</strong> {t("ou")} <strong>{t("banir")}</strong>{t(", abra o")}
+          <button className="lx-adminpanel-link" onClick={openDashboard}>{t("Dashboard Gumroad")}</button>.
         </p>
       </div>
     </div>

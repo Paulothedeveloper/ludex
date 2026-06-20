@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { SearchIcon, SystemIcon } from "./ludexIcons";
+import { t } from "./ludexI18n";
 
 const IS_ANDROID = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent || "");
 
@@ -127,7 +128,7 @@ export default function SearchOverlay({ systems, onPick, onClose, closing, modal
             autoFocus
             type="text"
             className="pb-search-input"
-            placeholder="Use o controle: D-pad/Stick navega · A confirma · Y apaga · X espaco · Start busca · B sai"
+            placeholder={t("Use o controle: D-pad/Stick navega · A confirma · Y apaga · X espaco · Start busca · B sai")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -162,7 +163,7 @@ export default function SearchOverlay({ systems, onPick, onClose, closing, modal
                     else if (a === "CLEAR") clearAll();
                     else if (a === "BUSCAR" && results[0]) onPick(results[0]);
                   }}
-                >{a}</button>
+                >{a === "⌫" ? a : t(a)}</button>
               ))}
             </div>
           </div>
@@ -183,7 +184,7 @@ export default function SearchOverlay({ systems, onPick, onClose, closing, modal
             </button>
           ))}
           {trimmed && results.length === 0 && (
-            <div className="pb-search-empty">Nenhum jogo encontrado</div>
+            <div className="pb-search-empty">{t("Nenhum jogo encontrado")}</div>
           )}
         </div>
       </div>

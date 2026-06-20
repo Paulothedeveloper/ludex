@@ -7,6 +7,7 @@ import {
 import {
   formatPlayTime, GAME_STATUS_ORDER, GAME_STATUS_LABELS, GAME_STATUS_EMOJI,
 } from "./ludexUtils";
+import { t } from "./ludexI18n";
 
 /**
  * Detalhe fullscreen do jogo: capa hero + screenshots + summary + ações.
@@ -91,7 +92,7 @@ export default function GameDetailPanel({
       {shotSrc && <img key={shotSrc} className="pb-detail-bg" src={shotSrc} alt="" aria-hidden />}
       <div className="pb-detail-overlay" />
 
-      <button className="pb-detail-close" onClick={onClose} title="Fechar (Esc)"><CloseIcon /></button>
+      <button className="pb-detail-close" onClick={onClose} title={t("Fechar (Esc)")}><CloseIcon /></button>
 
       <div className="pb-detail-stage">
         <div className="pb-detail-cover-wrap">
@@ -129,15 +130,15 @@ export default function GameDetailPanel({
           <div className="pb-detail-stats">
             <div className="pb-detail-stat">
               <strong>{formatPlayTime(playTimeSec || 0)}</strong>
-              <span>tempo jogado</span>
+              <span>{t("tempo jogado")}</span>
             </div>
             <div className="pb-detail-stat">
               <strong>{game.size_mb ? `${game.size_mb} MB` : "—"}</strong>
-              <span>tamanho</span>
+              <span>{t("tamanho")}</span>
             </div>
             <div className="pb-detail-stat">
               <strong>{game.extension?.toUpperCase() || "—"}</strong>
-              <span>formato</span>
+              <span>{t("formato")}</span>
             </div>
           </div>
 
@@ -146,25 +147,25 @@ export default function GameDetailPanel({
               <button
                 className={`pb-status-pill pb-status-${curStatus || "none"}`}
                 onClick={cycleStatus}
-                title="Clique pra ciclar entre os status (sem status → quero jogar → jogando → zerei → platinei → abandonei)"
+                title={t("Clique pra ciclar entre os status (sem status → quero jogar → jogando → zerei → platinei → abandonei)")}
               >
                 <span className="pb-status-icon">{GAME_STATUS_EMOJI[curStatus]}</span>
                 <span className="pb-status-label">{GAME_STATUS_LABELS[curStatus]}</span>
               </button>
-              <div className="pb-rating" role="group" aria-label="Sua nota">
+              <div className="pb-rating" role="group" aria-label={t("Sua nota")}>
                 {[1,2,3,4,5].map((n) => (
                   <button
                     key={n}
                     className={`pb-rating-star ${n <= curRating ? "filled" : ""}`}
                     onClick={() => onSetRating && onSetRating(n === curRating ? 0 : n)}
-                    title={`${n} estrela${n > 1 ? "s" : ""} (clique de novo pra limpar)`}
+                    title={n > 1 ? t("{n} estrelas (clique de novo pra limpar)", { n }) : t("{n} estrela (clique de novo pra limpar)", { n })}
                   >★</button>
                 ))}
               </div>
             </div>
             <textarea
               className="pb-detail-notes"
-              placeholder="Suas notas sobre o jogo... (auto-salva)"
+              placeholder={t("Suas notas sobre o jogo... (auto-salva)")}
               value={notesDraft}
               onChange={(e) => setNotesDraft(e.target.value)}
               maxLength={4000}
@@ -173,7 +174,7 @@ export default function GameDetailPanel({
           </div>
 
           {loading && !details && (
-            <p className="pb-detail-loading">Buscando informações no IGDB...</p>
+            <p className="pb-detail-loading">{t("Buscando informações no IGDB...")}</p>
           )}
 
           {details?.summary && (
@@ -196,20 +197,20 @@ export default function GameDetailPanel({
 
           <div className="pb-detail-actions">
             <button className="pb-btn pb-btn-primary pb-btn-large" onClick={onLaunch}>
-              <PlayIcon /> Jogar
+              <PlayIcon /> {t("Jogar")}
             </button>
             <button className="pb-btn pb-btn-ghost" onClick={onToggleFavorite}>
               <StarIcon filled={isFavorite} />
-              {isFavorite ? "Favorito" : "Favoritar"}
+              {isFavorite ? t("Favorito") : t("Favoritar")}
             </button>
             <button className="pb-btn pb-btn-ghost" onClick={onPickCover}>
-              <ImageIcon /> Trocar capa
+              <ImageIcon /> {t("Trocar capa")}
             </button>
             <button className="pb-btn pb-btn-ghost" onClick={onResyncCover}>
-              <RotateIcon /> Re-sync IGDB
+              <RotateIcon /> {t("Re-sync IGDB")}
             </button>
             <button className="pb-btn pb-btn-ghost" onClick={onOpenLocation}>
-              <FolderIcon /> Abrir local
+              <FolderIcon /> {t("Abrir local")}
             </button>
           </div>
         </div>

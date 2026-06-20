@@ -119,12 +119,106 @@ const DICT = {
   "Mais jogados":  { en: "Most played", es: "Más jugados", fr: "Plus joués", zh: "最常玩", ru: "Часто играемые" },
   "★ Favoritos":   { en: "★ Favorites", es: "★ Favoritos", fr: "★ Favoris", zh: "★ 收藏", ru: "★ Избранное" },
   "Buscar jogo":   { en: "Search game", es: "Buscar juego", fr: "Chercher un jeu", zh: "搜索游戏", ru: "Поиск игры" },
+
+  // ---- LudexSearchOverlay ----
+  "Use o controle: D-pad/Stick navega · A confirma · Y apaga · X espaco · Start busca · B sai": { en: "Use the controller: D-pad/Stick to navigate · A confirms · Y deletes · X space · Start searches · B exits", es: "Usa el mando: D-pad/Stick navega · A confirma · Y borra · X espacio · Start busca · B sale", fr: "Utilisez la manette : D-pad/Stick navigue · A confirme · Y efface · X espace · Start recherche · B quitte", zh: "使用手柄：方向键/摇杆导航 · A 确认 · Y 删除 · X 空格 · Start 搜索 · B 退出", ru: "Используйте контроллер: D-pad/стик — навигация · A — подтвердить · Y — удалить · X — пробел · Start — поиск · B — выход" },
+  "CLEAR": { en: "CLEAR", es: "BORRAR", fr: "EFFACER", zh: "清除", ru: "ОЧИСТИТЬ" },
+  "BUSCAR": { en: "SEARCH", es: "BUSCAR", fr: "RECHERCHER", zh: "搜索", ru: "ПОИСК" },
+  "Nenhum jogo encontrado": { en: "No games found", es: "No se encontraron juegos", fr: "Aucun jeu trouvé", zh: "未找到游戏", ru: "Игры не найдены" },
+
+  // ---- LudexGameDetailPanel ----
+  "Fechar (Esc)": { en: "Close (Esc)", es: "Cerrar (Esc)", fr: "Fermer (Échap)", zh: "关闭 (Esc)", ru: "Закрыть (Esc)" },
+  "tempo jogado": { en: "play time", es: "tiempo jugado", fr: "temps de jeu", zh: "游玩时长", ru: "время игры" },
+  "tamanho": { en: "size", es: "tamaño", fr: "taille", zh: "大小", ru: "размер" },
+  "formato": { en: "format", es: "formato", fr: "format", zh: "格式", ru: "формат" },
+  "Clique pra ciclar entre os status (sem status → quero jogar → jogando → zerei → platinei → abandonei)": { en: "Click to cycle through statuses (no status → want to play → playing → beaten → mastered → abandoned)", es: "Haz clic para alternar entre estados (sin estado → quiero jugar → jugando → terminado → platinado → abandonado)", fr: "Cliquez pour faire défiler les statuts (aucun statut → à jouer → en cours → terminé → maîtrisé → abandonné)", zh: "点击循环切换状态（无状态 → 想玩 → 游玩中 → 已通关 → 已白金 → 已弃坑）", ru: "Нажмите, чтобы переключать статусы (без статуса → хочу пройти → играю → пройдено → платина → заброшено)" },
+  "Sua nota": { en: "Your rating", es: "Tu valoración", fr: "Votre note", zh: "你的评分", ru: "Ваша оценка" },
+  "{n} estrela (clique de novo pra limpar)": { en: "{n} star (click again to clear)", es: "{n} estrella (haz clic de nuevo para limpiar)", fr: "{n} étoile (cliquez à nouveau pour effacer)", zh: "{n} 星（再次点击清除）", ru: "{n} звезда (нажмите ещё раз, чтобы сбросить)" },
+  "{n} estrelas (clique de novo pra limpar)": { en: "{n} stars (click again to clear)", es: "{n} estrellas (haz clic de nuevo para limpiar)", fr: "{n} étoiles (cliquez à nouveau pour effacer)", zh: "{n} 星（再次点击清除）", ru: "{n} звёзд (нажмите ещё раз, чтобы сбросить)" },
+  "Suas notas sobre o jogo... (auto-salva)": { en: "Your notes about the game... (auto-saved)", es: "Tus notas sobre el juego... (autoguardado)", fr: "Vos notes sur le jeu... (sauvegarde auto)", zh: "你对游戏的笔记……（自动保存）", ru: "Ваши заметки об игре... (автосохранение)" },
+  "Buscando informações no IGDB...": { en: "Fetching info from IGDB...", es: "Buscando información en IGDB...", fr: "Récupération des infos sur IGDB...", zh: "正在从 IGDB 获取信息……", ru: "Получение данных из IGDB..." },
+  "Jogar": { en: "Play", es: "Jugar", fr: "Jouer", zh: "开始游戏", ru: "Играть" },
+  "Favorito": { en: "Favorited", es: "Favorito", fr: "Favori", zh: "已收藏", ru: "В избранном" },
+  "Favoritar": { en: "Favorite", es: "Añadir a favoritos", fr: "Ajouter aux favoris", zh: "收藏", ru: "В избранное" },
+  "Trocar capa": { en: "Change cover", es: "Cambiar portada", fr: "Changer la jaquette", zh: "更换封面", ru: "Сменить обложку" },
+  "Re-sync IGDB": { en: "Re-sync IGDB", es: "Resincronizar IGDB", fr: "Resynchroniser IGDB", zh: "重新同步 IGDB", ru: "Пересинхронизировать IGDB" },
+  "Abrir local": { en: "Open location", es: "Abrir ubicación", fr: "Ouvrir l'emplacement", zh: "打开位置", ru: "Открыть папку" },
+
+  // ---- LudexCheatsModal ----
+  "{n} cheat(s) ativo(s)": { en: "{n} cheat(s) active", es: "{n} truco(s) activo(s)", fr: "{n} code(s) actif(s)", zh: "{n} 个金手指已启用", ru: "Активно читов: {n}" },
+  "Nenhum cheat ativo": { en: "No cheats active", es: "Ningún truco activo", fr: "Aucun code actif", zh: "没有启用的金手指", ru: "Нет активных читов" },
+  "Cheat manual": { en: "Manual cheat", es: "Truco manual", fr: "Code manuel", zh: "手动金手指", ru: "Ручной чит" },
+  "Nenhum cheat encontrado.": { en: "No cheats found.", es: "No se encontraron trucos.", fr: "Aucun code trouvé.", zh: "未找到金手指。", ru: "Читы не найдены." },
+  "{added} cheat(s) adicionado(s). Ative os que quiser.": { en: "{added} cheat(s) added. Enable the ones you want.", es: "{added} truco(s) añadido(s). Activa los que quieras.", fr: "{added} code(s) ajouté(s). Activez ceux que vous voulez.", zh: "已添加 {added} 个金手指。启用你想要的。", ru: "Добавлено читов: {added}. Включите нужные." },
+  "Cheats": { en: "Cheats", es: "Trucos", fr: "Codes de triche", zh: "金手指", ru: "Читы" },
+  "Buscando…": { en: "Searching…", es: "Buscando…", fr: "Recherche…", zh: "搜索中…", ru: "Поиск…" },
+  "Buscar cheats online": { en: "Search cheats online", es: "Buscar trucos en línea", fr: "Rechercher des codes en ligne", zh: "在线搜索金手指", ru: "Искать читы онлайн" },
+  "Busca online indisponível p/ este sistema": { en: "Online search unavailable for this system", es: "Búsqueda en línea no disponible para este sistema", fr: "Recherche en ligne indisponible pour ce système", zh: "此系统不支持在线搜索", ru: "Онлайн-поиск недоступен для этой системы" },
+  "Lista de cheats": { en: "Cheat list", es: "Lista de trucos", fr: "Liste des codes", zh: "金手指列表", ru: "Список читов" },
+  "Nenhum cheat ainda. Busque online ou adicione abaixo.": { en: "No cheats yet. Search online or add one below.", es: "Aún no hay trucos. Busca en línea o añade uno abajo.", fr: "Aucun code pour l'instant. Cherchez en ligne ou ajoutez-en un ci-dessous.", zh: "暂无金手指。在线搜索或在下方添加。", ru: "Читов пока нет. Найдите онлайн или добавьте ниже." },
+  "Ativar cheat": { en: "Toggle cheat", es: "Activar truco", fr: "Activer le code", zh: "切换金手指", ru: "Переключить чит" },
+  "Remover": { en: "Remove", es: "Eliminar", fr: "Supprimer", zh: "移除", ru: "Удалить" },
+  "Adicionar manualmente": { en: "Add manually", es: "Añadir manualmente", fr: "Ajouter manuellement", zh: "手动添加", ru: "Добавить вручную" },
+  "Descrição (ex: Vidas infinitas)": { en: "Description (e.g. Infinite lives)", es: "Descripción (ej. Vidas infinitas)", fr: "Description (ex. Vies infinies)", zh: "描述（例如：无限生命）", ru: "Описание (напр. Бесконечные жизни)" },
+  "Código (Game Genie / PAR / raw)": { en: "Code (Game Genie / PAR / raw)", es: "Código (Game Genie / PAR / raw)", fr: "Code (Game Genie / PAR / brut)", zh: "代码 (Game Genie / PAR / 原始)", ru: "Код (Game Genie / PAR / raw)" },
+  "Adicionar cheat": { en: "Add cheat", es: "Añadir truco", fr: "Ajouter le code", zh: "添加金手指", ru: "Добавить чит" },
+
+  // ---- LudexAdminPanel ----
+  "Liberar 1 slot da license de {who}?\n\nIsso decrementa o uses_count no Gumroad. O cliente vai poder ativar em outro PC.": { en: "Free up 1 slot from {who}'s license?\n\nThis decrements the uses_count on Gumroad. The customer will be able to activate it on another PC.", es: "¿Liberar 1 espacio de la licencia de {who}?\n\nEsto reduce el uses_count en Gumroad. El cliente podrá activarla en otro PC.", fr: "Libérer 1 emplacement de la licence de {who} ?\n\nCela décrémente le uses_count sur Gumroad. Le client pourra l'activer sur un autre PC.", zh: "释放 {who} 的许可证的 1 个名额？\n\n这会减少 Gumroad 上的 uses_count。客户将能在另一台电脑上激活。", ru: "Освободить 1 слот лицензии {who}?\n\nЭто уменьшит uses_count в Gumroad. Клиент сможет активировать её на другом ПК." },
+  "Liberar slot": { en: "Free up slot", es: "Liberar espacio", fr: "Libérer l'emplacement", zh: "释放名额", ru: "Освободить слот" },
+  "Liberar": { en: "Free up", es: "Liberar", fr: "Libérer", zh: "释放", ru: "Освободить" },
+  "Slot liberado pra {who}": { en: "Slot freed for {who}", es: "Espacio liberado para {who}", fr: "Emplacement libéré pour {who}", zh: "已为 {who} 释放名额", ru: "Слот освобождён для {who}" },
+  "Painel Admin · Ludex": { en: "Admin Panel · Ludex", es: "Panel de administración · Ludex", fr: "Panneau d'administration · Ludex", zh: "管理面板 · Ludex", ru: "Панель администратора · Ludex" },
+  "Vendas via Gumroad": { en: "Sales via Gumroad", es: "Ventas vía Gumroad", fr: "Ventes via Gumroad", zh: "通过 Gumroad 的销售", ru: "Продажи через Gumroad" },
+  "Vendas (página)": { en: "Sales (page)", es: "Ventas (página)", fr: "Ventes (page)", zh: "销售（本页）", ru: "Продажи (страница)" },
+  "Faturamento": { en: "Revenue", es: "Ingresos", fr: "Chiffre d'affaires", zh: "营收", ru: "Выручка" },
+  "Ativadas": { en: "Activated", es: "Activadas", fr: "Activées", zh: "已激活", ru: "Активировано" },
+  "Refunds": { en: "Refunds", es: "Reembolsos", fr: "Remboursements", zh: "退款", ru: "Возвраты" },
+  "Buscar por email, nome ou license key...": { en: "Search by email, name or license key...", es: "Buscar por correo, nombre o clave de licencia...", fr: "Rechercher par e-mail, nom ou clé de licence...", zh: "按邮箱、姓名或许可证密钥搜索...", ru: "Поиск по email, имени или лицензионному ключу..." },
+  "Atualizar": { en: "Refresh", es: "Actualizar", fr: "Actualiser", zh: "刷新", ru: "Обновить" },
+  "Gumroad ↗": { en: "Gumroad ↗", es: "Gumroad ↗", fr: "Gumroad ↗", zh: "Gumroad ↗", ru: "Gumroad ↗" },
+  "Carregando vendas...": { en: "Loading sales...", es: "Cargando ventas...", fr: "Chargement des ventes...", zh: "正在加载销售...", ru: "Загрузка продаж..." },
+  "Nenhuma venda bate com a busca.": { en: "No sale matches the search.", es: "Ninguna venta coincide con la búsqueda.", fr: "Aucune vente ne correspond à la recherche.", zh: "没有销售符合搜索条件。", ru: "Нет продаж, соответствующих поиску." },
+  "Nenhuma venda nessa página ainda.": { en: "No sales on this page yet.", es: "Aún no hay ventas en esta página.", fr: "Aucune vente sur cette page pour l'instant.", zh: "本页暂无销售。", ru: "На этой странице пока нет продаж." },
+  "Compras de teste do creator podem não aparecer aqui — só vendas reais de clientes externos.": { en: "Creator test purchases may not appear here — only real sales from external customers.", es: "Las compras de prueba del creador pueden no aparecer aquí — solo ventas reales de clientes externos.", fr: "Les achats de test du créateur peuvent ne pas apparaître ici — seulement les ventes réelles de clients externes.", zh: "创作者的测试购买可能不会显示在此处——仅显示来自外部客户的真实销售。", ru: "Тестовые покупки создателя могут здесь не отображаться — только реальные продажи внешним клиентам." },
+  "Sem nome": { en: "No name", es: "Sin nombre", fr: "Sans nom", zh: "无姓名", ru: "Без имени" },
+  "Refund": { en: "Refund", es: "Reembolso", fr: "Remboursement", zh: "退款", ru: "Возврат" },
+  "Disputa": { en: "Dispute", es: "Disputa", fr: "Litige", zh: "争议", ru: "Спор" },
+  "Ativa": { en: "Active", es: "Activa", fr: "Active", zh: "已激活", ru: "Активна" },
+  "Não ativada": { en: "Not activated", es: "No activada", fr: "Non activée", zh: "未激活", ru: "Не активирована" },
+  "PCs": { en: "PCs", es: "PCs", fr: "PC", zh: "台电脑", ru: "ПК" },
+  "License:": { en: "License:", es: "Licencia:", fr: "Licence :", zh: "许可证：", ru: "Лицензия:" },
+  "Liberando...": { en: "Freeing up...", es: "Liberando...", fr: "Libération...", zh: "正在释放...", ru: "Освобождение..." },
+  "Liberar 1 slot": { en: "Free up 1 slot", es: "Liberar 1 espacio", fr: "Libérer 1 emplacement", zh: "释放 1 个名额", ru: "Освободить 1 слот" },
+  "← Anterior": { en: "← Previous", es: "← Anterior", fr: "← Précédent", zh: "← 上一页", ru: "← Назад" },
+  "Página {page}": { en: "Page {page}", es: "Página {page}", fr: "Page {page}", zh: "第 {page} 页", ru: "Страница {page}" },
+  "Próxima →": { en: "Next →", es: "Siguiente →", fr: "Suivant →", zh: "下一页 →", ru: "Вперёд →" },
+  "Pra": { en: "To", es: "Para", fr: "Pour", zh: "要", ru: "Чтобы" },
+  "refund": { en: "refund", es: "reembolsar", fr: "rembourser", zh: "退款", ru: "вернуть деньги" },
+  "ou": { en: "or", es: "o", fr: "ou", zh: "或", ru: "или" },
+  "banir": { en: "ban", es: "banear", fr: "bannir", zh: "封禁", ru: "заблокировать" },
+  ", abra o": { en: ", open the", es: ", abre el", fr: ", ouvrez le", zh: "，请打开", ru: ", откройте" },
+  "Dashboard Gumroad": { en: "Gumroad Dashboard", es: "Panel de Gumroad", fr: "Tableau de bord Gumroad", zh: "Gumroad 仪表板", ru: "Панель Gumroad" },
+
+  // ---- LudexWhatsNew ----
+  "NOVIDADES": { en: "WHAT'S NEW", es: "NOVEDADES", fr: "NOUVEAUTÉS", zh: "新功能", ru: "ЧТО НОВОГО" },
+  "O que mudou": { en: "What changed", es: "Qué cambió", fr: "Ce qui a changé", zh: "更新内容", ru: "Что изменилось" },
+  "O que mudou na v{v}": { en: "What changed in v{v}", es: "Qué cambió en la v{v}", fr: "Ce qui a changé en v{v}", zh: "v{v} 更新内容", ru: "Что изменилось в v{v}" },
+  "Você atualizou e chegou na v{v}. Resumo das mudanças:": { en: "You updated and reached v{v}. Summary of changes:", es: "Actualizaste y llegaste a la v{v}. Resumen de cambios:", fr: "Vous avez mis à jour vers la v{v}. Résumé des changements :", zh: "您已更新至 v{v}。更新摘要：", ru: "Вы обновились до v{v}. Сводка изменений:" },
+  "Resumo rápido desta atualização.": { en: "Quick summary of this update.", es: "Resumen rápido de esta actualización.", fr: "Résumé rapide de cette mise à jour.", zh: "本次更新的简要说明。", ru: "Краткая сводка этого обновления." },
+  "Entendi": { en: "Got it", es: "Entendido", fr: "Compris", zh: "知道了", ru: "Понятно" },
 };
 
-/** Traduz `s` pro idioma atual. Cadeia: idioma -> inglês -> PT (a própria chave). */
-export function t(s) {
-  if (_lang === "pt") return s;
-  const e = DICT[s];
-  if (!e) return s;
-  return e[_lang] || e.en || s;
+/**
+ * Traduz `s` pro idioma atual. Cadeia: idioma -> inglês -> PT (a própria chave).
+ * `vars` interpola placeholders {nome}: t("Importei {n} BIOS", { n: 3 }).
+ */
+export function t(s, vars) {
+  let out;
+  if (_lang === "pt") out = s;
+  else { const e = DICT[s]; out = e ? (e[_lang] || e.en || s) : s; }
+  if (vars) {
+    for (const k in vars) out = out.split("{" + k + "}").join(String(vars[k]));
+  }
+  return out;
 }
