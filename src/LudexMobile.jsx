@@ -1575,6 +1575,18 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
 // ============================================================
 function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder, onPickSystemFolder, currentSystemFolder }) {
   const [guideOpen, setGuideOpen] = useState(false); // v0.9.15: sites por sistema
+  // v1.0: render progressivo do grid (bibliotecas grandes não pintam tudo de uma vez)
+  const GRID_PAGE = 120;
+  const [renderLimit, setRenderLimit] = useState(GRID_PAGE);
+  const gridSentinelRef = useRef(null);
+  useEffect(() => { setRenderLimit(GRID_PAGE); }, [system.id]);
+  useEffect(() => {
+    const el = gridSentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((e) => { if (e[0].isIntersecting) setRenderLimit((l) => l + GRID_PAGE); }, { rootMargin: "800px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [system.games.length, renderLimit]);
   const showInstallGuide = useCallback(() => {
     mAlert(
       t("Como colocar jogos de {name} no Ludex:", { name: system.name }) + "\n\n" +
@@ -1641,8 +1653,9 @@ function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder, onPick
           </div>
         </div>
       ) : (
+        <>
         <div className="lmx-systemview-grid">
-          {system.games.map((g) => (
+          {system.games.slice(0, renderLimit).map((g) => (
             <GameCard
               key={g.path}
               system={system}
@@ -1652,6 +1665,10 @@ function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder, onPick
             />
           ))}
         </div>
+        {renderLimit < system.games.length && (
+          <div ref={gridSentinelRef} aria-hidden style={{ height: 1, width: "100%" }} />
+        )}
+        </>
       )}
       <SuggestionsModal open={guideOpen} onClose={() => setGuideOpen(false)} defaultTab="roms" />
     </div>

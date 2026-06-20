@@ -40,7 +40,7 @@ import { EmulatorView, ResumePromptModal } from "./LudexEmulatorView";
 // v0.8.51 + v0.9.0: helpers compartilhados (antes locais aqui)
 import {
   invokeTimeout, validRomExtension, formatPlayTime,
-  GAME_STATUS_LABELS, GAME_STATUS_ORDER, GAME_STATUS_EMOJI,
+  GAME_STATUS_LABELS, GAME_STATUS_ORDER, GAME_STATUS_EMOJI, gridRenderLimit,
 } from "./ludexUtils";
 // v0.9.0: SearchOverlay extraido pra arquivo proprio (~194L removidas)
 import SearchOverlay from "./LudexSearchOverlay";
@@ -1979,6 +1979,13 @@ export default function LudexLauncher() {
   // D-pad DOWN em games -> systems. D-pad UP em systems -> games. A em systems -> entra (volta pra games).
   const [focusZone, setFocusZone] = useState("games");
   const [selectedGameIdx, setSelectedGameIdx] = useState(0);
+  // v1.0: renderização progressiva do grid — monta os primeiros N cards e cresce
+  // conforme o usuário rola (sentinela) ou navega por controle (buffer à frente).
+  // Mantém TODO card selecionado no DOM (scrollIntoView/foco continuam funcionando)
+  // e evita pintar milhares de cards de uma vez em bibliotecas grandes.
+  const GRID_PAGE = 120;
+  const [renderLimit, setRenderLimit] = useState(GRID_PAGE);
+  const gridSentinelRef = useRef(null);
   const [launchMsg, setLaunchMsg] = useState(null);
   const [covers, setCovers] = useState({});
   const [splashDone, setSplashDone] = useState(false);
@@ -2491,7 +2498,20 @@ export default function LudexLauncher() {
     return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => { setSelectedGameIdx(0); }, [selectedSystemIdx, sortMode]);
+  useEffect(() => { setSelectedGameIdx(0); setRenderLimit(GRID_PAGE); }, [selectedSystemIdx, sortMode]);
+  // v1.0: sentinela no fim do grid — cresce o limite conforme o usuário rola.
+  useEffect(() => {
+    const el = gridSentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) setRenderLimit((l) => l + GRID_PAGE);
+    }, { rootMargin: "800px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visibleGames.length, renderLimit, selectedGameIdx]);
+  // Limite efetivo: sempre inclui o card selecionado (+buffer), pra que pulos
+  // (Surpresa!/busca) montem o card no MESMO render e o scrollIntoView o encontre.
+  const gridLimit = gridRenderLimit(renderLimit, selectedGameIdx);
   // v0.8.49: auto-clamp se visibleGames encolheu (favoritos removidos, profile trocado etc)
   useEffect(() => {
     if (visibleGames.length === 0) {
@@ -4189,7 +4209,7 @@ export default function LudexLauncher() {
             {visibleGames.length > 0 && (
               <div className="pb-grid-wrap" key={`grid-${selected.id}-${sortMode}`} data-tour="grid">
                 <div className="pb-grid">
-                  {visibleGames.map((g, i) => {
+                  {visibleGames.slice(0, gridLimit).map((g, i) => {
                     const cover = covers[g.path];
                     const hasCover = typeof cover === "string" && cover.length > 0;
                     const isFav = favoriteSet.has(g.path);
@@ -4237,6 +4257,9 @@ export default function LudexLauncher() {
                     );
                   })}
                 </div>
+                {gridLimit < visibleGames.length && (
+                  <div ref={gridSentinelRef} className="pb-grid-sentinel" aria-hidden style={{ height: 1, width: "100%" }} />
+                )}
               </div>
             )}
 

@@ -70,3 +70,12 @@ export const GAME_STATUS_EMOJI = {
   "mastered": "✦",
   "abandoned": "✕",
 };
+
+// v1.0: render progressivo do grid. Limite efetivo de cards a montar = o limite
+// atual (cresce com scroll via sentinela) OU o índice selecionado + buffer, o que
+// for maior. Garante que o card selecionado SEMPRE está no slice renderizado
+// (nav por controle + scrollIntoView nunca apontam pra card não-montado).
+export function gridRenderLimit(renderLimit, selectedIdx, buffer = 30) {
+  const sel = Number.isFinite(selectedIdx) && selectedIdx > 0 ? selectedIdx : 0;
+  return Math.max(renderLimit | 0, sel + buffer);
+}
