@@ -84,3 +84,12 @@ Run the `.exe` and follow the steps (it asks for admin to install to `C:\Program
 ## 📜 License
 
 App code MIT. Libretro cores keep their own licenses. Console logos/marks belong to their respective owners — used here for reference only.
+
+
+---
+
+<div align="center">
+
+📧 [paulothedeveloper@protonmail.com](mailto:paulothedeveloper@protonmail.com) · 📸 [Instagram](https://instagram.com/) · 💼 [LinkedIn](https://linkedin.com/) · 🐙 [github.com/Paulothedeveloper](https://github.com/Paulothedeveloper)
+
+</div>
