@@ -118,6 +118,7 @@ const DICT = {
   "Recentes":      { en: "Recent", es: "Recientes", fr: "Récents", zh: "最近", ru: "Недавние" },
   "Mais jogados":  { en: "Most played", es: "Más jugados", fr: "Plus joués", zh: "最常玩", ru: "Часто играемые" },
   "★ Favoritos":   { en: "★ Favorites", es: "★ Favoritos", fr: "★ Favoris", zh: "★ 收藏", ru: "★ Избранное" },
+  "Buscar jogo":   { en: "Search game", es: "Buscar juego", fr: "Chercher un jeu", zh: "搜索游戏", ru: "Поиск игры" },
 };
 
 /** Traduz `s` pro idioma atual. Cadeia: idioma -> inglês -> PT (a própria chave). */

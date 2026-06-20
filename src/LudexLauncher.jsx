@@ -4104,7 +4104,7 @@ export default function LudexLauncher() {
             data-tour="search"
           >
             <SearchIcon />
-            <span className="pb-search-pill-label">Buscar jogo</span>
+            <span className="pb-search-pill-label">{t("Buscar jogo")}</span>
             <kbd className="pb-search-pill-kbd">/</kbd>
           </button>
           <button className="pb-icon-btn" onClick={pickRandomGame} title="Surpresa! (R) — escolhe jogo aleatorio" data-tour="random">
