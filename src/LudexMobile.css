@@ -2767,7 +2767,7 @@
   padding: 10px 20px; border-radius: 10px; border: 1px solid transparent;
   font-size: 14px; font-weight: 700; cursor: pointer; transition: filter .12s, box-shadow .12s;
 }
-.lx-dlg-btn-primary { background: #7c3aed; color: #fff; }
+.lx-dlg-btn-primary { background: linear-gradient(135deg, #7c3aed, #ec4899); color: #fff; box-shadow: 0 6px 16px rgba(124,58,237,0.4); }
 .lx-dlg-btn-danger  { background: #dc2626; color: #fff; }
 .lx-dlg-btn-ghost   { background: transparent; color: #d6d2e0; border-color: rgba(255,255,255,0.22); }
 .lx-dlg-btn.focused { box-shadow: 0 0 0 3px rgba(255,255,255,0.85); filter: brightness(1.08); }

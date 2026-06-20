@@ -9,6 +9,11 @@
   --theme-text: #fff;
   --theme-muted: #aaa;
   --theme-border: #3a3a3a;
+  /* v1.0: tokens de marca (gradiente da logo) — fonte única pros CTAs primários
+     e glows. Mesma identidade da tela de entrada já publicada. */
+  --lx-grad: linear-gradient(135deg, #7c3aed, #ec4899);
+  --lx-grad-hover: linear-gradient(135deg, #8b4ff5, #f25aa8);
+  --lx-glow: rgba(124, 58, 237, 0.45);
 }
 
 .pb {
@@ -5443,10 +5448,11 @@
 }
 .lx-licgate-btn:not(:disabled):hover { transform: translateY(-1px); }
 .lx-licgate-btn-primary {
-  background: linear-gradient(135deg, #7c3aed, #ec4899);
+  background: var(--lx-grad);
   color: #fff;
-  box-shadow: 0 8px 22px rgba(124, 58, 237, 0.45);
+  box-shadow: 0 8px 22px var(--lx-glow);
 }
+.lx-licgate-btn-primary:not(:disabled):hover { background: var(--lx-grad-hover); }
 .lx-licgate-btn-ghost {
   background: rgba(255, 255, 255, 0.04);
   color: rgba(229, 222, 244, 0.92);
@@ -6679,8 +6685,8 @@ html[data-android="true"] body {
 }
 .lx-settings-btn-ghost { background: rgba(255, 255, 255, 0.06); color: rgba(220, 210, 240, 0.85); }
 .lx-settings-btn-ghost:hover { background: rgba(255, 255, 255, 0.1); }
-.lx-settings-btn-primary { background: linear-gradient(135deg, #7c5cff, #5d3df0); color: #fff; }
-.lx-settings-btn-primary:hover { background: linear-gradient(135deg, #8a6dff, #6e4ef5); }
+.lx-settings-btn-primary { background: var(--lx-grad); color: #fff; box-shadow: 0 6px 18px var(--lx-glow); }
+.lx-settings-btn-primary:hover { background: var(--lx-grad-hover); }
 
 /* v0.8.42: Tabs + Controller remap UI */
 .lx-settings-tabs {
