@@ -321,6 +321,24 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
     }
   }, []);
 
+  // v1.0: screenshot full-res do frame atual → salva em screenshots/captures/.
+  const screenshotBusyRef = useRef(false);
+  const takeScreenshot = useCallback(async () => {
+    const c = canvasRef.current;
+    if (!c || screenshotBusyRef.current) return;
+    screenshotBusyRef.current = true;
+    try {
+      const dataUrl = c.toDataURL("image/png");
+      await invoke("save_game_screenshot", { gameName: game.name || "game", dataUrl });
+      showStateMsg("ok", t("Screenshot salvo 📸"));
+    } catch (e) {
+      console.warn("screenshot", e);
+      showStateMsg("error", t("Falha no screenshot"));
+    } finally {
+      screenshotBusyRef.current = false;
+    }
+  }, [game.name, showStateMsg]);
+
   const refreshSlots = useCallback(async () => {
     try {
       const list = await invoke("libretro_list_states", { romPath: game.path });
@@ -402,6 +420,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
       if (pressed) {
         if (e.key === "F5") { e.preventDefault(); saveState(0); return; }
         if (e.key === "F8") { e.preventDefault(); loadState(0); return; }
+        if (e.key === "F12") { e.preventDefault(); takeScreenshot(); return; }
       }
       if (e.key === " " || e.code === "Space") {
         e.preventDefault();
@@ -432,7 +451,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, [KEY_MAP, onClose, saveState, loadState, slotsOpen, refreshSlots]);
+  }, [KEY_MAP, onClose, saveState, loadState, slotsOpen, refreshSlots, takeScreenshot]);
 
   // Input gamepad
   useEffect(() => {
@@ -540,6 +559,11 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
       >
         {t("CHEATS")}
       </button>
+      <button
+        className="pb-emulator-cheats"
+        onClick={takeScreenshot}
+        title={t("Tirar screenshot (F12)")}
+      >📸</button>
       {cheatsOpen && (
         <CheatsModal systemId={system.id} gamePath={game.path} onClose={() => setCheatsOpen(false)} />
       )}

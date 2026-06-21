@@ -1421,6 +1421,35 @@ fn scan_roms_overrides(roms_root: Option<String>, overrides: std::collections::H
     }).collect()
 }
 
+// v1.0: scan com progresso real (emite "scan-progress" por sistema) e cancelável.
+static SCAN_CANCEL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[derive(serde::Serialize, Clone)]
+struct ScanProgress { done: usize, total: usize, system: String }
+
+#[tauri::command]
+fn cancel_scan() {
+    SCAN_CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[tauri::command]
+fn scan_roms_progress(app: tauri::AppHandle, roms_root: Option<String>) -> Vec<SystemInfo> {
+    SCAN_CANCEL.store(false, std::sync::atomic::Ordering::Relaxed);
+    let root_path = match roms_root {
+        Some(s) if !s.is_empty() => PathBuf::from(s),
+        _ => current_roms_root(),
+    };
+    let emu_root = current_emulators_root();
+    let total = EMULATORS.len();
+    let mut out = Vec::with_capacity(total);
+    for (i, cfg) in EMULATORS.iter().enumerate() {
+        if SCAN_CANCEL.load(std::sync::atomic::Ordering::Relaxed) { break; }
+        out.push(scan_system(&root_path, &emu_root, cfg));
+        let _ = app.emit("scan-progress", ScanProgress { done: i + 1, total, system: cfg.name.to_string() });
+    }
+    out
+}
+
 // v0.9.2: navegador de arquivos real. Antes o picker de pasta no Android era uma
 // lista fixa de caminhos comuns ("engessado") — agora o user navega o
 // armazenamento de verdade (o app ja tem MANAGE_EXTERNAL_STORAGE, entao
@@ -3561,6 +3590,43 @@ async fn download_libretro_core(filename: String, force: Option<bool>) -> Result
 #[tauri::command]
 fn open_cores_folder() -> Result<(), String> {
     let dir = resolve_cores_dir().ok_or("pasta cores nao resolvida")?;
+    std::fs::create_dir_all(&dir).ok();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        Command::new("explorer.exe").arg(&dir).creation_flags(CREATE_NO_WINDOW)
+            .spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    { Command::new("open").arg(&dir).spawn().map_err(|e| e.to_string())?; }
+    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
+    { Command::new("xdg-open").arg(&dir).spawn().map_err(|e| e.to_string())?; }
+    Ok(())
+}
+
+// v1.0: salva um screenshot do jogo (data-url PNG do canvas) em
+// <dados>/screenshots/captures/<jogo>_<timestamp>.png e devolve o caminho.
+#[tauri::command]
+fn save_game_screenshot(game_name: String, data_url: String) -> Result<String, String> {
+    let bytes = decode_data_url(&data_url).ok_or("data url invalido")?;
+    let dir = screenshots_dir().ok_or("dir screenshots indisponivel")?.join("captures");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let safe = sanitize_filename(&game_name);
+    let safe = if safe.is_empty() { "game".to_string() } else { safe };
+    let path = dir.join(format!("{}_{}.png", safe, ts));
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+// v1.0: abre a pasta de screenshots no explorador (desktop). Android: no-op Ok.
+#[tauri::command]
+fn open_screenshots_folder() -> Result<(), String> {
+    let dir = screenshots_dir().ok_or("pasta screenshots nao resolvida")?.join("captures");
     std::fs::create_dir_all(&dir).ok();
     #[cfg(windows)]
     {
@@ -6528,6 +6594,10 @@ pub fn run() {
             bios_try_auto_import,
             open_system_folder,
             open_cores_folder,
+            save_game_screenshot,
+            open_screenshots_folder,
+            scan_roms_progress,
+            cancel_scan,
             libretro_cores_status,
             download_libretro_core,
             bios_status,

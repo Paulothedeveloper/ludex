@@ -2059,6 +2059,7 @@ export default function LudexLauncher() {
   });
   useEffect(() => { try { localStorage.setItem("ludex.viewMode", viewMode); } catch {} }, [viewMode]);
   const [rescanBusy, setRescanBusy] = useState(false);
+  const [scanProgress, setScanProgress] = useState(null); // v1.0: {done,total,system} durante o scan
   const [achievementToast, setAchievementToast] = useState(null);
   // v0.8.51: notificação de gamepad conectado/desconectado (Windows API gamepadcontroller events)
   const [gamepadEvent, setGamepadEvent] = useState(null);
@@ -2914,15 +2915,22 @@ export default function LudexLauncher() {
   // -------- Re-escanear ROMs --------
   const rescanRoms = useCallback(async () => {
     setRescanBusy(true);
+    setScanProgress({ done: 0, total: 0, system: "" });
+    let unlisten = null;
     try {
-      const data = await invoke("scan_roms", {});
+      // v1.0: scan com progresso real (evento por sistema) e cancelável.
+      unlisten = await listen("scan-progress", (e) => setScanProgress(e.payload));
+      const data = await invoke("scan_roms_progress", {});
       setSystems(data);
       // limpa cache de fetched pra re-tentar capas/screens dos novos
       fetchedSystems.current.clear();
       fetchedShots.current.clear();
     } catch (e) { console.error("rescan", e); }
+    if (unlisten) { try { unlisten(); } catch {} }
+    setScanProgress(null);
     setRescanBusy(false);
   }, []);
+  const cancelScan = useCallback(() => { invoke("cancel_scan").catch(() => {}); }, []);
 
   // v1.0: comandos da Command Palette (ações unificadas). Labels via t().
   const paletteCommands = useMemo(() => {
@@ -2933,6 +2941,7 @@ export default function LudexLauncher() {
       { id: "rescan", label: t("Re-escanear ROMs"), group: t("Ação"), run: () => rescanRoms() },
       { id: "fullscreen", label: t("Alternar tela cheia"), group: t("Ação"), run: () => toggleFullscreen() },
       { id: "retroachievements", label: t("RetroAchievements"), group: t("Ação"), run: () => setRaOverlayOpen(true) },
+      { id: "screenshots", label: t("Abrir pasta de screenshots"), group: t("Ação"), run: () => invoke("open_screenshots_folder").catch(() => {}) },
       { id: "view-grid", label: t("Visualização: Grade"), group: t("Visualização"), run: () => setViewMode("grid") },
       { id: "view-big", label: t("Visualização: Capa grande"), group: t("Visualização"), run: () => setViewMode("big") },
       { id: "view-list", label: t("Visualização: Lista"), group: t("Visualização"), run: () => setViewMode("list") },
@@ -4521,6 +4530,20 @@ export default function LudexLauncher() {
 
       <LudexCommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={paletteCommands} />
       <LudexAchievementsOverlay open={raOverlayOpen} onClose={() => setRaOverlayOpen(false)} />
+
+      {scanProgress && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100070, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: "min(420px, 90vw)", background: "var(--theme-surface,#1f1f1f)", border: "1px solid var(--theme-border,#3a3a3a)", borderRadius: 16, padding: 24, textAlign: "center", boxShadow: "0 24px 70px rgba(0,0,0,.6)" }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: "var(--theme-text,#fff)" }}>{t("Escaneando ROMs…")}</div>
+            <div style={{ fontSize: 13, color: "var(--theme-muted,#aaa)", margin: "6px 0 14px", minHeight: 18 }}>{scanProgress.system || ""}</div>
+            <div style={{ height: 8, borderRadius: 999, background: "var(--theme-card,#2a2a2a)", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${scanProgress.total ? Math.round((scanProgress.done / scanProgress.total) * 100) : 0}%`, background: "var(--lx-grad, linear-gradient(135deg,#7c3aed,#ec4899))", transition: "width .2s ease" }} />
+            </div>
+            <div style={{ fontSize: 12, color: "var(--theme-muted,#aaa)", margin: "10px 0 16px" }}>{scanProgress.done}/{scanProgress.total}</div>
+            <button onClick={cancelScan} style={{ padding: "9px 22px", borderRadius: 9, border: "1px solid var(--theme-border,#3a3a3a)", background: "var(--theme-card,#2a2a2a)", color: "var(--theme-text,#fff)", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}>{t("Cancelar")}</button>
+          </div>
+        </div>
+      )}
 
       {achievementToast && (
         <AchievementToast achievement={achievementToast} onDone={() => setAchievementToast(null)} />

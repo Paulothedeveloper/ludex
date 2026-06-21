@@ -2992,6 +2992,7 @@ function MobileEmulatorView({ system, game, onClose }) {
                   <button key={`l${s}`} className="lmx-emu-menu-pill" onClick={() => { loadState(s); setMenuOpen(false); }}>{t("Carregar {slot}", { slot: s })}</button>
                 ))}
               </div>
+              <button className="lmx-emu-menu-pill" style={{ marginTop: 8 }} onClick={() => { takeScreenshot(); setMenuOpen(false); }}>📸 {t("Tirar screenshot")}</button>
             </div>
 
             <div className="lmx-emu-menu-section">
