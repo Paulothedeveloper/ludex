@@ -1587,6 +1587,20 @@ function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder, onPick
     io.observe(el);
     return () => io.disconnect();
   }, [system.games.length, renderLimit]);
+  // v1.0: gesto de swipe a partir da borda esquerda → voltar (além do back do sistema).
+  const swipeRef = useRef(null);
+  const onEdgeTouchStart = useCallback((e) => {
+    const tx = e.touches[0].clientX;
+    swipeRef.current = tx <= 26 ? { x: tx, y: e.touches[0].clientY, t: Date.now() } : null;
+  }, []);
+  const onEdgeTouchEnd = useCallback((e) => {
+    const st = swipeRef.current; swipeRef.current = null;
+    if (!st) return;
+    const tp = e.changedTouches[0];
+    if (tp.clientX - st.x > 70 && Math.abs(tp.clientY - st.y) < 60 && Date.now() - st.t < 600) {
+      onBack && onBack();
+    }
+  }, [onBack]);
   const showInstallGuide = useCallback(() => {
     mAlert(
       t("Como colocar jogos de {name} no Ludex:", { name: system.name }) + "\n\n" +
@@ -1599,7 +1613,7 @@ function SystemScreen({ system, covers, onBack, onPickGame, onPickFolder, onPick
     );
   }, [system.name]);
   return (
-    <div className="lmx-systemview">
+    <div className="lmx-systemview" onTouchStart={onEdgeTouchStart} onTouchEnd={onEdgeTouchEnd}>
       <header className="lmx-page-header has-back">
         <button className="lmx-back-btn" onClick={onBack}><IconArrowLeft /></button>
         <div className="lmx-systemview-title-wrap">
@@ -2239,6 +2253,7 @@ const DEFAULT_CONTROL_PREFS = {
   hideWhenGamepad: true,
   theme: "default",
   scale: 1,
+  opacity: 1, // v1.0: opacidade dos controles virtuais (0.3–1)
   groupScale: { dpad: 1, face: 1, shoulders: 1, system: 1, analog: 1 },
 };
 // v0.9.13: temas do app (paridade com o launcher do PC). Aplicado via data-theme.
@@ -3019,6 +3034,12 @@ function MobileEmulatorView({ system, game, onClose }) {
                 <span className="lmx-emu-menu-val">{Math.round(ctrlPrefs.scale * 100)}%</span>
                 <button className="lmx-emu-menu-pill" onClick={() => updateCtrlPrefs({ scale: Math.min(1.6, +(ctrlPrefs.scale + 0.1).toFixed(2)) })}>+</button>
               </div>
+              <div className="lmx-emu-menu-sublabel">{t("Opacidade")}</div>
+              <div className="lmx-emu-menu-row">
+                <button className="lmx-emu-menu-pill" onClick={() => updateCtrlPrefs({ opacity: Math.max(0.3, +(( ctrlPrefs.opacity ?? 1) - 0.1).toFixed(2)) })}>−</button>
+                <span className="lmx-emu-menu-val">{Math.round((ctrlPrefs.opacity ?? 1) * 100)}%</span>
+                <button className="lmx-emu-menu-pill" onClick={() => updateCtrlPrefs({ opacity: Math.min(1, +(( ctrlPrefs.opacity ?? 1) + 0.1).toFixed(2)) })}>+</button>
+              </div>
               <div className="lmx-emu-menu-sublabel">{t("Tema do controle")}</div>
               <div className="lmx-emu-menu-row" style={{ flexWrap: "wrap" }}>
                 {CONTROL_THEMES.map(([id, lbl]) => (
@@ -3158,6 +3179,7 @@ function MobileEmulatorView({ system, game, onClose }) {
            className={`lmx-emu-controls lmx-ctrl-theme-${ctrlPrefs.theme} ${editMode ? "lmx-emu-edit" : ""} ${gamepadConnected && !editMode ? (ctrlPrefs.hideWhenGamepad ? "lmx-emu-controls-hidden" : "lmx-emu-controls-dim") : ""}`}
            data-face-count={layout.face.length}
            data-has-analog={layout.analog ? "1" : undefined}
+           style={{ opacity: editMode ? 1 : (ctrlPrefs.opacity ?? 1) }}
            onTouchStart={onControlsTouchStart}
            onTouchMove={onControlsTouchMove}
            onTouchEnd={onControlsTouchEnd}
@@ -3964,6 +3986,22 @@ function StatsDashboardCard({ systems }) {
   }
   const maxDay = Math.max(1, ...last7.map(d => d.total));
 
+  // v1.0: heatmap de atividade (~12 semanas / 84 dias), estilo GitHub.
+  const HEAT_DAYS = 84;
+  const heat = [];
+  let heatMax = 1;
+  for (let d = HEAT_DAYS - 1; d >= 0; d--) {
+    const dayStart = now - d * dayMs;
+    let total = 0;
+    for (const s of Object.values(stats)) {
+      if (s.lastSession && s.lastSession >= dayStart - dayMs && s.lastSession <= dayStart) {
+        total += s.totalSec || 0;
+      }
+    }
+    heat.push({ ts: dayStart, total });
+    if (total > heatMax) heatMax = total;
+  }
+
   return (
     <section className="lmx-settings-card">
       <div className="lmx-settings-label">{t("Estatísticas")}</div>
@@ -4023,6 +4061,31 @@ function StatsDashboardCard({ systems }) {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* v1.0: heatmap de atividade (12 semanas) */}
+      <div style={{ marginTop: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#c4b5fd", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>{t("Atividade (12 semanas)")}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 3 }}>
+          {Array.from({ length: 12 }).map((_, col) => (
+            <div key={col} style={{ display: "grid", gridTemplateRows: "repeat(7, 1fr)", gap: 3 }}>
+              {Array.from({ length: 7 }).map((_, row) => {
+                const cell = heat[col * 7 + row];
+                const v = cell ? cell.total : 0;
+                const lvl = v <= 0 ? 0 : Math.min(4, Math.ceil((v / heatMax) * 4));
+                const bg = lvl === 0 ? "rgba(255,255,255,0.06)" : `rgba(124,58,237,${(0.28 + lvl * 0.18).toFixed(2)})`;
+                return (
+                  <div
+                    key={row}
+                    title={cell ? `${new Date(cell.ts).toLocaleDateString(currentLocale())}: ${formatPlayTime(v)}` : ""}
+                    style={{ aspectRatio: "1 / 1", borderRadius: 3, background: bg }}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 6 }}>{t("Mais escuro = mais tempo de jogo no dia.")}</div>
       </div>
     </section>
   );
