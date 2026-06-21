@@ -4,8 +4,8 @@ compatibility_date = "2024-11-01"
 
 # Variáveis NÃO-secretas (ok ficar aqui no repo)
 [vars]
-GUMROAD_PRODUCT_ID = "ludex"                 # permalink do produto Gumroad
-ADMIN_EMAIL = "pauloadriel98@gmail.com"       # email admin (bypassa limite de device)
+GUMROAD_PRODUCT_ID = "YfReCcWOSiwsk37jDMSwJw=="  # product_id real (== secrets.rs)
+ADMIN_EMAIL = "paulobatista19988@gmail.com"      # email admin (== secrets.rs)
 TOKEN_TTL_DAYS = "14"                          # validade do token assinado
 MAX_DEVICES = "2"                              # referência (limite de PCs por key)
 

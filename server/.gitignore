@@ -3,3 +3,7 @@ node_modules/
 .wrangler/
 dist/
 *.log
+# chaves locais — NUNCA commitar
+pubkey.hex
+privkey.tmp
+keygen.mjs
