@@ -4,6 +4,18 @@
 
 // Bullets curtos e claros por versão (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "1.0.0": [
+    "O Ludex agora fala 6 idiomas (Português, Inglês, Espanhol, Francês, Chinês e Russo) — escolha na tela de entrada ou em Ajustes, troca na hora sem reiniciar.",
+    "Nova identidade visual: logo e ícone novos em todo o app.",
+    "Paleta de comandos (Ctrl+K) no PC: buscar, ir direto pra um console, trocar tema, screenshot — tudo num lugar só.",
+    "Modos de visualização da biblioteca: grade, capa grande ou lista.",
+    "Overlay de RetroAchievements: seus pontos, ranking e conquistas recentes num só lugar.",
+    "Screenshot dentro do jogo (F12 no PC, menu no celular), salvo numa pasta própria.",
+    "Re-escanear ROMs agora mostra barra de progresso e botão de cancelar.",
+    "Biblioteca muito mais leve e fluida em coleções grandes (render progressivo do grid).",
+    "Celular: nova tela de boas-vindas com escolha de idioma logo na entrada.",
+    "Tutorial atualizado com as novidades e os atalhos novos.",
+  ],
   "0.9.36": [
     "Celular: ao abrir um jogo, a tela trava em horizontal automaticamente (mesmo se a rotação do sistema estiver bloqueada).",
     "Celular: layout dos botões do PS1/PS2/PSP em horizontal corrigido — o offset do modo editar era de portrait e jogava os botões pra fora da tela em landscape (causa do 'enlouquece' e 'não responde').",
