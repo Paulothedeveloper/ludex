@@ -164,6 +164,13 @@ const TOUR_STEPS = [
     body: "Clique pra abrir detalhes (capa, screenshots, sua nota, tempo jogado, status). Duplo-clique pra iniciar. Botao direito abre menu com 'Remover', 'Favorito', 'Renomear' etc.",
     placement: "top",
   },
+  {
+    id: "power",
+    selector: '[data-tour="sort"]',
+    title: "Atalhos & visualização",
+    body: "Ctrl+K abre a paleta de comandos — buscar, ir direto pra um console, trocar tema, screenshot, tudo num lugar só. Os 3 ícones ao lado trocam a visualização: grade, capa grande ou lista. Dentro do jogo, F12 tira screenshot.",
+    placement: "bottom",
+  },
 ];
 
 function useTargetRect(selector, deps) {

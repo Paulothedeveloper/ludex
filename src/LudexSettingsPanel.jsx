@@ -908,9 +908,11 @@ export default function SettingsPanel({
             <dt>ENTER</dt><dd>{t("Lançar jogo")}</dd>
             <dt>F</dt><dd>{t("Marcar favorito")}</dd>
             <dt>/</dt><dd>{t("Buscar jogo")}</dd>
+            <dt>Ctrl+K</dt><dd>{t("Paleta de comandos (todas as ações)")}</dd>
             <dt>S</dt><dd>{t("Configurações")}</dd>
             <dt>P</dt><dd>{t("Trocar perfil")}</dd>
             <dt>F11</dt><dd>{t("Tela cheia")}</dd>
+            <dt>F12</dt><dd>{t("Screenshot (no jogo)")}</dd>
             <dt>ESC</dt><dd>{t("Voltar / Fechar painel")}</dd>
           </dl>
           <p className="pb-settings-hint" style={{ marginTop: 12 }}>
