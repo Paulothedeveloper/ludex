@@ -520,7 +520,7 @@ export default function LudexOnboarding({ onComplete, tourOnly = false }) {
       <div className="lx-firstrun-root">
         <div className="lx-firstrun-bg" />
         <div className="lx-firstrun-card lx-firstrun-card-intro">
-          <div className="lx-firstrun-logo">L U D E X</div>
+          <div className="lx-firstrun-logo"><img src="/ludex-wordmark.png" alt="Ludex" style={{ width: "min(340px, 72%)", height: "auto", display: "block", margin: "0 auto" }} /></div>
           <p className="lx-firstrun-sub">
             {t("Sua biblioteca retro em um lugar só — 27+ sistemas embedded, controle nativo, save states, RetroAchievements e Discord Rich Presence.")}
           </p>

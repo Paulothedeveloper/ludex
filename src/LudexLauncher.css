@@ -4687,15 +4687,9 @@
   width: min(520px, 100%);
 }
 .lx-firstrun-logo {
-  font-size: 38px;
-  font-weight: 800;
-  letter-spacing: 8px;
-  background: linear-gradient(135deg, #c4b5fd, #ec4899);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  /* v1.0: agora contém a logo (img) — sem gradiente-texto pra não vazar atrás do PNG */
   margin-bottom: 18px;
-  text-shadow: 0 0 22px rgba(196, 181, 253, 0.18);
+  filter: drop-shadow(0 0 22px rgba(196, 181, 253, 0.22));
 }
 .lx-firstrun-title {
   margin: 0 0 8px;
