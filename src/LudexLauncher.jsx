@@ -45,6 +45,7 @@ import {
 // v0.9.0: SearchOverlay extraido pra arquivo proprio (~194L removidas)
 import SearchOverlay from "./LudexSearchOverlay";
 import LudexCommandPalette from "./LudexCommandPalette";
+import LudexAchievementsOverlay from "./LudexAchievementsOverlay";
 // v0.9.0: GameDetailPanel extraido pra arquivo proprio (~222L removidas)
 import GameDetailPanel from "./LudexGameDetailPanel";
 // v0.9.0: SettingsPanel extraido pra arquivo proprio (~636L removidas).
@@ -2005,6 +2006,7 @@ export default function LudexLauncher() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchClosing, setSearchClosing] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false); // v1.0: command palette (Ctrl+K)
+  const [raOverlayOpen, setRaOverlayOpen] = useState(false); // v1.0: overlay RetroAchievements
   const pendingJumpRef = useRef(null);
   const [welcomeBack, setWelcomeBack] = useState(false);
   const [systemEnter, setSystemEnter] = useState({ id: null, key: 0 });
@@ -2930,6 +2932,7 @@ export default function LudexLauncher() {
       { id: "settings", label: t("Abrir Configurações"), group: t("Ação"), run: () => setSettingsOpen(true) },
       { id: "rescan", label: t("Re-escanear ROMs"), group: t("Ação"), run: () => rescanRoms() },
       { id: "fullscreen", label: t("Alternar tela cheia"), group: t("Ação"), run: () => toggleFullscreen() },
+      { id: "retroachievements", label: t("RetroAchievements"), group: t("Ação"), run: () => setRaOverlayOpen(true) },
       { id: "view-grid", label: t("Visualização: Grade"), group: t("Visualização"), run: () => setViewMode("grid") },
       { id: "view-big", label: t("Visualização: Capa grande"), group: t("Visualização"), run: () => setViewMode("big") },
       { id: "view-list", label: t("Visualização: Lista"), group: t("Visualização"), run: () => setViewMode("list") },
@@ -3295,6 +3298,7 @@ export default function LudexLauncher() {
     padCtxRef.current.profilesOpen = profilesOpen;
     padCtxRef.current.searchOpen = searchOpen;
     padCtxRef.current.cmdOpen = cmdOpen;
+    padCtxRef.current.raOverlayOpen = raOverlayOpen;
     padCtxRef.current.launching = launching;
     padCtxRef.current.emulatorOpen = !!emulator;
     padCtxRef.current.focusZone = focusZone;
@@ -3432,7 +3436,7 @@ export default function LudexLauncher() {
         // v0.9.37: firstRunActive incluso pra o loop principal NÃO agir durante o
         // onboarding/criação de perfil — senão o D-pad navega a home e A dá launch
         // num jogo atrás, em paralelo com o OSK (que agora tem polling próprio).
-        const modalActive = ctx.settingsOpen || ctx.profilesOpen || ctx.searchOpen || ctx.cmdOpen || ctx.previewOpen || ctx.systemSettingsOpen || ctx.firstRunActive;
+        const modalActive = ctx.settingsOpen || ctx.profilesOpen || ctx.searchOpen || ctx.cmdOpen || ctx.raOverlayOpen || ctx.previewOpen || ctx.systemSettingsOpen || ctx.firstRunActive;
         if (modalActive) {
           const isStandardM = pad.mapping === "standard";
           const ax = pad.axes[0] || 0;
@@ -4516,6 +4520,7 @@ export default function LudexLauncher() {
       )}
 
       <LudexCommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={paletteCommands} />
+      <LudexAchievementsOverlay open={raOverlayOpen} onClose={() => setRaOverlayOpen(false)} />
 
       {achievementToast && (
         <AchievementToast achievement={achievementToast} onDone={() => setAchievementToast(null)} />
