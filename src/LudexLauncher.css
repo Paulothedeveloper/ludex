@@ -3100,6 +3100,80 @@
 .pb-grid::-webkit-scrollbar-track { background: transparent; }
 .pb-grid::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
 
+/* v1.0: toggle de visualização (grade / capa grande / lista) */
+.pb-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 999px;
+  padding: 3px;
+}
+.pb-view-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 26px;
+  border: 0; border-radius: 999px;
+  background: transparent; color: var(--theme-muted);
+  cursor: pointer; transition: background .15s, color .15s;
+}
+.pb-view-btn:hover { color: var(--theme-text); }
+.pb-view-btn.active { background: var(--lx-grad); color: #fff; }
+
+/* nome em texto: escondido na grade/capa, visível só na lista */
+.pb-card-name { display: none; }
+
+/* --- modo CAPA GRANDE (mesma rolagem horizontal, cards maiores) --- */
+.pb-grid[data-view="big"] .pb-card { width: 360px; height: 360px; }
+
+/* --- modo LISTA (coluna vertical, linhas compactas) --- */
+.pb-grid-wrap:has(.pb-grid[data-view="list"]) { overflow: visible; }
+.pb-grid[data-view="list"] {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: calc(100vh - 300px);
+  padding: 14px 24px 24px;
+}
+.pb-grid[data-view="list"] .pb-card-wrap { width: 100%; max-width: 860px; }
+.pb-grid[data-view="list"] .pb-card {
+  width: 100%; height: 64px;
+  flex-direction: row; align-items: center; gap: 14px;
+  padding: 8px 14px; border-radius: 12px;
+  animation: none;
+}
+.pb-grid[data-view="list"] .pb-card.focused { transform: translateX(4px) scale(1.0); }
+.pb-grid[data-view="list"] .pb-card-cover {
+  position: static; width: 46px; height: 48px; flex: 0 0 auto;
+  border-radius: 7px;
+}
+.pb-grid[data-view="list"] .pb-card-bg { display: none; }
+.pb-grid[data-view="list"] .pb-card-icon {
+  position: static; width: 46px; height: 48px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+}
+.pb-grid[data-view="list"] .pb-card-title { display: none; }
+.pb-grid[data-view="list"] .pb-card-name {
+  display: block; flex: 1 1 auto; min-width: 0; order: 1;
+  font-size: 14px; font-weight: 600; color: var(--theme-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pb-grid[data-view="list"] .pb-card-cover,
+.pb-grid[data-view="list"] .pb-card-icon { order: 0; }
+/* na lista, badges decorativos viram metadados inline à direita */
+.pb-grid[data-view="list"] .pb-card-fav,
+.pb-grid[data-view="list"] .pb-card-discs,
+.pb-grid[data-view="list"] .pb-card-status,
+.pb-grid[data-view="list"] .pb-card-rating,
+.pb-grid[data-view="list"] .pb-card-stats {
+  position: static; flex: 0 0 auto; order: 2;
+  margin: 0 0 0 8px; top: auto; right: auto; left: auto; bottom: auto;
+}
+.pb-grid[data-view="list"] .pb-card-resync { display: none; }
+
 .pb-card-wrap {
   position: relative;
   flex: 0 0 auto;

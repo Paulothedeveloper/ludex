@@ -44,6 +44,7 @@ import {
 } from "./ludexUtils";
 // v0.9.0: SearchOverlay extraido pra arquivo proprio (~194L removidas)
 import SearchOverlay from "./LudexSearchOverlay";
+import LudexCommandPalette from "./LudexCommandPalette";
 // v0.9.0: GameDetailPanel extraido pra arquivo proprio (~222L removidas)
 import GameDetailPanel from "./LudexGameDetailPanel";
 // v0.9.0: SettingsPanel extraido pra arquivo proprio (~636L removidas).
@@ -1964,6 +1965,8 @@ const GameCardInner = React.memo(function GameCardInner({ hasCover, cover, name,
       {playSec > 0 && (
         <div className="pb-card-stats"><span className="pb-card-stat-time">{formatPlayTime(playSec)}</span></div>
       )}
+      {/* v1.0: nome em texto — só aparece no modo lista (CSS), grade/capa usam a própria capa */}
+      <div className="pb-card-name">{name}</div>
     </>
   );
 });
@@ -2001,6 +2004,8 @@ export default function LudexLauncher() {
   const [launching, setLaunching] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchClosing, setSearchClosing] = useState(false);
+  const [cmdOpen, setCmdOpen] = useState(false); // v1.0: command palette (Ctrl+K)
+  const pendingJumpRef = useRef(null);
   const [welcomeBack, setWelcomeBack] = useState(false);
   const [systemEnter, setSystemEnter] = useState({ id: null, key: 0 });
   const [quitting, setQuitting] = useState(false);
@@ -2046,6 +2051,11 @@ export default function LudexLauncher() {
   const [resumePrompt, setResumePrompt] = useState(null);
   // Ordenacao do grid de jogos: "default" | "az" | "playtime" | "recent" | "fav"
   const [sortMode, setSortMode] = useState("default");
+  // v1.0: modo de visualização do grid (grid padrão / lista / capa grande), persistido.
+  const [viewMode, setViewMode] = useState(() => {
+    try { return localStorage.getItem("ludex.viewMode") || "grid"; } catch { return "grid"; }
+  });
+  useEffect(() => { try { localStorage.setItem("ludex.viewMode", viewMode); } catch {} }, [viewMode]);
   const [rescanBusy, setRescanBusy] = useState(false);
   const [achievementToast, setAchievementToast] = useState(null);
   // v0.8.51: notificação de gamepad conectado/desconectado (Windows API gamepadcontroller events)
@@ -2183,6 +2193,18 @@ export default function LudexLauncher() {
   }, [favoritesSystem, systems, selectedCategoryId]);
 
   const selected = displayedSystems[selectedSystemIdx];
+
+  // v1.0: pula direto pra um console (usado pela Command Palette). Se já está em
+  // "all", acha o índice na hora; senão troca pra "all" e aplica no efeito abaixo.
+  const jumpToConsole = useCallback((id) => {
+    if (selectedCategoryId === "all") {
+      const idx = displayedSystems.findIndex((s) => s.id === id);
+      if (idx >= 0) setSelectedSystemIdx(idx);
+    } else {
+      pendingJumpRef.current = id;
+      setSelectedCategoryId("all");
+    }
+  }, [selectedCategoryId, displayedSystems]);
 
   // v0.8.49: dividi em 2 memos pra evitar re-sort em mudancas de perfil/favoritos.
   // Sort soh refaz quando selected ou sortMode muda; filtros aplicam por cima.
@@ -2522,6 +2544,14 @@ export default function LudexLauncher() {
   }, [visibleGames.length, selectedGameIdx]);
   // Quando trocar categoria, volta pro primeiro sistema (evita idx fora de range)
   useEffect(() => { setSelectedSystemIdx(0); }, [selectedCategoryId]);
+  // v1.0: aplica o jump pendente da Command Palette após displayedSystems atualizar
+  // (roda depois do reset acima, então o índice-alvo prevalece sobre o 0).
+  useEffect(() => {
+    if (!pendingJumpRef.current) return;
+    const idx = displayedSystems.findIndex((s) => s.id === pendingJumpRef.current);
+    if (idx >= 0) setSelectedSystemIdx(idx);
+    pendingJumpRef.current = null;
+  }, [displayedSystems]);
 
   useEffect(() => {
     if (activeCardRef.current) {
@@ -2892,6 +2922,30 @@ export default function LudexLauncher() {
     setRescanBusy(false);
   }, []);
 
+  // v1.0: comandos da Command Palette (ações unificadas). Labels via t().
+  const paletteCommands = useMemo(() => {
+    const cmds = [
+      { id: "search", label: t("Buscar jogos"), group: t("Ação"), run: () => setSearchOpen(true) },
+      { id: "random", label: t("Jogo aleatório (Surpresa!)"), group: t("Ação"), run: () => pickRandomGame() },
+      { id: "settings", label: t("Abrir Configurações"), group: t("Ação"), run: () => setSettingsOpen(true) },
+      { id: "rescan", label: t("Re-escanear ROMs"), group: t("Ação"), run: () => rescanRoms() },
+      { id: "fullscreen", label: t("Alternar tela cheia"), group: t("Ação"), run: () => toggleFullscreen() },
+      { id: "view-grid", label: t("Visualização: Grade"), group: t("Visualização"), run: () => setViewMode("grid") },
+      { id: "view-big", label: t("Visualização: Capa grande"), group: t("Visualização"), run: () => setViewMode("big") },
+      { id: "view-list", label: t("Visualização: Lista"), group: t("Visualização"), run: () => setViewMode("list") },
+      { id: "sort-default", label: t("Ordenar: Padrão"), group: t("Ordenar"), run: () => setSortMode("default") },
+      { id: "sort-az", label: t("Ordenar: A-Z"), group: t("Ordenar"), run: () => setSortMode("az") },
+      { id: "sort-recent", label: t("Ordenar: Recentes"), group: t("Ordenar"), run: () => setSortMode("recent") },
+      { id: "sort-playtime", label: t("Ordenar: Mais jogados"), group: t("Ordenar"), run: () => setSortMode("playtime") },
+      { id: "sort-fav", label: t("Ordenar: Favoritos"), group: t("Ordenar"), run: () => setSortMode("fav") },
+    ];
+    for (const s of systems) {
+      if (!s.games || s.games.length === 0) continue;
+      cmds.push({ id: `go-${s.id}`, label: t("Ir para {name}", { name: s.name }), group: t("Console"), hint: s.id, run: () => jumpToConsole(s.id) });
+    }
+    return cmds;
+  }, [systems, jumpToConsole, pickRandomGame, rescanRoms, toggleFullscreen]);
+
   // -------- Setup keys do Switch --------
   const setupSwitchKeys = useCallback(async () => {
     setSwitchKeysStatus({ busy: true, message: null, kind: null });
@@ -3216,6 +3270,7 @@ export default function LudexLauncher() {
     settingsOpen: false,
     profilesOpen: false,
     searchOpen: false,
+    cmdOpen: false,
     previewOpen: false,
     launching: false,
     emulatorOpen: false,
@@ -3239,6 +3294,7 @@ export default function LudexLauncher() {
     padCtxRef.current.settingsOpen = settingsOpen;
     padCtxRef.current.profilesOpen = profilesOpen;
     padCtxRef.current.searchOpen = searchOpen;
+    padCtxRef.current.cmdOpen = cmdOpen;
     padCtxRef.current.launching = launching;
     padCtxRef.current.emulatorOpen = !!emulator;
     padCtxRef.current.focusZone = focusZone;
@@ -3254,6 +3310,18 @@ export default function LudexLauncher() {
     padCtxRef.current.setSelectedCategoryId = setSelectedCategoryId; // v0.8.41
     padCtxRef.current.firstRunActive = firstRunActive; // v0.9.37: gate do loop durante onboarding/OSK
   });
+
+  // v1.0: Ctrl+K (ou Cmd+K) abre/fecha a Command Palette.
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setCmdOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     if (!splashDone) return;
@@ -3364,7 +3432,7 @@ export default function LudexLauncher() {
         // v0.9.37: firstRunActive incluso pra o loop principal NÃO agir durante o
         // onboarding/criação de perfil — senão o D-pad navega a home e A dá launch
         // num jogo atrás, em paralelo com o OSK (que agora tem polling próprio).
-        const modalActive = ctx.settingsOpen || ctx.profilesOpen || ctx.searchOpen || ctx.previewOpen || ctx.systemSettingsOpen || ctx.firstRunActive;
+        const modalActive = ctx.settingsOpen || ctx.profilesOpen || ctx.searchOpen || ctx.cmdOpen || ctx.previewOpen || ctx.systemSettingsOpen || ctx.firstRunActive;
         if (modalActive) {
           const isStandardM = pad.mapping === "standard";
           const ax = pad.axes[0] || 0;
@@ -4202,13 +4270,28 @@ export default function LudexLauncher() {
                       onClick={() => { sfx.click(); setSortMode(opt.id); }}
                     >{t(opt.label)}</button>
                   ))}
+                  <div className="pb-view-toggle" role="group" aria-label={t("Modo de visualização")}>
+                    {[
+                      { id: "grid", title: t("Grade"), icon: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></> },
+                      { id: "big",  title: t("Capa grande"), icon: <><rect x="3" y="3" width="8.5" height="8.5" rx="1.5"/><rect x="12.5" y="3" width="8.5" height="8.5" rx="1.5"/><rect x="3" y="12.5" width="8.5" height="8.5" rx="1.5"/><rect x="12.5" y="12.5" width="8.5" height="8.5" rx="1.5"/></> },
+                      { id: "list", title: t("Lista"), icon: <><rect x="3" y="4" width="18" height="3.2" rx="1.5"/><rect x="3" y="10.4" width="18" height="3.2" rx="1.5"/><rect x="3" y="16.8" width="18" height="3.2" rx="1.5"/></> },
+                    ].map((v) => (
+                      <button
+                        key={v.id}
+                        className={`pb-view-btn ${viewMode === v.id ? "active" : ""}`}
+                        title={v.title}
+                        aria-label={v.title}
+                        onClick={() => { sfx.click(); setViewMode(v.id); }}
+                      ><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden>{v.icon}</svg></button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
 
             {visibleGames.length > 0 && (
               <div className="pb-grid-wrap" key={`grid-${selected.id}-${sortMode}`} data-tour="grid">
-                <div className="pb-grid">
+                <div className="pb-grid" data-view={viewMode}>
                   {visibleGames.slice(0, gridLimit).map((g, i) => {
                     const cover = covers[g.path];
                     const hasCover = typeof cover === "string" && cover.length > 0;
@@ -4431,6 +4514,8 @@ export default function LudexLauncher() {
           }}
         />
       )}
+
+      <LudexCommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={paletteCommands} />
 
       {achievementToast && (
         <AchievementToast achievement={achievementToast} onDone={() => setAchievementToast(null)} />
