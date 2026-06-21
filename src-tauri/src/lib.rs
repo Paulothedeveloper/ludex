@@ -5789,7 +5789,15 @@ fn license_gate_ok() -> bool {
     }
     #[cfg(target_os = "android")]
     {
-        true
+        // v1.0.1 HARDENING: enforça a demo NO RUST (antes retornava `true` e a demo
+        // era checada só no frontend JS — editável: decompila APK, pula a tela de
+        // "demo expirou" = acesso grátis permanente). Agora o launch_game/libretro
+        // só roda se a demo NÃO expirou (a mesma lógica do android_demo_status, que
+        // já considera o admin_unlock por license). Quem o frontend liberava continua
+        // liberado; quem expirou é barrado no nativo (precisa patchar o .so, não só JS).
+        // NOTA: o `android_admin_unlock` ainda é um bool local forjável — fix completo
+        // é o token assinado pelo servidor (fase C). Isto fecha o furo trivial do JS.
+        !android_demo_status().expired
     }
     #[cfg(not(target_os = "android"))]
     {
