@@ -212,6 +212,7 @@ const DICT = {
   "Você atualizou e chegou na v{v}. Resumo das mudanças:": { en: "You updated and reached v{v}. Summary of changes:", es: "Actualizaste y llegaste a la v{v}. Resumen de cambios:", fr: "Vous avez mis à jour vers la v{v}. Résumé des changements :", zh: "您已更新至 v{v}。更新摘要：", ru: "Вы обновились до v{v}. Сводка изменений:" },
   "Resumo rápido desta atualização.": { en: "Quick summary of this update.", es: "Resumen rápido de esta actualización.", fr: "Résumé rapide de cette mise à jour.", zh: "本次更新的简要说明。", ru: "Краткая сводка этого обновления." },
   "Entendi": { en: "Got it", es: "Entendido", fr: "Compris", zh: "知道了", ru: "Понятно" },
+  "Começar": { en: "Get started", es: "Comenzar", fr: "Commencer", zh: "开始", ru: "Начать" },
 
   // ---- Avatar labels (DEFAULT_AVATARS) ----
   "Roxo Ludex": { en: "Ludex Purple", es: "Morado Ludex", fr: "Violet Ludex", zh: "Ludex 紫", ru: "Фиолетовый Ludex" },

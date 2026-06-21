@@ -143,6 +143,36 @@ function MobileSplash() {
   );
 }
 
+// v1.0: tela de boas-vindas do celular (1x) — wordmark + frase + escolha de idioma
+// + Começar. Espírito da tela de entrada do PC (LicenseGate). Idioma reativo.
+function MobileWelcome({ onDone }) {
+  const cur = getLanguage();
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 100090, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, padding: 28, textAlign: "center", background: "radial-gradient(1200px 600px at 50% 0%, rgba(124,58,237,0.35), transparent 60%), #140f24", overflowY: "auto" }}>
+      <img src="/ludex-wordmark.png" alt="Ludex" style={{ width: "min(300px, 74vw)", height: "auto" }} />
+      <p style={{ margin: 0, color: "rgba(255,255,255,0.7)", fontSize: 15, maxWidth: 340 }}>{t("Sua biblioteca retro em um lugar só")}</p>
+      <div style={{ width: "100%", maxWidth: 360 }}>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>{t("Idioma")}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          {LANGUAGES.map((lng) => (
+            <button
+              key={lng.code}
+              onClick={() => { setLanguage(lng.code); try { sfx.confirm(); haptic(8); } catch {} }}
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, border: cur === lng.code ? "1px solid transparent" : "1px solid rgba(255,255,255,0.14)", background: cur === lng.code ? "var(--lx-grad, linear-gradient(135deg,#7c3aed,#ec4899))" : "rgba(255,255,255,0.06)", color: "#fff", fontFamily: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+            >
+              <span style={{ fontSize: 18 }}>{lng.flag}</span><span>{lng.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <button
+        onClick={() => { try { sfx.confirm(); haptic(12); } catch {} onDone(); }}
+        style={{ marginTop: 6, width: "min(360px, 86vw)", padding: "14px 0", borderRadius: 12, border: 0, background: "var(--lx-grad, linear-gradient(135deg,#7c3aed,#ec4899))", color: "#fff", fontFamily: "inherit", fontSize: 16, fontWeight: 800, cursor: "pointer" }}
+      >{t("Começar")}</button>
+    </div>
+  );
+}
+
 // ============================================================
 // === COMPONENTE PRINCIPAL ===================================
 // ============================================================
@@ -160,6 +190,10 @@ export default function LudexMobile() {
   // sumia (botão "Começar" travado). Agora é state de verdade.
   const [tutorialDone, setTutorialDone] = useState(() => isFirstRunDone());
   const [splashDone, setSplashDone] = useState(false); // v0.9.7: splash de abertura
+  // v1.0: tela de boas-vindas (1x) com escolha de idioma — paridade com a entrada do PC.
+  const [welcomed, setWelcomed] = useState(() => {
+    try { return localStorage.getItem("ludex.mobile.welcomed") === "1"; } catch { return false; }
+  });
   const [whatsNew, setWhatsNew] = useState(null); // v0.9.8: novidades pos-update
   const [profileEditorOpen, setProfileEditorOpen] = useState(false); // v0.9.4
   const [sysFolderPick, setSysFolderPick] = useState(null); // v0.9.5: systemId sendo configurado
@@ -795,6 +829,7 @@ export default function LudexMobile() {
       )}
 
       {/* v0.9.7: splash de abertura */}
+      {!welcomed && <MobileWelcome onDone={() => { try { localStorage.setItem("ludex.mobile.welcomed", "1"); } catch {} setWelcomed(true); }} />}
       {!splashDone && <MobileSplash />}
       {/* v0.9.8: novidades pos-update (depois do splash e do tutorial) */}
       {whatsNew && splashDone && tutorialDone && (
@@ -3432,6 +3467,15 @@ function TutorialBanner({ step, rect, idx, total, onNext, onPrev, onSkip }) {
       <div className="lmx-tour-step">{t("Passo {n} de {total}", { n: idx + 1, total })}</div>
       <h2 className="lmx-tour-title">{t(step.title)}</h2>
       <p className="lmx-tour-body">{t(step.body)}</p>
+      {step.id === "done" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 12px", fontSize: 13, color: "rgba(255,255,255,0.6)" }}>
+          <span>{t("Feito com 💜 por")} <strong style={{ color: "#fff" }}>Paulo</strong></span>
+          <button
+            onClick={() => { invoke("open_url", { url: "https://instagram.com/paulo.videodev" }).catch(() => {}); }}
+            style={{ marginLeft: "auto", background: "var(--lx-grad, linear-gradient(135deg,#7c3aed,#ec4899))", color: "#fff", border: 0, borderRadius: 999, padding: "6px 12px", fontWeight: 700, fontFamily: "inherit", fontSize: 12.5 }}
+          >📸 @paulo.videodev</button>
+        </div>
+      )}
       <div className="lmx-tour-actions">
         <button className="lmx-tour-btn lmx-tour-btn-ghost" onClick={onSkip}>{t("Pular")}</button>
         <div className="lmx-tour-nav">
