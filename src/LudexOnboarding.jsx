@@ -171,6 +171,14 @@ const TOUR_STEPS = [
     body: "Ctrl+K abre a paleta de comandos — buscar, ir direto pra um console, trocar tema, screenshot, tudo num lugar só. Os 3 ícones ao lado trocam a visualização: grade, capa grande ou lista. Dentro do jogo, F12 tira screenshot.",
     placement: "bottom",
   },
+  {
+    // selector que não casa com nada → rect null → banner centralizado + blur cheio
+    id: "end",
+    selector: '[data-tour="__end__"]',
+    title: "Bom jogo! 🎮",
+    body: "É isso! Sua biblioteca retro tá pronta. Aproveite — e bons jogos.",
+    placement: "center",
+  },
 ];
 
 function useTargetRect(selector, deps) {
@@ -264,6 +272,16 @@ function TourBanner({ step, rect, idx, total, onNext, onPrev, onSkip }) {
       </div>
       <h2 className="lx-tour-banner-title">{t(step.title)}</h2>
       <p className="lx-tour-banner-body">{t(step.body)}</p>
+      {step.id === "end" && (
+        <div className="lx-tour-credit" style={{ display: "flex", alignItems: "center", gap: 8, margin: "2px 0 14px", fontSize: 13, color: "var(--theme-muted, #aaa)" }}>
+          <span>{t("Feito com 💜 por")} <strong style={{ color: "var(--theme-text, #fff)" }}>Paulo</strong></span>
+          <button
+            onClick={() => invoke("open_url", { url: "https://instagram.com/paulo.videodev" }).catch(() => {})}
+            style={{ marginLeft: "auto", background: "var(--lx-grad, linear-gradient(135deg,#7c3aed,#ec4899))", color: "#fff", border: 0, borderRadius: 999, padding: "5px 12px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", fontSize: 12.5 }}
+            title="Instagram"
+          >📸 @paulo.videodev</button>
+        </div>
+      )}
       <div className="lx-tour-banner-actions">
         <button className="lx-tour-btn lx-tour-btn-ghost" onClick={onSkip}>
           {t("Pular tour")}

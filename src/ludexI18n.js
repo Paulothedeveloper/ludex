@@ -1503,6 +1503,10 @@ const DICT = {
   "Atalhos & visualização": { en: "Shortcuts & view", es: "Atajos y visualización", fr: "Raccourcis & affichage", zh: "快捷键与视图", ru: "Горячие клавиши и вид" },
   "Ctrl+K abre a paleta de comandos — buscar, ir direto pra um console, trocar tema, screenshot, tudo num lugar só. Os 3 ícones ao lado trocam a visualização: grade, capa grande ou lista. Dentro do jogo, F12 tira screenshot.": { en: "Ctrl+K opens the command palette — search, jump straight to a console, change theme, screenshot, all in one place. The 3 icons next to it switch the view: grid, big cover or list. In a game, F12 takes a screenshot.", es: "Ctrl+K abre la paleta de comandos — buscar, ir directo a una consola, cambiar tema, captura, todo en un solo lugar. Los 3 iconos al lado cambian la visualización: cuadrícula, carátula grande o lista. En el juego, F12 toma una captura.", fr: "Ctrl+K ouvre la palette de commandes — rechercher, aller directement à une console, changer de thème, capture, tout au même endroit. Les 3 icônes à côté changent l'affichage : grille, grande jaquette ou liste. En jeu, F12 fait une capture d'écran.", zh: "Ctrl+K 打开命令面板——搜索、直接跳到某个主机、切换主题、截图，全部集中在一处。旁边的 3 个图标切换视图：网格、大封面或列表。游戏中按 F12 截图。", ru: "Ctrl+K открывает палитру команд — поиск, переход к консоли, смена темы, скриншот, всё в одном месте. Три значка рядом переключают вид: сетка, крупная обложка или список. В игре F12 делает скриншот." },
 
+  "Bom jogo! 🎮": { en: "Have fun! 🎮", es: "¡Buen juego! 🎮", fr: "Bon jeu ! 🎮", zh: "玩得开心！🎮", ru: "Приятной игры! 🎮" },
+  "É isso! Sua biblioteca retro tá pronta. Aproveite — e bons jogos.": { en: "That's it! Your retro library is ready. Enjoy — and have fun.", es: "¡Eso es todo! Tu biblioteca retro está lista. Disfruta — y a jugar.", fr: "C'est tout ! Votre bibliothèque rétro est prête. Profitez-en — et bon jeu.", zh: "就这样！你的复古游戏库已就绪。尽情享受，玩得开心。", ru: "Вот и всё! Ваша ретро-библиотека готова. Наслаждайтесь — и приятной игры." },
+  "Feito com 💜 por": { en: "Made with 💜 by", es: "Hecho con 💜 por", fr: "Fait avec 💜 par", zh: "用 💜 制作，作者", ru: "Сделано с 💜" },
+
 };
 
 /**
