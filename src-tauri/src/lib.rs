@@ -2193,6 +2193,11 @@ struct AppConfig {
     /// Timestamps Unix dos ultimos deactivates. Usado pra rate limit (max 5/dia).
     #[serde(default)]
     license_deactivate_log: Vec<u64>,
+    /// FASE C: token de licenca assinado pelo servidor (Ed25519). So usado em
+    /// server_mode. Auto-validavel (assinatura + device + exp) — nao precisa de
+    /// consenso anti-tamper porque forjar exige a chave privada do Worker.
+    #[serde(default)]
+    license_token: Option<String>,
     /// v0.7.4 (Android demo): timestamp do primeiro launch no APK. 0 = nunca usado.
     #[serde(default)]
     android_installed_at: u64,
@@ -2234,6 +2239,7 @@ impl Default for AppConfig {
             license_uses: 0,
             license_fingerprint: None,
             license_deactivate_log: Vec::new(),
+            license_token: None,
             android_installed_at: 0,
             android_admin_unlock: false,
         }
@@ -5385,7 +5391,8 @@ fn get_play_stats() -> PlayStats {
 // licenses, nao da pra editar produto.
 
 mod secrets;
-use secrets::{GUMROAD_PRODUCT_ID, GUMROAD_ACCESS_TOKEN, GUMROAD_PERMALINK, ADMIN_EMAIL};
+use secrets::{GUMROAD_PRODUCT_ID, GUMROAD_ACCESS_TOKEN, GUMROAD_PERMALINK, ADMIN_EMAIL,
+    LICENSE_SERVER_URL, LICENSE_PUBLIC_KEY_HEX};
 use sha2::{Digest, Sha256};
 
 /// Maximo de PCs (uses count) que uma license aceita. Soft-enforce no backend.
@@ -5541,6 +5548,107 @@ fn prune_deactivate_log(log: &mut Vec<u64>) {
     log.retain(|&t| t > day_ago);
 }
 
+// === FASE C: token de licenca assinado pelo servidor (anti-crack Tier 2) ====
+// Quando LICENSE_SERVER_URL/PUBKEY estao configurados (server_mode), a ativacao
+// e a validacao passam pelo Worker, que devolve um token Ed25519. O gate exige
+// esse token: assinatura valida (so a chave privada do Worker assina) + device
+// + exp. Isso fecha o furo de "forjar config.json + HKCU pra estender o grace",
+// e tira o token do Gumroad de dentro do binario. Com placeholders nos secrets,
+// server_mode() = false e o app segue no fluxo Gumroad-direto (legado).
+
+/// True quando o servidor de token esta configurado (secrets preenchidos).
+fn server_mode() -> bool {
+    !LICENSE_SERVER_URL.contains("PLACEHOLDER")
+        && !LICENSE_PUBLIC_KEY_HEX.contains("PLACEHOLDER")
+        && LICENSE_PUBLIC_KEY_HEX.len() == 64
+}
+
+/// ID estavel da maquina pra amarrar o token. Diferente do machine_fingerprint
+/// (que inclui o MAC, volatil) — aqui so GUID + CPU (desktop) ou machine-id
+/// (mobile), pra NAO bloquear o usuario quando um adaptador de rede liga/desliga.
+fn stable_device_id() -> String {
+    let guid = read_machine_guid().unwrap_or_default();
+    let cpu = read_cpu_name().unwrap_or_default();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let extra = primary_mac().unwrap_or_default(); // machine-id/hostname no mobile
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let extra = String::new();
+    let mut hasher = Sha256::new();
+    hasher.update(format!("{}|{}|{}", guid, cpu, extra).as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // v/k/iat fazem parte do payload assinado mas nao sao lidos no gate
+struct TokenPayload {
+    #[serde(default)] v: u32,
+    #[serde(default)] k: String,    // hash curto da key (nao vaza a key inteira)
+    #[serde(default)] d: String,    // device id (== stable_device_id)
+    #[serde(default)] adm: bool,    // email == ADMIN_EMAIL (flag de UI)
+    #[serde(default)] iat: u64,
+    #[serde(default)] exp: u64,
+}
+
+/// Verifica a assinatura Ed25519 de `payloadB64.sigB64` e o device. NAO checa exp
+/// (o caller decide: fresh exige exp futuro, gate aceita exp dentro do grace).
+/// Usa a chave publica embutida (LICENSE_PUBLIC_KEY_HEX).
+fn verify_license_token(token: &str, expect_device: &str) -> Result<TokenPayload, String> {
+    verify_token_with_key(token, expect_device, LICENSE_PUBLIC_KEY_HEX)
+}
+
+/// Igual ao verify_license_token mas com a pubkey explicita (testavel).
+fn verify_token_with_key(token: &str, expect_device: &str, pubkey_hex: &str) -> Result<TokenPayload, String> {
+    use base64::Engine;
+    use ed25519_dalek::{Signature, VerifyingKey, Verifier};
+    let b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let mut parts = token.split('.');
+    let payload_b64 = parts.next().ok_or("token sem payload")?;
+    let sig_b64 = parts.next().ok_or("token sem assinatura")?;
+    if parts.next().is_some() {
+        return Err("token mal-formado".into());
+    }
+    // chave publica
+    let pk_bytes = hex::decode(pubkey_hex).map_err(|_| "pubkey invalida")?;
+    let pk_arr: [u8; 32] = pk_bytes.as_slice().try_into().map_err(|_| "pubkey tamanho errado")?;
+    let vk = VerifyingKey::from_bytes(&pk_arr).map_err(|_| "pubkey invalida")?;
+    // assinatura sobre os BYTES do payload_b64 (igual ao Worker)
+    let sig_bytes = b64.decode(sig_b64).map_err(|_| "assinatura invalida")?;
+    let sig_arr: [u8; 64] = sig_bytes.as_slice().try_into().map_err(|_| "assinatura tamanho errado")?;
+    let sig = Signature::from_bytes(&sig_arr);
+    vk.verify(payload_b64.as_bytes(), &sig).map_err(|_| "assinatura nao confere".to_string())?;
+    // payload
+    let payload_json = b64.decode(payload_b64).map_err(|_| "payload invalido")?;
+    let payload: TokenPayload = serde_json::from_slice(&payload_json).map_err(|_| "payload json invalido")?;
+    if !expect_device.is_empty() && payload.d != expect_device {
+        return Err("token de outro dispositivo".into());
+    }
+    Ok(payload)
+}
+
+/// Busca um token assinado no servidor (server_mode). device = stable_device_id.
+async fn fetch_server_token(key: &str) -> Result<String, String> {
+    let device = stable_device_id();
+    let client = http_client_builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent("Ludex/1.1 (license)")
+        .build()
+        .map_err(|e| format!("http client: {}", e))?;
+    let url = format!("{}/token", LICENSE_SERVER_URL.trim_end_matches('/'));
+    let resp = client.post(&url)
+        .json(&serde_json::json!({ "license_key": key.trim(), "device_id": device }))
+        .send().await
+        .map_err(|e| format!("servidor inacessivel: {}", e))?;
+    let status = resp.status();
+    let body: serde_json::Value = resp.json().await
+        .map_err(|e| format!("resposta invalida: {}", e))?;
+    if !status.is_success() {
+        let msg = body.get("error").and_then(|v| v.as_str()).unwrap_or("license invalida");
+        return Err(msg.to_string());
+    }
+    body.get("token").and_then(|v| v.as_str()).map(String::from)
+        .ok_or_else(|| "servidor nao retornou token".into())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct LicenseInfo {
     /// Validade booleana (true = pode usar o app, false = trancado)
@@ -5622,6 +5730,31 @@ async fn gumroad_verify(key: &str, increment_uses: bool) -> Result<LicenseInfo, 
 /// hardware fingerprint atual e espelha o state no registry HKCU.
 #[tauri::command]
 async fn license_activate(key: String) -> Result<LicenseInfo, String> {
+    // FASE C: em server_mode o app NUNCA fala com o Gumroad direto — pede o token
+    // assinado pro Worker, verifica a assinatura local e guarda. Forjar exige a
+    // chave privada do servidor.
+    if server_mode() {
+        let token = fetch_server_token(&key).await?;
+        let payload = verify_license_token(&token, &stable_device_id())?;
+        if payload.exp <= now_secs() {
+            return Err("Servidor devolveu token ja expirado (relogio do PC errado?)".into());
+        }
+        let mut cfg = load_config();
+        cfg.license_key = Some(key.trim().to_string());
+        cfg.license_token = Some(token);
+        write_state_to_both(&mut cfg, now_secs(), 1, Some(machine_fingerprint()));
+        save_config_internal(cfg)?;
+        return Ok(LicenseInfo {
+            valid: true,
+            message: "Licenca ativa".into(),
+            uses: 0,
+            max_uses: GUMROAD_MAX_USES,
+            buyer_email: None,
+            validated_at: now_secs(),
+            purchase_url: license_purchase_url(),
+            is_admin: payload.adm,
+        });
+    }
     let info = gumroad_verify(&key, true).await?;
     let fingerprint = machine_fingerprint();
     let mut cfg = load_config();
@@ -5639,6 +5772,45 @@ async fn license_activate(key: String) -> Result<LicenseInfo, String> {
 async fn license_validate() -> Result<LicenseInfo, String> {
     let cfg = load_config();
     let key = cfg.license_key.clone().ok_or("Nenhuma license cadastrada")?;
+
+    // FASE C: server_mode — pede token novo; se offline, aceita o guardado dentro
+    // do grace (mas a assinatura + device tem que bater sempre).
+    if server_mode() {
+        let device = stable_device_id();
+        match fetch_server_token(&key).await {
+            Ok(token) => {
+                let payload = verify_license_token(&token, &device)?;
+                let mut c = load_config();
+                c.license_token = Some(token);
+                write_state_to_both(&mut c, now_secs(), 1, Some(machine_fingerprint()));
+                save_config_internal(c).ok();
+                return Ok(LicenseInfo {
+                    valid: true, message: "Licenca ativa".into(), uses: 0,
+                    max_uses: GUMROAD_MAX_USES, buyer_email: None,
+                    validated_at: now_secs(), purchase_url: license_purchase_url(),
+                    is_admin: payload.adm,
+                });
+            }
+            Err(e) => {
+                if let Some(tok) = cfg.license_token.clone() {
+                    if let Ok(p) = verify_license_token(&tok, &device) {
+                        let past = now_secs().saturating_sub(p.exp) / 86400;
+                        if p.exp > now_secs() || past < LICENSE_OFFLINE_GRACE_DAYS {
+                            return Ok(LicenseInfo {
+                                valid: true,
+                                message: "Modo offline (token assinado)".into(),
+                                uses: 0, max_uses: GUMROAD_MAX_USES, buyer_email: None,
+                                validated_at: cfg.license_validated_at,
+                                purchase_url: license_purchase_url(), is_admin: p.adm,
+                            });
+                        }
+                    }
+                }
+                return Err(format!("Validacao falhou: {}", e));
+            }
+        }
+    }
+
     // Le state consensual (anti-tamper: usa o MENOR validated_at e o MAIOR uses entre config.json e HKCU)
     let (consensus_va, consensus_uses, stored_fp) = read_state_consensus(&cfg);
     let current_fp = machine_fingerprint();
@@ -5767,6 +5939,24 @@ fn license_locally_valid() -> bool {
     let cfg = load_config();
     if cfg.license_key.is_none() {
         return false;
+    }
+    // FASE C: em server_mode o gate exige o token assinado. A assinatura + device
+    // tem que bater SEMPRE (forjar exige a chave privada do Worker); o exp pode
+    // estar vencido ate LICENSE_OFFLINE_GRACE_DAYS (servidor fora do ar / sem net).
+    if server_mode() {
+        return match cfg.license_token.as_deref() {
+            Some(tok) => match verify_license_token(tok, &stable_device_id()) {
+                Ok(p) => {
+                    if p.exp > now_secs() {
+                        true
+                    } else {
+                        now_secs().saturating_sub(p.exp) / 86400 < LICENSE_OFFLINE_GRACE_DAYS
+                    }
+                }
+                Err(_) => false,
+            },
+            None => false,
+        };
     }
     // Usa o consensus config+registry (anti-tamper: MIN dos validated_at — forjar
     // só o config.json não basta, precisa forjar o registro HKCU também).
@@ -6189,6 +6379,30 @@ fn version_is_newer(latest: &str, current: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // FASE C: prova que um token assinado por Node/@noble-compativel (Ed25519
+    // padrao, mesmo algoritmo do Worker) valida no ed25519-dalek. Amostra gerada
+    // com `crypto.sign(null, payloadB64, ed25519Priv)` — assinatura sobre os BYTES
+    // do base64url(payload), exatamente como o Worker faz.
+    #[test]
+    fn license_token_interop_verifies() {
+        let pubkey = "65561cfe0922a82b52a3b2526112bb7a51ad2187d5dbe8a6392f7e5879a0b75b";
+        let token = "eyJ2IjoxLCJrIjoiYWJjZGVmMDEyMzQ1Njc4OSIsImQiOiJkZXZpY2UtWFlaIiwiYWRtIjpmYWxzZSwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjQxMDI0NDQ4MDB9.IOgEiENj0gEgtftcTAPcHtPGlmRQtegbwrx5BHxg44cjrYMV6S3CvP-GzuzfIZB_LqFB4dO_F9zF0QCq5VcCBA";
+        // device certo -> ok, payload decodificado
+        let p = verify_token_with_key(token, "device-XYZ", pubkey).expect("deve verificar");
+        assert_eq!(p.d, "device-XYZ");
+        assert_eq!(p.k, "abcdef0123456789");
+        assert_eq!(p.exp, 4102444800);
+        assert!(!p.adm);
+        // device errado -> rejeita
+        assert!(verify_token_with_key(token, "outro-device", pubkey).is_err());
+        // assinatura adulterada (1 char trocado no payload) -> rejeita
+        let tampered = token.replacen("eyJ2IjoxL", "eyJ2IjoyL", 1);
+        assert!(verify_token_with_key(&tampered, "device-XYZ", pubkey).is_err());
+        // pubkey errada -> rejeita
+        let wrong_pk = "0000000000000000000000000000000000000000000000000000000000000000";
+        assert!(verify_token_with_key(token, "device-XYZ", wrong_pk).is_err());
+    }
 
     #[test]
     fn version_compare() {
