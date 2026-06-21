@@ -35,7 +35,7 @@ You receive a license key by email. Paste it on first launch and the app is your
 
 ## 📥 Download
 
-Grab the installer from the [latest release](https://github.com/EllaeMyApp/ludex/releases/latest):
+Grab the installer from the [latest release](https://github.com/Paulothedeveloper/ludex/releases/latest):
 
 - **Windows 10/11 (x64):** `Ludex_X.Y.Z_x64-setup.exe`
 

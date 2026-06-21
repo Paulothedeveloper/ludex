@@ -21,7 +21,10 @@ Launcher estilo Switch/PS5 que centraliza todos seus emuladores num só lugar:
 - Múltiplos perfis com saves isolados (junctions NTFS)
 - Tempo jogado, sessões, conquistas locais e integração com **RetroAchievements**
 - Música ambiente, Discord Rich Presence, auto-update
-- **6 idiomas de interface** (Português, English, Español, Français, 中文, Русский) — troque a hora que quiser nos Ajustes
+- **6 idiomas de interface** (Português, English, Español, Français, 中文, Русский) — troque na tela de entrada ou nos Ajustes, na hora, sem reiniciar
+- **Paleta de comandos (Ctrl+K)** — buscar, ir direto pra um console, trocar tema, screenshot, tudo num lugar só
+- **Modos de visualização**: grade, capa grande ou lista
+- **Screenshot no jogo** (F12) salvo numa pasta própria
 - 10 avatares prontos + tour explicativo na primeira execução
 - Totalmente **navegável por controle** (teclado virtual, diálogos e menus)
 
@@ -35,7 +38,7 @@ Você recebe uma license key por email. Cola no primeiro launch e o app fica seu
 
 ## 📥 Download
 
-Baixe o instalador da [última release](https://github.com/EllaeMyApp/ludex/releases/latest):
+Baixe o instalador da [última release](https://github.com/Paulothedeveloper/ludex/releases/latest):
 
 - **Windows 10/11 (x64):** `Ludex_X.Y.Z_x64-setup.exe`
 
@@ -72,6 +75,9 @@ Roda o `.exe` e segue as instruções (pede admin pra instalar em `C:\Program Fi
 | `R` | Sortear jogo aleatório |
 | `S` ou `Esc` | Configurações |
 | `/` | Buscar |
+| `Ctrl+K` | Paleta de comandos (todas as ações) |
+| `F11` | Tela cheia |
+| `F12` | Screenshot (dentro do jogo) |
 
 ## 👤 Sobre o desenvolvedor
 
