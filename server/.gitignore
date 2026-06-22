@@ -12,3 +12,5 @@ devsetup.mjs
 devpub.hex
 .dev.vars
 testreal.mjs
+testprod.mjs
+testlocal.mjs
