@@ -35,7 +35,7 @@ O Ludex é um app pago — **uma licença, acesso vitalício, funciona no PC e n
 
 ➡️ **[pauloadriel98.gumroad.com/l/ludex](https://pauloadriel98.gumroad.com/l/ludex)** (R$ 49,90)
 
-Você recebe uma license key por email. Cola no primeiro launch e o app fica seu pra sempre — a **mesma key ativa o PC e o Android**. A validação da licença passa por um servidor próprio do Ludex (sua key e seus dados nunca ficam expostos dentro do app).
+Você recebe uma license key por email. Cola no primeiro launch e o app fica seu pra sempre — a **mesma key ativa o PC e o Android (até 3 dispositivos ativos)**. A validação da licença passa por um servidor próprio do Ludex (sua key e seus dados nunca ficam expostos dentro do app).
 
 ## 📥 Download
 
