@@ -4,6 +4,11 @@
 
 // Bullets curtos e claros por versão (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "1.1.0": [
+    "Licenciamento mais seguro: a validação da sua key agora passa por um servidor próprio do Ludex — sua key e seus dados nunca ficam expostos dentro do app.",
+    "Uma license só, PC e celular: ative com a mesma key nos dois (a versão Android virou produto completo, não só demo).",
+    "Ativação simplificada: o app pede só a sua license key, sem etapas extras.",
+  ],
   "1.0.0": [
     "O Ludex agora fala 6 idiomas (Português, Inglês, Espanhol, Francês, Chinês e Russo) — escolha na tela de entrada ou em Ajustes, troca na hora sem reiniciar.",
     "Nova identidade visual: logo e ícone novos em todo o app.",

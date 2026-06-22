@@ -90,21 +90,18 @@ export default {
     if (purchase.refunded || purchase.chargebacked || purchase.disputed) {
       return jsonResponse({ error: "license refunded/disputed" }, 403);
     }
-    const email = String(purchase.email || "");
-    const isAdmin = !!env.ADMIN_EMAIL && email.toLowerCase() === env.ADMIN_EMAIL.toLowerCase();
-
     // (Opcional) limite de devices: aqui daria pra checar uma KV com os device_ids
     // já vistos pra essa key. Sem KV, o token tem device_id + exp curto, então um
     // device roubado expira sozinho. MAX_DEVICES fica como referência.
 
     // 2) Monta + assina o token (Ed25519) --------------------------------
+    // v1.1.0: sem flag de admin — todo comprador é tratado igual.
     const now = Math.floor(Date.now() / 1000);
     const ttlDays = parseInt(env.TOKEN_TTL_DAYS || "14", 10);
     const payloadObj = {
       v: 1,
       k: (await sha256Hex(key)).slice(0, 16), // hash curto da key (não vaza a key inteira)
       d: device,
-      adm: isAdmin,
       iat: now,
       exp: now + ttlDays * 86400,
     };
@@ -113,6 +110,6 @@ export default {
     const sig = ed.sign(enc.encode(payloadB64), priv); // assina os BYTES do payload-b64
     const token = `${payloadB64}.${b64url(sig)}`;
 
-    return jsonResponse({ token, exp: payloadObj.exp, admin: isAdmin });
+    return jsonResponse({ token, exp: payloadObj.exp });
   },
 };

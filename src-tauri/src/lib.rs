@@ -5391,8 +5391,7 @@ fn get_play_stats() -> PlayStats {
 // licenses, nao da pra editar produto.
 
 mod secrets;
-use secrets::{GUMROAD_PRODUCT_ID, GUMROAD_ACCESS_TOKEN, GUMROAD_PERMALINK, ADMIN_EMAIL,
-    LICENSE_SERVER_URL, LICENSE_PUBLIC_KEY_HEX};
+use secrets::{GUMROAD_PERMALINK, LICENSE_SERVER_URL, LICENSE_PUBLIC_KEY_HEX};
 use sha2::{Digest, Sha256};
 
 /// Maximo de PCs (uses count) que uma license aceita. Soft-enforce no backend.
@@ -5675,222 +5674,92 @@ fn license_purchase_url() -> String { GUMROAD_PERMALINK.to_string() }
 
 // `now_secs` ja esta definido la em cima (linha ~1148) — nao redefinir aqui.
 
-/// Chama POST /v2/licenses/verify do Gumroad.
-/// `increment_uses` = true so na primeira ativacao naquele PC.
-async fn gumroad_verify(key: &str, increment_uses: bool) -> Result<LicenseInfo, String> {
-    if GUMROAD_ACCESS_TOKEN == "PLACEHOLDER_ACCESS_TOKEN" {
+/// Ativa uma license nova: pede o token assinado pro Worker, verifica a assinatura
+/// localmente e guarda. O app NUNCA fala com o Gumroad direto — quem valida a key
+/// e o servidor (o token do Gumroad fica la, fora do binario). Forjar o token exige
+/// a chave privada do Worker. Vale igual pra PC e Android.
+#[tauri::command]
+async fn license_activate(key: String) -> Result<LicenseInfo, String> {
+    if !server_mode() {
         return Err("Sistema de licenca nao configurado (build de desenvolvimento)".into());
     }
-    let client = http_client_builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .user_agent("Ludex/0.5 (license-validator)")
-        .build()
-        .map_err(|e| format!("http client: {}", e))?;
-    let mut form = std::collections::HashMap::new();
-    form.insert("product_id", GUMROAD_PRODUCT_ID.to_string());
-    form.insert("license_key", key.trim().to_string());
-    form.insert("increment_uses_count", if increment_uses { "true" } else { "false" }.to_string());
-    let resp = client.post("https://api.gumroad.com/v2/licenses/verify")
-        .bearer_auth(GUMROAD_ACCESS_TOKEN)
-        .form(&form)
-        .send().await
-        .map_err(|e| format!("gumroad request: {}", e))?;
-    let status = resp.status();
-    let body: serde_json::Value = resp.json().await
-        .map_err(|e| format!("gumroad parse: {}", e))?;
-    let success = body.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
-    if !status.is_success() || !success {
-        let msg = body.get("message").and_then(|v| v.as_str()).unwrap_or("license invalida");
-        return Err(msg.to_string());
+    let token = fetch_server_token(&key).await?;
+    let payload = verify_license_token(&token, &stable_device_id())?;
+    if payload.exp <= now_secs() {
+        return Err("Servidor devolveu token ja expirado (relogio do dispositivo errado?)".into());
     }
-    let uses = body.get("uses").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-    let buyer_email = body.pointer("/purchase/email")
-        .and_then(|v| v.as_str()).map(String::from);
-    let is_admin = buyer_email.as_deref()
-        .map(|e| e.eq_ignore_ascii_case(ADMIN_EMAIL))
-        .unwrap_or(false);
-    // v0.8.25: admin bypassa check de uses (uso ilimitado pra dev/owner)
-    if uses > GUMROAD_MAX_USES && !is_admin {
-        return Err(format!("Limite de {} PCs ja atingido com essa license. Desative em outro PC ou compre outra.", GUMROAD_MAX_USES));
-    }
+    let mut cfg = load_config();
+    cfg.license_key = Some(key.trim().to_string());
+    cfg.license_token = Some(token);
+    write_state_to_both(&mut cfg, now_secs(), 1, Some(machine_fingerprint()));
+    save_config_internal(cfg)?;
     Ok(LicenseInfo {
         valid: true,
         message: "Licenca ativa".into(),
-        uses,
+        uses: 0,
         max_uses: GUMROAD_MAX_USES,
-        buyer_email,
+        buyer_email: None,
         validated_at: now_secs(),
         purchase_url: license_purchase_url(),
-        is_admin,
+        is_admin: false,
     })
 }
 
-/// Ativa uma license key nova (cliente acabou de comprar e colou a key).
-/// increment_uses=true consome 1 slot dos 2 disponiveis. Tambem captura o
-/// hardware fingerprint atual e espelha o state no registry HKCU.
-#[tauri::command]
-async fn license_activate(key: String) -> Result<LicenseInfo, String> {
-    // FASE C: em server_mode o app NUNCA fala com o Gumroad direto — pede o token
-    // assinado pro Worker, verifica a assinatura local e guarda. Forjar exige a
-    // chave privada do servidor.
-    if server_mode() {
-        let token = fetch_server_token(&key).await?;
-        let payload = verify_license_token(&token, &stable_device_id())?;
-        if payload.exp <= now_secs() {
-            return Err("Servidor devolveu token ja expirado (relogio do PC errado?)".into());
-        }
-        let mut cfg = load_config();
-        cfg.license_key = Some(key.trim().to_string());
-        cfg.license_token = Some(token);
-        write_state_to_both(&mut cfg, now_secs(), 1, Some(machine_fingerprint()));
-        save_config_internal(cfg)?;
-        return Ok(LicenseInfo {
-            valid: true,
-            message: "Licenca ativa".into(),
-            uses: 0,
-            max_uses: GUMROAD_MAX_USES,
-            buyer_email: None,
-            validated_at: now_secs(),
-            purchase_url: license_purchase_url(),
-            is_admin: payload.adm,
-        });
-    }
-    let info = gumroad_verify(&key, true).await?;
-    let fingerprint = machine_fingerprint();
-    let mut cfg = load_config();
-    cfg.license_key = Some(key.trim().to_string());
-    write_state_to_both(&mut cfg, info.validated_at, info.uses, Some(fingerprint));
-    save_config_internal(cfg)?;
-    Ok(info)
-}
-
-/// Re-valida a license atual (chamada na startup + 1x/semana em background).
-/// increment_uses=false (nao consome slot).
-/// Se sem internet e dentro do grace period (30 dias), retorna valid=true cached.
-/// Se fora do grace period sem internet, retorna valid=false (app trancado).
+/// Re-valida a license (startup + 1x/semana). Pede um token novo ao Worker; se
+/// offline, aceita o token guardado dentro do grace period (a assinatura + device
+/// conferem sempre). Sem internet e fora do grace = valid=false (app trancado).
 #[tauri::command]
 async fn license_validate() -> Result<LicenseInfo, String> {
+    if !server_mode() {
+        return Err("Sistema de licenca nao configurado".into());
+    }
     let cfg = load_config();
     let key = cfg.license_key.clone().ok_or("Nenhuma license cadastrada")?;
-
-    // FASE C: server_mode — pede token novo; se offline, aceita o guardado dentro
-    // do grace (mas a assinatura + device tem que bater sempre).
-    if server_mode() {
-        let device = stable_device_id();
-        match fetch_server_token(&key).await {
-            Ok(token) => {
-                let payload = verify_license_token(&token, &device)?;
-                let mut c = load_config();
-                c.license_token = Some(token);
-                write_state_to_both(&mut c, now_secs(), 1, Some(machine_fingerprint()));
-                save_config_internal(c).ok();
-                return Ok(LicenseInfo {
-                    valid: true, message: "Licenca ativa".into(), uses: 0,
-                    max_uses: GUMROAD_MAX_USES, buyer_email: None,
-                    validated_at: now_secs(), purchase_url: license_purchase_url(),
-                    is_admin: payload.adm,
-                });
-            }
-            Err(e) => {
-                if let Some(tok) = cfg.license_token.clone() {
-                    if let Ok(p) = verify_license_token(&tok, &device) {
-                        let past = now_secs().saturating_sub(p.exp) / 86400;
-                        if p.exp > now_secs() || past < LICENSE_OFFLINE_GRACE_DAYS {
-                            return Ok(LicenseInfo {
-                                valid: true,
-                                message: "Modo offline (token assinado)".into(),
-                                uses: 0, max_uses: GUMROAD_MAX_USES, buyer_email: None,
-                                validated_at: cfg.license_validated_at,
-                                purchase_url: license_purchase_url(), is_admin: p.adm,
-                            });
-                        }
-                    }
-                }
-                return Err(format!("Validacao falhou: {}", e));
-            }
-        }
-    }
-
-    // Le state consensual (anti-tamper: usa o MENOR validated_at e o MAIOR uses entre config.json e HKCU)
-    let (consensus_va, consensus_uses, stored_fp) = read_state_consensus(&cfg);
-    let current_fp = machine_fingerprint();
-
-    match gumroad_verify(&key, false).await {
-        Ok(info) => {
-            // Online + key boa. Verifica fingerprint. Se mudou, REGRAVA pro novo
-            // hardware — Gumroad ja confirmou que a license eh valida e dentro
-            // do limite. Soft-enforce (usuario legitimo trocou hardware).
-            let mut cfg = load_config();
-            write_state_to_both(&mut cfg, info.validated_at, info.uses, Some(current_fp));
-            save_config_internal(cfg).ok();
-            Ok(info)
+    let device = stable_device_id();
+    match fetch_server_token(&key).await {
+        Ok(token) => {
+            verify_license_token(&token, &device)?;
+            let mut c = load_config();
+            c.license_token = Some(token);
+            write_state_to_both(&mut c, now_secs(), 1, Some(machine_fingerprint()));
+            save_config_internal(c).ok();
+            Ok(LicenseInfo {
+                valid: true, message: "Licenca ativa".into(), uses: 0,
+                max_uses: GUMROAD_MAX_USES, buyer_email: None,
+                validated_at: now_secs(), purchase_url: license_purchase_url(),
+                is_admin: false,
+            })
         }
         Err(e) => {
-            // Offline (ou key revogada). Checa fingerprint antes de conceder grace
-            // period — se hardware nao bate com o que ativou, NAO concede offline.
-            if let Some(stored) = stored_fp {
-                if stored != current_fp {
-                    return Err(format!(
-                        "Hardware diferente do que ativou essa license. Reconecte na internet pra revalidar. Detalhes: {}", e
-                    ));
+            if let Some(tok) = cfg.license_token.clone() {
+                if let Ok(p) = verify_license_token(&tok, &device) {
+                    let past = now_secs().saturating_sub(p.exp) / 86400;
+                    if p.exp > now_secs() || past < LICENSE_OFFLINE_GRACE_DAYS {
+                        return Ok(LicenseInfo {
+                            valid: true,
+                            message: "Modo offline (token assinado)".into(),
+                            uses: 0, max_uses: GUMROAD_MAX_USES, buyer_email: None,
+                            validated_at: cfg.license_validated_at,
+                            purchase_url: license_purchase_url(), is_admin: false,
+                        });
+                    }
                 }
-            }
-            let age_days = now_secs().saturating_sub(consensus_va) / 86400;
-            if consensus_va > 0 && age_days < LICENSE_OFFLINE_GRACE_DAYS {
-                return Ok(LicenseInfo {
-                    valid: true,
-                    message: format!("Modo offline (validacao ha {} dias)", age_days),
-                    uses: consensus_uses,
-                    max_uses: GUMROAD_MAX_USES,
-                    buyer_email: None,
-                    validated_at: consensus_va,
-                    purchase_url: license_purchase_url(),
-                    is_admin: false,
-                });
             }
             Err(format!("Validacao falhou: {}", e))
         }
     }
 }
 
-/// Libera 1 slot dos 2 (chamado quando user clica "Desativar este PC").
-/// Endpoint: PUT /v2/licenses/decrement_uses_count.
-/// Rate limit: maximo 5 deactivates em 24h por PC. Anti-share farm.
+/// "Desativar este dispositivo": limpa a license local (key + token assinado). O
+/// usuario tera que reativar com a key. Sem chamada externa — o controle de
+/// dispositivos e do servidor/token (device-bound + exp curto).
 #[tauri::command]
-async fn license_deactivate() -> Result<(), String> {
-    if GUMROAD_ACCESS_TOKEN == "PLACEHOLDER_ACCESS_TOKEN" {
-        return Err("Sistema de licenca nao configurado".into());
-    }
+fn license_deactivate() -> Result<(), String> {
     let mut cfg = load_config();
-    let key = cfg.license_key.clone().ok_or("Nenhuma license cadastrada")?;
-
-    // Rate limit
-    prune_deactivate_log(&mut cfg.license_deactivate_log);
-    if cfg.license_deactivate_log.len() >= DEACTIVATE_RATE_LIMIT_PER_DAY {
-        return Err(format!(
-            "Limite de {} desativacoes por dia atingido. Tente novamente daqui algumas horas.",
-            DEACTIVATE_RATE_LIMIT_PER_DAY
-        ));
-    }
-
-    let client = http_client_builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build().map_err(|e| format!("http: {}", e))?;
-    let mut form = std::collections::HashMap::new();
-    form.insert("product_id", GUMROAD_PRODUCT_ID.to_string());
-    form.insert("license_key", key);
-    let resp = client.put("https://api.gumroad.com/v2/licenses/decrement_uses_count")
-        .bearer_auth(GUMROAD_ACCESS_TOKEN)
-        .form(&form)
-        .send().await.map_err(|e| format!("decrement: {}", e))?;
-    if !resp.status().is_success() {
-        return Err(format!("Gumroad retornou {}", resp.status()));
-    }
-
-    // Registra deactivate e limpa local
-    cfg.license_deactivate_log.push(now_secs());
     cfg.license_key = None;
+    cfg.license_token = None;
     cfg.license_fingerprint = None;
+    cfg.android_admin_unlock = false;
     write_state_to_both(&mut cfg, 0, 0, None);
     save_config_internal(cfg)?;
     Ok(())
@@ -5902,31 +5771,18 @@ async fn license_deactivate() -> Result<(), String> {
 #[tauri::command]
 fn license_get_local_info() -> Option<LicenseInfo> {
     let cfg = load_config();
-    let _key = cfg.license_key.as_ref()?;
-    let (consensus_va, consensus_uses, stored_fp) = read_state_consensus(&cfg);
-    let age_days = now_secs().saturating_sub(consensus_va) / 86400;
-    let mut valid = consensus_va > 0 && age_days < LICENSE_OFFLINE_GRACE_DAYS;
-
-    // Anti-tamper: se fingerprint salvo nao bate com hardware atual, considera invalido
-    // (vai forcar license_validate online no startup).
-    if valid {
-        if let Some(fp) = &stored_fp {
-            if *fp != machine_fingerprint() {
-                valid = false;
-            }
-        }
-    }
-
+    cfg.license_key.as_ref()?;
+    let valid = license_locally_valid();
     Some(LicenseInfo {
         valid,
-        message: if valid { "Licenca ativa (cache local)".into() }
+        message: if valid { "Licenca ativa".into() }
                  else { "Licenca precisa revalidar online".into() },
-        uses: consensus_uses,
+        uses: 0,
         max_uses: GUMROAD_MAX_USES,
         buyer_email: None,
-        validated_at: consensus_va,
+        validated_at: cfg.license_validated_at,
         purchase_url: license_purchase_url(),
-        is_admin: false, // is_admin so eh sabido apos chamar Gumroad
+        is_admin: false,
     })
 }
 
@@ -5934,64 +5790,43 @@ fn license_get_local_info() -> Option<LicenseInfo> {
 /// license_get_local_info, mas usada pra GATEAR o ponto de valor (abrir jogo).
 /// O gate do frontend (React) sozinho é burlável editando o JS; replicar a
 /// checagem em Rust faz o crack exigir patch do binário (símbolos stripados).
-#[cfg(not(target_os = "android"))]
+/// v0.9.38+/fase C: validade da license NO BACKEND (gateia o ponto de valor =
+/// abrir jogo). Baseado no token assinado pelo servidor: assinatura + device
+/// conferem SEMPRE (forjar exige a chave privada do Worker); o exp pode estar
+/// vencido ate LICENSE_OFFLINE_GRACE_DAYS (servidor fora do ar / sem net). O gate
+/// do frontend (React/JS) sozinho e burlavel; replicar em Rust faz o crack exigir
+/// patch do binario (simbolos stripados). Vale pra PC e Android.
 fn license_locally_valid() -> bool {
     let cfg = load_config();
-    if cfg.license_key.is_none() {
-        return false;
+    match cfg.license_token.as_deref() {
+        Some(tok) => match verify_license_token(tok, &stable_device_id()) {
+            Ok(p) => {
+                p.exp > now_secs()
+                    || now_secs().saturating_sub(p.exp) / 86400 < LICENSE_OFFLINE_GRACE_DAYS
+            }
+            Err(_) => false,
+        },
+        None => false,
     }
-    // FASE C: em server_mode o gate exige o token assinado. A assinatura + device
-    // tem que bater SEMPRE (forjar exige a chave privada do Worker); o exp pode
-    // estar vencido ate LICENSE_OFFLINE_GRACE_DAYS (servidor fora do ar / sem net).
-    if server_mode() {
-        return match cfg.license_token.as_deref() {
-            Some(tok) => match verify_license_token(tok, &stable_device_id()) {
-                Ok(p) => {
-                    if p.exp > now_secs() {
-                        true
-                    } else {
-                        now_secs().saturating_sub(p.exp) / 86400 < LICENSE_OFFLINE_GRACE_DAYS
-                    }
-                }
-                Err(_) => false,
-            },
-            None => false,
-        };
-    }
-    // Usa o consensus config+registry (anti-tamper: MIN dos validated_at — forjar
-    // só o config.json não basta, precisa forjar o registro HKCU também).
-    let (consensus_va, _uses, _fp) = read_state_consensus(&cfg);
-    let age_days = now_secs().saturating_sub(consensus_va) / 86400;
-    // PROPOSITAL: NÃO checa fingerprint aqui. O fingerprint (MAC/adapter) é volátil
-    // e bloquearia usuário legítimo no momento de abrir o jogo, durante a janela de
-    // revalidação online que reescreve o fp. O anti-share por fingerprint continua
-    // no frontend + license_validate (online). Este gate só precisa derrotar o crack
-    // de "editar o JS" — que não deixa license_key + validated_at no config+registro.
-    consensus_va > 0 && age_days < LICENSE_OFFLINE_GRACE_DAYS
 }
 
-/// Pode abrir jogo? Exceções: build de DEV (secrets PLACEHOLDER — senão não roda
-/// em dev; release é garantido pelo build.rs) e ANDROID (modelo é demo de 7 dias
-/// no frontend, não license Gumroad) passam direto. Desktop release = checa license.
+/// Pode abrir jogo? Build de DEV (servidor de licenca nao configurado) passa
+/// direto. Release: PC exige token assinado valido; Android exige token OU a demo
+/// (periodo de teste) nao expirada.
 fn license_gate_ok() -> bool {
-    if GUMROAD_ACCESS_TOKEN == "PLACEHOLDER_ACCESS_TOKEN" {
-        return true;
+    if !server_mode() {
+        return true; // dev build sem servidor de licenca configurado
+    }
+    if license_locally_valid() {
+        return true; // token assinado valido (PC ou Android)
     }
     #[cfg(target_os = "android")]
     {
-        // v1.0.1 HARDENING: enforça a demo NO RUST (antes retornava `true` e a demo
-        // era checada só no frontend JS — editável: decompila APK, pula a tela de
-        // "demo expirou" = acesso grátis permanente). Agora o launch_game/libretro
-        // só roda se a demo NÃO expirou (a mesma lógica do android_demo_status, que
-        // já considera o admin_unlock por license). Quem o frontend liberava continua
-        // liberado; quem expirou é barrado no nativo (precisa patchar o .so, não só JS).
-        // NOTA: o `android_admin_unlock` ainda é um bool local forjável — fix completo
-        // é o token assinado pelo servidor (fase C). Isto fecha o furo trivial do JS.
-        !android_demo_status().expired
+        return !android_demo_status().expired; // Android: periodo de teste
     }
     #[cfg(not(target_os = "android"))]
     {
-        license_locally_valid()
+        false
     }
 }
 
@@ -6000,90 +5835,9 @@ fn license_purchase_link() -> String {
     license_purchase_url()
 }
 
-// ============================================================
-// === ADMIN COMMANDS — somente pra license cujo email = ADMIN_EMAIL =========
-// ============================================================
-// Cada command chama gumroad_verify pra confirmar que o caller eh admin antes
-// de retornar qualquer coisa. Isso impede um cliente normal de chamar
-// admin_list_sales via DevTools — ate o backend confirmar com o Gumroad que o
-// email bate, nada vaza.
-
-async fn ensure_admin() -> Result<(), String> {
-    let cfg = load_config();
-    let key = cfg.license_key.ok_or("Nenhuma license cadastrada")?;
-    let info = gumroad_verify(&key, false).await
-        .map_err(|e| format!("Falha ao validar admin: {}", e))?;
-    if !info.is_admin {
-        return Err("Acesso negado: essa license nao tem permissao de admin".into());
-    }
-    Ok(())
-}
-
-/// Lista vendas do produto via /v2/sales. Retorna JSON cru do Gumroad pra
-/// frontend formatar como quiser. Page comeca em 1; sem page = 1.
-#[tauri::command]
-async fn admin_list_sales(page: Option<u32>) -> Result<serde_json::Value, String> {
-    ensure_admin().await?;
-    let client = http_client_builder()
-        .timeout(std::time::Duration::from_secs(20))
-        .user_agent("Ludex/0.6 (admin-panel)")
-        .build().map_err(|e| format!("http: {}", e))?;
-    let url = match page {
-        Some(p) if p > 1 => format!("https://api.gumroad.com/v2/sales?page={}", p),
-        _ => "https://api.gumroad.com/v2/sales".to_string(),
-    };
-    let resp = client.get(&url)
-        .bearer_auth(GUMROAD_ACCESS_TOKEN)
-        .send().await.map_err(|e| format!("sales request: {}", e))?;
-    if !resp.status().is_success() {
-        return Err(format!("Gumroad retornou {}", resp.status()));
-    }
-    let body: serde_json::Value = resp.json().await
-        .map_err(|e| format!("sales parse: {}", e))?;
-    Ok(body)
-}
-
-/// Decrementa o uses_count de QUALQUER license (nao precisa ser a do PC atual).
-/// Usado pra Paulo liberar 1 slot de um cliente que pediu suporte por email.
-#[tauri::command]
-async fn admin_force_deactivate(license_key: String) -> Result<(), String> {
-    ensure_admin().await?;
-    let client = http_client_builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build().map_err(|e| format!("http: {}", e))?;
-    let mut form = std::collections::HashMap::new();
-    form.insert("product_id", GUMROAD_PRODUCT_ID.to_string());
-    form.insert("license_key", license_key.trim().to_string());
-    let resp = client.put("https://api.gumroad.com/v2/licenses/decrement_uses_count")
-        .bearer_auth(GUMROAD_ACCESS_TOKEN)
-        .form(&form)
-        .send().await.map_err(|e| format!("decrement: {}", e))?;
-    if !resp.status().is_success() {
-        return Err(format!("Gumroad retornou {}", resp.status()));
-    }
-    Ok(())
-}
-
-/// Verifica se a license ativa atual eh admin (consultando Gumroad).
-/// Retorna false se nenhum license, ou se email nao bate. NAO eh source of
-/// truth — admin_list_sales / admin_force_deactivate revalidam por conta.
-#[tauri::command]
-async fn admin_check_status() -> Result<bool, String> {
-    let cfg = load_config();
-    let key = match cfg.license_key {
-        Some(k) => k,
-        None => return Ok(false),
-    };
-    let info = gumroad_verify(&key, false).await?;
-    Ok(info.is_admin)
-}
-
-/// Retorna a URL do dashboard Gumroad pra Paulo abrir no browser quando
-/// quiser refundar/banir uma sale (a API publica nao expoe disable_license).
-#[tauri::command]
-fn admin_dashboard_url() -> String {
-    "https://app.gumroad.com/dashboard".to_string()
-}
+// v1.1.0: Painel Admin REMOVIDO. Vendas/refunds sao vistos direto no dashboard
+// do Gumroad (web). Isso tirou os ultimos usos do GUMROAD_ACCESS_TOKEN no app —
+// o token saiu de vez do binario (ver secrets.rs). O fluxo agora e so "po a key".
 
 // ============================================================
 // === ANDROID DEMO TIME LIMIT (v0.7.4+) ======================
@@ -6204,17 +5958,19 @@ fn android_demo_status() -> AndroidDemoStatus {
             last_seen_at: new_last_seen,
         });
 
-        // 5. Determina expiracao
+        // 5. Determina expiracao. v1.1.0: "destravado" agora = token assinado valido
+        // (license real), nao mais o bool local android_admin_unlock. A demo so
+        // expira pra quem NAO tem license. Quem comprou (token) nunca expira.
+        let licensed = license_locally_valid();
         let clock_tampered = clock_tampered_install || clock_tampered_lastseen;
         let elapsed_days = (now.saturating_sub(installed_at) / 86400) as i64;
         let days_left = ANDROID_DEMO_DAYS as i64 - elapsed_days;
-        let expired = !cfg.android_admin_unlock
-            && (days_left <= 0 || clock_tampered);
+        let expired = !licensed && (days_left <= 0 || clock_tampered);
 
         AndroidDemoStatus {
             expired,
             days_left,
-            is_admin_unlocked: cfg.android_admin_unlock,
+            is_admin_unlocked: licensed,
             installed_at,
             demo_days_total: ANDROID_DEMO_DAYS,
             clock_tampered,
@@ -6222,75 +5978,9 @@ fn android_demo_status() -> AndroidDemoStatus {
     }
 }
 
-/// v0.9.0: Destrava APK Android com QUALQUER license valida (era so admin).
-/// Admin email continua bypassando limite de uses. User comum consome 1 slot
-/// dos GUMROAD_MAX_USES (igual no Windows). Multi-device real: mesma key vale
-/// pra ate 5 dispositivos combinados (PC + celular contam juntos).
-#[tauri::command]
-async fn android_demo_admin_unlock(license_key: String) -> Result<bool, String> {
-    if GUMROAD_ACCESS_TOKEN == "PLACEHOLDER_ACCESS_TOKEN" {
-        return Err("Sistema de licenca nao configurado".into());
-    }
-    let client = http_client_builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .user_agent("Ludex/0.9 (android-unlock)")
-        .build()
-        .map_err(|e| format!("http client: {}", e))?;
-    let mut form = std::collections::HashMap::new();
-    form.insert("product_id", GUMROAD_PRODUCT_ID.to_string());
-    form.insert("license_key", license_key.trim().to_string());
-    // v0.9.0: incrementa uses (consome slot) - so se NAO for admin (admin bypassa)
-    // Faz primeiro um fetch sem incremento pra detectar admin, depois incrementa.
-    form.insert("increment_uses_count", "false".to_string());
-    let resp = client.post("https://api.gumroad.com/v2/licenses/verify")
-        .bearer_auth(GUMROAD_ACCESS_TOKEN)
-        .form(&form)
-        .send().await
-        .map_err(|e| format!("gumroad request: {}", e))?;
-    let body: serde_json::Value = resp.json().await
-        .map_err(|e| format!("gumroad parse: {}", e))?;
-    let buyer_email = body.pointer("/purchase/email")
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    let is_admin = buyer_email.as_deref()
-        .map(|e| e.eq_ignore_ascii_case(ADMIN_EMAIL))
-        .unwrap_or(false);
-    let success = body.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
-    let uses = body.get("uses").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-
-    if !is_admin {
-        if !success {
-            let msg = body.get("message").and_then(|v| v.as_str()).unwrap_or("license invalida");
-            return Err(format!("License invalida: {}", msg));
-        }
-        // User comum: respeita limite de uses (igual no Windows)
-        if uses >= GUMROAD_MAX_USES {
-            return Err(format!(
-                "Limite de {} dispositivos ja atingido com essa license. Desative em outro PC/celular ou compre outra.",
-                GUMROAD_MAX_USES
-            ));
-        }
-        // Re-fetch com incremento de slot pra "ativar" no Gumroad oficialmente
-        let mut form2 = std::collections::HashMap::new();
-        form2.insert("product_id", GUMROAD_PRODUCT_ID.to_string());
-        form2.insert("license_key", license_key.trim().to_string());
-        form2.insert("increment_uses_count", "true".to_string());
-        let resp2 = client.post("https://api.gumroad.com/v2/licenses/verify")
-            .bearer_auth(GUMROAD_ACCESS_TOKEN)
-            .form(&form2)
-            .send().await
-            .map_err(|e| format!("gumroad activate: {}", e))?;
-        if !resp2.status().is_success() {
-            return Err(format!("Falha ao consumir slot: HTTP {}", resp2.status()));
-        }
-    }
-    // Salva (independente de admin ou user comum)
-    let mut cfg = load_config();
-    cfg.android_admin_unlock = true; // nome legado, mas agora vale pra user comum tb
-    cfg.license_key = Some(license_key.trim().to_string());
-    save_config(cfg)?;
-    Ok(true)
-}
+// v1.1.0: android_demo_admin_unlock REMOVIDO. O Android agora ativa com a MESMA
+// command do PC (license_activate) — pega o token assinado do servidor. A demo de
+// 7 dias vira so periodo de teste; com license, desbloqueio permanente (token).
 
 // ============================================================
 // === ANDROID AUTO-UPDATER basico (v0.7.5+) ===================
@@ -6868,12 +6558,7 @@ pub fn run() {
             license_deactivate,
             license_get_local_info,
             license_purchase_link,
-            admin_list_sales,
-            admin_force_deactivate,
-            admin_check_status,
-            admin_dashboard_url,
             android_demo_status,
-            android_demo_admin_unlock,
             android_check_update,
             libretro_set_option,
             libretro_get_option,

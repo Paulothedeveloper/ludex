@@ -13,7 +13,6 @@ import LudexOnboarding, { DEFAULT_AVATARS, avatarUrl, getProfileAvatarUrl } from
 import LudexLicenseGate from "./LudexLicenseGate";
 import { lxConfirm, lxAlert } from "./LudexDialog";
 import { t, currentLocale } from "./ludexI18n";
-import LudexAdminPanel from "./LudexAdminPanel";
 import {
   EmptyStateSystem, SuggestionsModal, ControlsTipModal,
   SystemSettingsModal,
@@ -485,8 +484,6 @@ function LicenseSettingsSection() {
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
 
   async function refresh() {
     try {
@@ -494,13 +491,6 @@ function LicenseSettingsSection() {
       setInfo(local);
     } catch (e) {
       setInfo(null);
-    }
-    // is_admin não vem do cache local — precisa consultar Gumroad
-    try {
-      const adm = await invoke("admin_check_status");
-      setIsAdmin(!!adm);
-    } catch (_) {
-      setIsAdmin(false);
     }
   }
   useEffect(() => { refresh(); }, []);
@@ -522,7 +512,7 @@ function LicenseSettingsSection() {
   }
 
   async function deactivate() {
-    if (!await lxConfirm(t("Desativar este PC libera 1 slot da sua license. Você precisará colar a key de novo se quiser usar o Ludex aqui. Confirmar?"), { title: t("Desativar este PC"), okText: t("Desativar"), danger: true })) return;
+    if (!await lxConfirm(t("Desativar este dispositivo remove a license daqui. Você precisará colar a key de novo se quiser usar o Ludex aqui. Confirmar?"), { title: t("Desativar este dispositivo"), okText: t("Desativar"), danger: true })) return;
     setBusy(true); setMsg(null);
     try {
       await invoke("license_deactivate");
@@ -560,19 +550,9 @@ function LicenseSettingsSection() {
         </strong>
       </div>
       <div className="pb-version-line">
-        <span className="pb-version-label">{t("PCs ativados:")}</span>
-        <strong>{t("{used} de {max}", { used: info.uses, max: info.max_uses })}</strong>
-      </div>
-      <div className="pb-version-line">
         <span className="pb-version-label">{t("Última validação:")}</span>
         <strong>{ageDays === "—" ? "—" : t("há {n} dias", { n: ageDays })}</strong>
       </div>
-      {info.buyer_email && (
-        <div className="pb-version-line">
-          <span className="pb-version-label">{t("Comprado por:")}</span>
-          <strong style={{ fontSize: 12 }}>{info.buyer_email}</strong>
-        </div>
-      )}
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
         <button className="pb-settings-btn" onClick={revalidate} disabled={busy}>
           {busy ? "..." : t("Revalidar agora")}
@@ -582,19 +562,9 @@ function LicenseSettingsSection() {
           onClick={deactivate}
           disabled={busy}
         >
-          {t("Desativar este PC")}
+          {t("Desativar este dispositivo")}
         </button>
-        {isAdmin && (
-          <button
-            className="pb-settings-btn"
-            style={{ background: "linear-gradient(135deg, #c4b5fd 0%, #ec4899 100%)", color: "#0a0814", fontWeight: 700 }}
-            onClick={() => setShowAdmin(true)}
-          >
-            {t("Painel Admin")}
-          </button>
-        )}
       </div>
-      {showAdmin && <LudexAdminPanel onClose={() => setShowAdmin(false)} />}
       {msg && (
         <p className="pb-settings-hint" style={{ marginTop: 8, color: msg.kind === "error" ? "#fca5a5" : "#86efac" }}>
           {msg.text}
@@ -1841,8 +1811,8 @@ function DeleteConfirmModal({ game, system, onCancel, onConfirm }) {
 
 /**
  * Tela mostrada quando a demo Android expirou (após 7 dias de uso).
- * Tem botão "Tenho license admin" pra Paulo destravar uso permanente.
- * Usuario comum NAO consegue destravar (only admin email vale).
+ * O usuário cola a license key (comprada no Gumroad) pra destravar permanente —
+ * o app pega o token assinado do servidor (license_activate). Mesma key vale PC+celular.
  */
 function AndroidDemoExpired({ demo, onUnlock }) {
   const [showKeyInput, setShowKeyInput] = useState(false);
@@ -1855,14 +1825,10 @@ function AndroidDemoExpired({ demo, onUnlock }) {
     if (!k) return;
     setBusy(true); setMsg(null);
     try {
-      const ok = await invoke("android_demo_admin_unlock", { licenseKey: k });
-      if (ok) {
-        const newDemo = await invoke("android_demo_status");
-        setMsg({ kind: "ok", text: t("Destravado! Carregando...") });
-        setTimeout(() => onUnlock(newDemo), 800);
-      } else {
-        setMsg({ kind: "error", text: t("License não destravou (não e admin)") });
-      }
+      await invoke("license_activate", { key: k });
+      const newDemo = await invoke("android_demo_status");
+      setMsg({ kind: "ok", text: t("Destravado! Carregando...") });
+      setTimeout(() => onUnlock(newDemo), 800);
     } catch (e) {
       setMsg({ kind: "error", text: String(e) });
     } finally {
@@ -1887,7 +1853,7 @@ function AndroidDemoExpired({ demo, onUnlock }) {
           {t("Voce usou {n} dias da versão Android gratuita.", { n: demo.demo_days_total })}
         </p>
         <p className="pb-demo-expired-pitch">
-          {t("Pra continuar sem limite, compra a versão")} <strong>Windows</strong> {t("com mais features (auto-update, todos os sistemas embedded, license vitalicia, etc).")}
+          {t("Pra continuar sem limite, ative com sua license key. A mesma key vale no PC e no celular, é vitalícia e funciona offline.")}
         </p>
 
         <a
@@ -1896,7 +1862,7 @@ function AndroidDemoExpired({ demo, onUnlock }) {
           target="_blank"
           rel="noopener noreferrer"
         >
-          {t("Comprar Windows (R$ 49,90)")}
+          {t("Comprar Ludex (R$ 49,90)")}
         </a>
 
         {!showKeyInput ? (
@@ -1904,7 +1870,7 @@ function AndroidDemoExpired({ demo, onUnlock }) {
             className="pb-demo-expired-btn pb-demo-expired-btn-ghost"
             onClick={() => setShowKeyInput(true)}
           >
-            {t("Sou admin / tenho license")}
+            {t("Já tenho a license")}
           </button>
         ) : (
           <div className="pb-demo-expired-input-wrap">

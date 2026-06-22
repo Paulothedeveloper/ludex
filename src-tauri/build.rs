@@ -24,13 +24,15 @@ fn guard_release_secrets() {
        Gumroad antes de buildar release (senao o app sai SEM trava de licenca).\n\n"
     );
   }
-  if content.contains("PLACEHOLDER_ACCESS_TOKEN")
-    || content.contains("PLACEHOLDER_PRODUCT_PERMALINK")
+  // v1.1.0: a trava agora e o servidor de licenca (server_mode). Sem URL/pubkey
+  // reais, license_gate_ok() libera tudo (modo dev). Bloqueia release nesse caso.
+  if content.contains("PLACEHOLDER.workers.dev")
+    || content.contains("PLACEHOLDER_PUBKEY_HEX")
   {
     panic!(
       "\n\n[ludex] RELEASE BLOQUEADO: src-tauri/src/secrets.rs ainda tem PLACEHOLDER.\n\
-       Preencha GUMROAD_PRODUCT_ID e GUMROAD_ACCESS_TOKEN com os valores reais\n\
-       antes de buildar release (senao o license gate fica desativado).\n\n"
+       Preencha LICENSE_SERVER_URL e LICENSE_PUBLIC_KEY_HEX com os valores reais\n\
+       do Worker (server/) antes de buildar release (senao o gate fica desativado).\n\n"
     );
   }
 }

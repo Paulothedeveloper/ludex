@@ -1402,16 +1402,12 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
     if (!k) return;
     setBusy(true); setMsg(null);
     try {
-      const ok = await invoke("android_demo_admin_unlock", { licenseKey: k });
-      if (ok) {
-        const newDemo = await invoke("android_demo_status");
-        onAdminUnlock(newDemo);
-        setMsg({ kind: "ok", text: t("Destravado! Demo removida.") });
-        setShowKeyInput(false);
-        setKeyInput("");
-      } else {
-        setMsg({ kind: "error", text: t("License não destravou (não é admin)") });
-      }
+      await invoke("license_activate", { key: k });
+      const newDemo = await invoke("android_demo_status");
+      onAdminUnlock(newDemo);
+      setMsg({ kind: "ok", text: t("Destravado! Demo removida.") });
+      setShowKeyInput(false);
+      setKeyInput("");
     } catch (e) {
       setMsg({ kind: "error", text: String(e) });
     } finally {
@@ -1479,7 +1475,7 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
               <div className="lmx-settings-label">{t("Status da licença")}</div>
               <div className="lmx-settings-value">
                 {androidDemo.is_admin_unlocked
-                  ? t("Admin desbloqueado (vitalício)")
+                  ? t("Licença ativa (vitalícia)")
                   : androidDemo.days_left > 0
                     ? (androidDemo.days_left === 1 ? t("Demo: {n} dia restante", { n: androidDemo.days_left }) : t("Demo: {n} dias restantes", { n: androidDemo.days_left }))
                     : t("Demo expirada")}
@@ -1489,11 +1485,11 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
           {!androidDemo.is_admin_unlocked && (
             <>
               <button className="lmx-settings-btn primary" onClick={() => invoke("open_url", { url: "https://pauloadriel98.gumroad.com/l/ludex" }).catch(() => {})}>
-                {t("Comprar versão Windows (R$ 49,90)")}
+                {t("Comprar Ludex (R$ 49,90)")}
               </button>
               {!showKeyInput ? (
                 <button className="lmx-settings-btn ghost" onClick={() => setShowKeyInput(true)}>
-                  {t("Sou admin / tenho license")}
+                  {t("Já tenho a license")}
                 </button>
               ) : (
                 <div className="lmx-settings-key">
@@ -2148,13 +2144,9 @@ function DemoExpiredScreen({ demo, onUnlock }) {
     if (!k) return;
     setBusy(true); setMsg(null);
     try {
-      const ok = await invoke("android_demo_admin_unlock", { licenseKey: k });
-      if (ok) {
-        const newDemo = await invoke("android_demo_status");
-        onUnlock(newDemo);
-      } else {
-        setMsg({ kind: "error", text: t("License não é admin") });
-      }
+      await invoke("license_activate", { key: k });
+      const newDemo = await invoke("android_demo_status");
+      onUnlock(newDemo);
     } catch (e) {
       setMsg({ kind: "error", text: String(e) });
     } finally {
@@ -2168,14 +2160,14 @@ function DemoExpiredScreen({ demo, onUnlock }) {
         <div className="lmx-demo-expired-icon"><IconClock /></div>
         <h1>{t("Demo expirou")}</h1>
         <p>
-          {t("Você usou os {n} dias da versão Android gratuita. Pra continuar, compre a versão Windows.", { n: demo.demo_days_total })}
+          {t("Você usou os {n} dias do teste grátis. Pra continuar, ative com sua license key (vale no PC e no celular).", { n: demo.demo_days_total })}
         </p>
         <button className="lmx-settings-btn primary" onClick={() => invoke("open_url", { url: "https://pauloadriel98.gumroad.com/l/ludex" }).catch(() => {})}>
-          {t("Comprar Windows (R$ 49,90)")}
+          {t("Comprar Ludex (R$ 49,90)")}
         </button>
         {!showKeyInput ? (
           <button className="lmx-settings-btn ghost" onClick={() => setShowKeyInput(true)}>
-            {t("Sou admin / tenho license")}
+            {t("Já tenho a license")}
           </button>
         ) : (
           <div className="lmx-settings-key">

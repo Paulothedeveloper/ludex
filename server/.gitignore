@@ -7,3 +7,8 @@ dist/
 pubkey.hex
 privkey.tmp
 keygen.mjs
+
+devsetup.mjs
+devpub.hex
+.dev.vars
+testreal.mjs
