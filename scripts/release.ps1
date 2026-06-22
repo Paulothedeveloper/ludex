@@ -90,7 +90,7 @@ $platforms = @{}
 if (-not $SkipWindows) {
   $platforms["windows-x86_64"] = @{
     signature = $signature
-    url       = "https://github.com/EllaeMyApp/ludex/releases/download/v$Version/Ludex_${Version}_x64-setup.exe"
+    url       = "https://github.com/Paulothedeveloper/ludex/releases/download/v$Version/Ludex_${Version}_x64-setup.exe"
   }
 }
 $latest = @{
@@ -142,7 +142,7 @@ try {
 } finally { Pop-Location }
 
 Write-Host "`n=== OK! Release v$Version publicada ===" -ForegroundColor Green
-Write-Host "URL: https://github.com/EllaeMyApp/ludex/releases/tag/v$Version"
+Write-Host "URL: https://github.com/Paulothedeveloper/ludex/releases/tag/v$Version"
 Write-Host "Windows: auto-update na proxima abertura."
 if (-not $SkipAndroid) {
   Write-Host "Android: APK disponivel em Ludex_${Version}.apk (auto-update Mobile pega via check_update_info)."
