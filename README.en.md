@@ -21,25 +21,30 @@ A Switch/PS5-style launcher that centralizes all your emulators in one place:
 - Multiple profiles with isolated saves (NTFS junctions)
 - Playtime, sessions, local achievements and **RetroAchievements** integration
 - Ambient music, Discord Rich Presence, auto-update
-- **6 UI languages** (English, Português, Español, Français, 中文, Русский) — switch anytime in Settings
+- **6 UI languages** (English, Português, Español, Français, 中文, Русский) — switch on the entry screen or in Settings, instantly, no restart
+- **Command palette (Ctrl+K)** — search, jump straight to a console, change theme, screenshot, all in one place
+- **View modes**: grid, big cover or list
+- **In-game screenshot** (F12) saved to its own folder
 - 10 ready-made avatars + explanatory tour on first run
 - Fully **controller-navigable** (on-screen keyboard, dialogs and menus)
+- **PC and Android** from a single purchase
 
 ## 💜 Buy
 
-Ludex is a paid app — **one license, lifetime access, up to 2 PCs**, no subscription:
+Ludex is a paid app — **one license, lifetime access, works on PC and phone (Android)**, no subscription:
 
 ➡️ **[pauloadriel98.gumroad.com/l/ludex](https://pauloadriel98.gumroad.com/l/ludex)** (R$ 49,90)
 
-You receive a license key by email. Paste it on first launch and the app is yours forever.
+You receive a license key by email. Paste it on first launch and the app is yours forever — the **same key activates both PC and Android**. License validation goes through Ludex's own server (your key and data are never exposed inside the app).
 
 ## 📥 Download
 
-Grab the installer from the [latest release](https://github.com/Paulothedeveloper/ludex/releases/latest):
+Grab the latest files from the [latest release](https://github.com/Paulothedeveloper/ludex/releases/latest):
 
 - **Windows 10/11 (x64):** `Ludex_X.Y.Z_x64-setup.exe`
+- **Android:** `Ludex_X.Y.Z.apk`
 
-Run the `.exe` and follow the steps (it asks for admin to install to `C:\Program Files\Ludex`). From then on Ludex updates itself.
+Run the `.exe` and follow the steps (it asks for admin to install to `C:\Program Files\Ludex`). From then on Ludex updates itself. On Android, install the APK (allow installs from unknown sources); a 7-day free trial lets you try before activating with your key.
 
 ## ⚙️ Requirements
 
@@ -72,6 +77,9 @@ Run the `.exe` and follow the steps (it asks for admin to install to `C:\Program
 | `R` | Random game |
 | `S` or `Esc` | Settings |
 | `/` | Search |
+| `Ctrl+K` | Command palette (all actions) |
+| `F11` | Fullscreen |
+| `F12` | Screenshot (in-game) |
 
 ## 👤 About the developer
 

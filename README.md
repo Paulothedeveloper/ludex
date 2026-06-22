@@ -27,22 +27,24 @@ Launcher estilo Switch/PS5 que centraliza todos seus emuladores num só lugar:
 - **Screenshot no jogo** (F12) salvo numa pasta própria
 - 10 avatares prontos + tour explicativo na primeira execução
 - Totalmente **navegável por controle** (teclado virtual, diálogos e menus)
+- **PC e Android** com uma compra só
 
 ## 💜 Comprar
 
-O Ludex é um app pago — **uma licença, acesso vitalício, até 2 PCs**, sem assinatura:
+O Ludex é um app pago — **uma licença, acesso vitalício, funciona no PC e no celular (Android)**, sem assinatura:
 
 ➡️ **[pauloadriel98.gumroad.com/l/ludex](https://pauloadriel98.gumroad.com/l/ludex)** (R$ 49,90)
 
-Você recebe uma license key por email. Cola no primeiro launch e o app fica seu pra sempre.
+Você recebe uma license key por email. Cola no primeiro launch e o app fica seu pra sempre — a **mesma key ativa o PC e o Android**. A validação da licença passa por um servidor próprio do Ludex (sua key e seus dados nunca ficam expostos dentro do app).
 
 ## 📥 Download
 
-Baixe o instalador da [última release](https://github.com/Paulothedeveloper/ludex/releases/latest):
+Baixe os arquivos da [última release](https://github.com/Paulothedeveloper/ludex/releases/latest):
 
 - **Windows 10/11 (x64):** `Ludex_X.Y.Z_x64-setup.exe`
+- **Android:** `Ludex_X.Y.Z.apk`
 
-Roda o `.exe` e segue as instruções (pede admin pra instalar em `C:\Program Files\Ludex`). Da próxima atualização o Ludex baixa e instala sozinho.
+Roda o `.exe` e segue as instruções (pede admin pra instalar em `C:\Program Files\Ludex`). Da próxima atualização o Ludex baixa e instala sozinho. No Android, instala o APK (permita instalar de fontes desconhecidas); um teste grátis de 7 dias deixa você experimentar antes de ativar com sua key.
 
 ## ⚙️ Pré-requisitos
 
