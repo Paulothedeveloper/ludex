@@ -90,13 +90,38 @@ export default {
     if (purchase.refunded || purchase.chargebacked || purchase.disputed) {
       return jsonResponse({ error: "license refunded/disputed" }, 403);
     }
-    // (Opcional) limite de devices: aqui daria pra checar uma KV com os device_ids
-    // já vistos pra essa key. Sem KV, o token tem device_id + exp curto, então um
-    // device roubado expira sozinho. MAX_DEVICES fica como referência.
+    const now = Math.floor(Date.now() / 1000);
+
+    // 1.5) Limite de dispositivos por key (anti-compartilhamento) ---------
+    // KV guarda, por key, um mapa { device_id: last_seen }. Dispositivos sem
+    // ativar há DEVICE_PRUNE_DAYS liberam a vaga sozinhos (não tranca quem
+    // reinstala/troca de aparelho). Um device já conhecido sempre renova.
+    if (env.DEVICES) {
+      const maxDevices = parseInt(env.MAX_DEVICES || "3", 10);
+      const pruneSecs = parseInt(env.DEVICE_PRUNE_DAYS || "45", 10) * 86400;
+      const keyHash = await sha256Hex(key); // chave do KV (não vaza a key inteira)
+      let map = {};
+      try {
+        const raw = await env.DEVICES.get(keyHash);
+        if (raw) map = JSON.parse(raw);
+      } catch (_) { map = {}; }
+      // poda inativos
+      for (const [d, ts] of Object.entries(map)) {
+        if (now - ts > pruneSecs) delete map[d];
+      }
+      const known = Object.prototype.hasOwnProperty.call(map, device);
+      if (!known && Object.keys(map).length >= maxDevices) {
+        return jsonResponse({
+          error: `Limite de ${maxDevices} dispositivos atingido para essa license. Pare de usar em um aparelho (a vaga libera após ${env.DEVICE_PRUNE_DAYS || "45"} dias sem uso) ou compre outra license.`,
+          device_limit: maxDevices,
+        }, 403);
+      }
+      map[device] = now;
+      try { await env.DEVICES.put(keyHash, JSON.stringify(map)); } catch (_) {}
+    }
 
     // 2) Monta + assina o token (Ed25519) --------------------------------
     // v1.1.0: sem flag de admin — todo comprador é tratado igual.
-    const now = Math.floor(Date.now() / 1000);
     const ttlDays = parseInt(env.TOKEN_TTL_DAYS || "14", 10);
     const payloadObj = {
       v: 1,

@@ -6,7 +6,13 @@ compatibility_date = "2024-11-01"
 [vars]
 GUMROAD_PRODUCT_ID = "YfReCcWOSiwsk37jDMSwJw=="  # product_id real do Gumroad
 TOKEN_TTL_DAYS = "14"                          # validade do token assinado
-MAX_DEVICES = "2"                              # referência (limite de PCs por key)
+MAX_DEVICES = "3"                              # máx de dispositivos ATIVOS por key (PC+celular+folga)
+DEVICE_PRUNE_DAYS = "45"                        # dispositivo sem ativar há N dias libera a vaga
+
+# KV: rastreia device_ids ativos por key (anti-compartilhamento de key).
+[[kv_namespaces]]
+binding = "DEVICES"
+id = "37421fb7c39f4ed5b90b40d972f3d79e"
 
 # SECRETS (NÃO ficam aqui — setar via CLI):
 #   npx wrangler secret put GUMROAD_TOKEN
