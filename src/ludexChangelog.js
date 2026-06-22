@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versão (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "1.1.1": [
+    "Ao desativar um dispositivo, a vaga é liberada na hora pra você ativar em outro.",
+  ],
   "1.1.0": [
     "Licenciamento mais seguro: a validação da sua key agora passa por um servidor próprio do Ludex — sua key e seus dados nunca ficam expostos dentro do app.",
     "Uma license só, PC e celular: ative com a mesma key nos dois (a versão Android virou produto completo, não só demo).",

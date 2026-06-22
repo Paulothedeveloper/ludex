@@ -5648,6 +5648,26 @@ async fn fetch_server_token(key: &str) -> Result<String, String> {
         .ok_or_else(|| "servidor nao retornou token".into())
 }
 
+/// Avisa o servidor pra LIBERAR a vaga deste dispositivo no KV (na hora). Chamado
+/// no "desativar este dispositivo". Best-effort: se falhar (offline), o local limpa
+/// do mesmo jeito e a vaga recicla sozinha pela poda de inatividade.
+async fn notify_server_deactivate(key: &str, device: &str) -> Result<(), String> {
+    let client = http_client_builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent("Ludex/1.1 (license)")
+        .build()
+        .map_err(|e| format!("http client: {}", e))?;
+    let url = format!("{}/deactivate", LICENSE_SERVER_URL.trim_end_matches('/'));
+    let resp = client.post(&url)
+        .json(&serde_json::json!({ "license_key": key.trim(), "device_id": device }))
+        .send().await
+        .map_err(|e| format!("servidor inacessivel: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("servidor retornou {}", resp.status()));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct LicenseInfo {
     /// Validade booleana (true = pode usar o app, false = trancado)
@@ -5750,11 +5770,18 @@ async fn license_validate() -> Result<LicenseInfo, String> {
     }
 }
 
-/// "Desativar este dispositivo": limpa a license local (key + token assinado). O
-/// usuario tera que reativar com a key. Sem chamada externa — o controle de
-/// dispositivos e do servidor/token (device-bound + exp curto).
+/// "Desativar este dispositivo": avisa o servidor pra LIBERAR a vaga deste device
+/// no KV (na hora) e limpa a license local (key + token). O usuario tera que
+/// reativar com a key. O aviso ao servidor e best-effort — se estiver offline, o
+/// local limpa do mesmo jeito e a vaga recicla pela poda de inatividade (45d).
 #[tauri::command]
-fn license_deactivate() -> Result<(), String> {
+async fn license_deactivate() -> Result<(), String> {
+    let cfg = load_config();
+    if server_mode() {
+        if let Some(key) = cfg.license_key.clone() {
+            let _ = notify_server_deactivate(&key, &stable_device_id()).await;
+        }
+    }
     let mut cfg = load_config();
     cfg.license_key = None;
     cfg.license_token = None;
