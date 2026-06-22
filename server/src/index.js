@@ -57,13 +57,31 @@ export default {
     }
     if (request.method !== "POST") return jsonResponse({ error: "POST only" }, 405);
     const url = new URL(request.url);
-    if (url.pathname !== "/token") return jsonResponse({ error: "not found" }, 404);
+    if (url.pathname !== "/token" && url.pathname !== "/deactivate") {
+      return jsonResponse({ error: "not found" }, 404);
+    }
 
     let body;
     try { body = await request.json(); } catch { return jsonResponse({ error: "bad json" }, 400); }
     const key = String(body.license_key || "").trim();
     const device = String(body.device_id || "").trim().slice(0, 128);
     if (!key || !device) return jsonResponse({ error: "missing license_key or device_id" }, 400);
+
+    // POST /deactivate — libera a vaga do dispositivo no KV na hora (sem Gumroad:
+    // remover um device só ajuda o dono da key; precisa da key+device exatos).
+    if (url.pathname === "/deactivate") {
+      if (env.DEVICES) {
+        const keyHash = await sha256Hex(key);
+        let map = {};
+        try { const raw = await env.DEVICES.get(keyHash); if (raw) map = JSON.parse(raw); } catch (_) { map = {}; }
+        delete map[device];
+        try {
+          if (Object.keys(map).length) await env.DEVICES.put(keyHash, JSON.stringify(map));
+          else await env.DEVICES.delete(keyHash);
+        } catch (_) {}
+      }
+      return jsonResponse({ ok: true });
+    }
 
     // 1) Valida no Gumroad (token fica AQUI, nunca no app) ----------------
     const form = new URLSearchParams();
