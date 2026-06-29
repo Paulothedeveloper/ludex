@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" font-family="Segoe UI, system-ui, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#160a26"/><stop offset="1" stop-color="#0a0418"/></linearGradient>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C3AED"/><stop offset="1" stop-color="#EC4899"/></linearGradient>
+    <radialGradient id="gp"><stop offset="0" stop-color="#7C3AED" stop-opacity=".55"/><stop offset="1" stop-color="#7C3AED" stop-opacity="0"/></radialGradient>
+    <radialGradient id="gr"><stop offset="0" stop-color="#EC4899" stop-opacity=".5"/><stop offset="1" stop-color="#EC4899" stop-opacity="0"/></radialGradient>
+    <radialGradient id="amber"><stop offset="0" stop-color="#FCB917"/><stop offset=".6" stop-color="#FCB917"/><stop offset="1" stop-color="#FCB917" stop-opacity="0"/></radialGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="90"/></filter>
+    <filter id="dot" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="12"/></filter>
+    <pattern id="scan" width="3" height="3" patternUnits="userSpaceOnUse"><rect width="3" height="1" fill="#fff" opacity="0.02"/></pattern>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <circle cx="240" cy="160" r="280" fill="url(#gp)" filter="url(#soft)"/>
+  <circle cx="1080" cy="540" r="300" fill="url(#gr)" filter="url(#soft)"/>
+  <!-- marca L. -->
+  <g transform="translate(150,200)">
+    <rect width="240" height="240" rx="54" fill="url(#brand)"/>
+    <path d="M82 56 h36 v94 h70 v36 h-106 z" fill="#fff"/>
+    <circle cx="184" cy="186" r="34" fill="url(#amber)" filter="url(#dot)"/>
+    <circle cx="184" cy="186" r="19" fill="#FCB917"/>
+  </g>
+  <!-- texto -->
+  <text x="450" y="270" fill="#fff" font-size="104" font-weight="800" letter-spacing="2">Ludex</text>
+  <text x="452" y="330" fill="#C4B5FD" font-size="30" font-weight="600">Sua biblioteca retro em um lugar só.</text>
+  <text x="452" y="372" fill="#8a7aa6" font-size="22" font-weight="500">Launcher multi-emulador estilo console · Tauri + Rust + React</text>
+  <!-- badges -->
+  <g transform="translate(452,418)" font-size="22" font-weight="700">
+    <rect width="150" height="46" rx="23" fill="url(#brand)"/><text x="75" y="30" fill="#fff" text-anchor="middle">Windows</text>
+    <rect x="166" width="146" height="46" rx="23" fill="url(#brand)"/><text x="239" y="30" fill="#fff" text-anchor="middle">Android</text>
+    <rect x="328" width="220" height="46" rx="23" fill="#FCB917"/><text x="438" y="30" fill="#1a0a14" text-anchor="middle">Press start →</text>
+  </g>
+  <rect width="1280" height="640" fill="url(#scan)"/>
+</svg>

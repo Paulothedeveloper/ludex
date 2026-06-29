@@ -34,6 +34,18 @@ Launcher estilo Switch/PS5 que centraliza todos seus emuladores num só lugar:
 - Totalmente **navegável por controle** (teclado virtual, diálogos e menus)
 - **PC e Android** com uma compra só
 
+## 🕹️ Conheça o Lumi
+
+O mascote do Ludex — a luz de *press start* da sua coleção.
+
+<div align="center">
+
+[<img src="docs/lumi-thumb.jpg" alt="Lumi — mascote do Ludex (vídeo)" width="220" />](https://github.com/Paulothedeveloper/ludex/releases/download/v1.1.1/Ludex-Mascote-Lumi.mp4)
+
+▶️ **[Ver o Lumi em movimento](https://github.com/Paulothedeveloper/ludex/releases/download/v1.1.1/Ludex-Mascote-Lumi.mp4)**
+
+</div>
+
 ## 💜 Comprar
 
 O Ludex é um app pago — **uma licença, acesso vitalício, funciona no PC e no celular (Android)**, sem assinatura:
