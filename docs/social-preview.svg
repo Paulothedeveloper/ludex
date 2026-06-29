@@ -2,6 +2,7 @@
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#160a26"/><stop offset="1" stop-color="#0a0418"/></linearGradient>
     <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C3AED"/><stop offset="1" stop-color="#EC4899"/></linearGradient>
+    <linearGradient id="iconbg" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#7A41C6"/><stop offset="0.5" stop-color="#43205F"/><stop offset="1" stop-color="#160726"/></linearGradient>
     <radialGradient id="gp"><stop offset="0" stop-color="#7C3AED" stop-opacity=".55"/><stop offset="1" stop-color="#7C3AED" stop-opacity="0"/></radialGradient>
     <radialGradient id="gr"><stop offset="0" stop-color="#EC4899" stop-opacity=".5"/><stop offset="1" stop-color="#EC4899" stop-opacity="0"/></radialGradient>
     <radialGradient id="amber"><stop offset="0" stop-color="#FCB917"/><stop offset=".6" stop-color="#FCB917"/><stop offset="1" stop-color="#FCB917" stop-opacity="0"/></radialGradient>
@@ -12,12 +13,13 @@
   <rect width="1280" height="640" fill="url(#bg)"/>
   <circle cx="240" cy="160" r="280" fill="url(#gp)" filter="url(#soft)"/>
   <circle cx="1080" cy="540" r="300" fill="url(#gr)" filter="url(#soft)"/>
-  <!-- marca L. -->
+  <!-- marca: L + power pixel âmbar (canto) -->
   <g transform="translate(150,200)">
-    <rect width="240" height="240" rx="54" fill="url(#brand)"/>
-    <path d="M82 56 h36 v94 h70 v36 h-106 z" fill="#fff"/>
-    <circle cx="184" cy="186" r="34" fill="url(#amber)" filter="url(#dot)"/>
-    <circle cx="184" cy="186" r="19" fill="#FCB917"/>
+    <rect width="240" height="240" rx="54" fill="url(#iconbg)"/>
+    <circle cx="104" cy="153" r="38" fill="url(#amber)" filter="url(#dot)"/>
+    <rect x="89" y="62" width="31" height="76" fill="#fff"/>
+    <rect x="120" y="138" width="53" height="31" fill="#fff"/>
+    <rect x="89" y="138" width="31" height="31" rx="3" fill="#FCB917"/>
   </g>
   <!-- texto -->
   <text x="450" y="270" fill="#fff" font-size="104" font-weight="800" letter-spacing="2">Ludex</text>
