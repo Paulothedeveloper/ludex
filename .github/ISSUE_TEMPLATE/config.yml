@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🎮 Comprar o Ludex · Buy Ludex
+    url: https://pauloadriel98.gumroad.com/l/ludex
+    about: Licença vitalícia, PC + Android (até 3 dispositivos). · Lifetime license, PC + Android.
+  - name: 📥 Última versão · Latest release
+    url: https://github.com/Paulothedeveloper/ludex/releases/latest
+    about: Baixar o instalador (Windows) ou o APK (Android). · Download the installer or APK.
+  - name: ✉️ Suporte · Support
+    url: mailto:paulobatista19988@proton.me
+    about: Dúvidas de compra/licença. · Purchase / license questions.

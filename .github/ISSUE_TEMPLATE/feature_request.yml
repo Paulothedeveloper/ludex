@@ -1,0 +1,19 @@
+name: 💡 Ideia / Feature
+description: Sugerir uma melhoria · Suggest an improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Que dor isso resolve? · What pain does it solve?
+      description: Foque no problema, não só na solução. · Focus on the problem, not just the solution.
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes:
+      label: Sua ideia · Your idea
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Onde? · Where?
+      options: [PC (Windows), Celular (Android), Ambos]

@@ -8,7 +8,12 @@
 
 🌍 **[English](README.en.md)** · [Português](README.md)
 
-[![Buy Ludex](https://img.shields.io/badge/Buy-Ludex%20R$49,90-7c3aed?style=for-the-badge)](https://pauloadriel98.gumroad.com/l/ludex)
+[![Release](https://img.shields.io/github/v/release/Paulothedeveloper/ludex?style=for-the-badge&color=7c3aed)](https://github.com/Paulothedeveloper/ludex/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Paulothedeveloper/ludex/total?style=for-the-badge&color=ec4899)](https://github.com/Paulothedeveloper/ludex/releases)
+[![Platforms](https://img.shields.io/badge/Windows%20%7C%20Android-1f1f1f?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Paulothedeveloper/ludex/releases/latest)
+[![License](https://img.shields.io/github/license/Paulothedeveloper/ludex?style=for-the-badge&color=22c55e)](LICENSE)
+
+[![Buy Ludex — R$ 49.90](https://img.shields.io/badge/Buy%20now-R$%2049.90-fcb917?style=for-the-badge&logo=gumroad&logoColor=black)](https://pauloadriel98.gumroad.com/l/ludex)
 
 </div>
 

@@ -1,0 +1,38 @@
+name: 🐛 Bug / Problema
+description: Reportar um bug no Ludex · Report a bug
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Obrigado por ajudar a melhorar o Ludex! Preencha o máximo possível. · Thanks for helping improve Ludex!"
+  - type: textarea
+    id: what
+    attributes:
+      label: O que aconteceu? · What happened?
+      description: Descreva o problema e o que você esperava. · Describe the problem and what you expected.
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Passos pra reproduzir · Steps to reproduce
+      placeholder: |
+        1. Abri o Ludex...
+        2. Cliquei em...
+        3. Aconteceu...
+    validations: { required: true }
+  - type: dropdown
+    id: os
+    attributes:
+      label: Sistema · OS
+      options: [Windows, Android]
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Versão do Ludex · Ludex version
+      description: "Ajustes → Sobre · Settings → About (ex.: 1.1.1)"
+    validations: { required: true }
+  - type: textarea
+    id: extra
+    attributes:
+      label: Print / logs (opcional)
