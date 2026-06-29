@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versão (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "1.1.2": [
+    "Marca renovada: novo logotipo \"LUDEX\" (agora lê o nome com clareza) e ícone do app no Android redesenhado, com o ponto âmbar de power.",
+  ],
   "1.1.1": [
     "Ao desativar um dispositivo, a vaga é liberada na hora pra você ativar em outro.",
   ],

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/ludex-logo.jpg" alt="Ludex" width="460" />
+<img src="docs/ludex-logo.png" alt="Ludex" width="460" />
 
 # Ludex
 
