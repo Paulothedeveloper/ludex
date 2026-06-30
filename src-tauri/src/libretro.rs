@@ -261,8 +261,14 @@ pub static OPTIONS_DIRTY: std::sync::atomic::AtomicBool = std::sync::atomic::Ato
 
 pub fn set_option_override(key: String, value: String) {
     if let Ok(cs) = CString::new(value) {
-        let leaked: &'static CString = Box::leak(Box::new(cs));
         let mut m = option_overrides().lock().unwrap();
+        // HARDENING (auditoria 2026-06): dedup — só vaza (Box::leak, necessário p/ dar
+        // ponteiro 'static ao core) se o valor MUDOU. Antes, cada toque repetido num
+        // slider/toggle de config vazava um CString mesmo sem alteração.
+        if let Some(existing) = m.get(&key) {
+            if existing.as_c_str() == cs.as_c_str() { return; }
+        }
+        let leaked: &'static CString = Box::leak(Box::new(cs));
         m.insert(key, leaked);
         // Sinaliza pro core re-ler as variaveis (hot-reload)
         OPTIONS_DIRTY.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -572,8 +578,11 @@ extern "C" fn cb_environment(cmd: c_uint, data: *mut c_void) -> bool {
         RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO => unsafe {
             if data.is_null() { return false; }
             let av = data as *const RetroSystemAvInfo;
-            log::info!("[libretro] SET_AV_INFO {}x{} fps={}", (*av).geometry.base_width, (*av).geometry.base_height, (*av).timing.fps);
-            g.av_info = Some(std::ptr::read(av));
+            // HARDENING (auditoria 2026-06): read_unaligned — o ponteiro vem do core e pode
+            // não estar alinhado; std::ptr::read em ptr desalinhado é UB. Lê uma vez.
+            let info = std::ptr::read_unaligned(av);
+            log::info!("[libretro] SET_AV_INFO {}x{} fps={}", info.geometry.base_width, info.geometry.base_height, info.timing.fps);
+            g.av_info = Some(info);
             true
         },
         // Outros cmds que retornam unhandled mas com log debug
@@ -992,30 +1001,35 @@ extern "C" fn cb_video_refresh(data: *const c_void, width: c_uint, height: c_uin
     // a gente faz glReadPixels pra trazer pra RAM.
     #[cfg(any(windows, target_os = "android"))]
     if data as isize == RETRO_HW_FRAME_BUFFER_VALID {
-        if let Some(rgba) = crate::gl_context::read_pixels(width, height) {
+        // dims efetivas (clampadas ao FBO) vêm do read_pixels p/ o Frame casar com o buffer
+        if let Some((rgba, w, h)) = crate::gl_context::read_pixels(width, height) {
             let s = state();
             let mut g = s.lock().unwrap();
-            g.frame = Some(Frame { width, height, rgba });
+            g.frame = Some(Frame { width: w, height: h, rgba });
         }
         return;
     }
     if data.is_null() { return; }
-    // v0.8.35: snapshot pixel_format e libera lock ANTES do per-pixel loop
-    let fmt = {
-        let s = state();
-        let g = s.lock().unwrap();
-        g.pixel_format
-    };
     let need = (width * height * 4) as usize;
+    // HARDENING (auditoria 2026-06): seção crítica ÚNICA (lock seguro do começo ao fim).
+    // Antes o lock era solto entre o snapshot do pixel_format e a escrita, abrindo janela
+    // pra um SET_PIXEL_FORMAT concorrente trocar o formato no meio do decode + race no
+    // frame_pool. Aqui fmt+pool+decode+store ficam atômicos. (run_frame NÃO segura este
+    // lock durante retro_run — senão o callback já dava deadlock antes — então é seguro.)
+    let s = state();
+    let mut g = s.lock().unwrap();
+    let fmt = g.pixel_format;
+    // CRÍTICO: valida pitch ANTES de ler. Cores que mudam geometria em runtime (PS1 troca de
+    // modo, SET_GEOMETRY) podem mandar frame com pitch < width*bpp -> a leitura indexada por
+    // width passaria do fim do buffer do core (read OOB/UB). Frame malformado é descartado.
+    let bpp: usize = if fmt == RETRO_PIXEL_FORMAT_XRGB8888 { 4 } else { 2 };
+    if width == 0 || height == 0 || pitch < (width as usize) * bpp {
+        return;
+    }
     // v0.8.35: reusa buffer do pool (sem alloc por frame). Cresce on-demand.
-    let mut rgba = {
-        let s = state();
-        let mut g = s.lock().unwrap();
-        let mut v = std::mem::take(&mut g.frame_pool);
-        if v.capacity() < need { v.reserve(need - v.capacity()); }
-        v.resize(need, 0);
-        v
-    };
+    let mut rgba = std::mem::take(&mut g.frame_pool);
+    if rgba.capacity() < need { rgba.reserve(need - rgba.capacity()); }
+    rgba.resize(need, 0);
     unsafe {
         match fmt {
             RETRO_PIXEL_FORMAT_XRGB8888 => {
@@ -1072,9 +1086,7 @@ extern "C" fn cb_video_refresh(data: *const c_void, width: c_uint, height: c_uin
             }
         }
     }
-    // v0.8.35: devolve frame pro pool reciclando o Vec antigo
-    let s = state();
-    let mut g = s.lock().unwrap();
+    // devolve frame pro pool reciclando o Vec antigo (mesma seção crítica — g já travado)
     let old = g.frame.replace(Frame { width, height, rgba });
     if let Some(old_frame) = old {
         // Pool guarda o Vec liberado pra proxima alocacao
@@ -1369,8 +1381,14 @@ impl LibretroCore {
                 log::info!("[libretro] chamando hw context_destroy");
                 destroy();
             }
-            let s2 = state();
-            let mut g = s2.lock().unwrap();
+        }
+        // HARDENING (auditoria 2026-06): limpa estado HW/disk/rom SEMPRE — antes estava só
+        // no cfg(windows/android), então em macOS/Linux ficava sujo: após reload de outro
+        // core, hw_context_reset/disk_control apontavam pra uma Library já dropada
+        // (dangling fn-ptr). Reset incondicional fecha esse buraco.
+        {
+            let s = state();
+            let mut g = s.lock().unwrap();
             g.hw_active = false;
             g.hw_context_reset = None;
             g.hw_context_destroy = None;
@@ -1378,7 +1396,11 @@ impl LibretroCore {
             g.current_rom_path = None;
         }
         if let Ok(f) = self.lib.get::<Fn0>(b"retro_unload_game") { f(); }
-        // v0.8.46: cleanup do symlink/hardlink temp/rom.* (deixa pasta limpa)
+        // v0.8.46: cleanup do hardlink/symlink em temp/. FIX (auditoria 2026-06): o link é
+        // criado como "rom_<hash>.<ext>" (make_safe_link), mas o cleanup testava o prefixo
+        // antigo "rom." que NUNCA casava -> leak de FS (links acumulando). Corrigido p/
+        // "rom_". É seguro apagar: o link é recriado idêntico (hash do path) na próxima
+        // sessão, então o nome do memcard se mantém estável.
         let temp_link = dirs::data_dir()
             .map(|d| d.join("Ludex").join("temp"));
         if let Some(temp_dir) = temp_link {
@@ -1386,7 +1408,7 @@ impl LibretroCore {
                 for e in entries.flatten() {
                     let p = e.path();
                     if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
-                        if name.starts_with("rom.") { let _ = std::fs::remove_file(&p); }
+                        if name.starts_with("rom_") { let _ = std::fs::remove_file(&p); }
                     }
                 }
             }

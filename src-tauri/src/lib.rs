@@ -2614,8 +2614,16 @@ fn move_dir_contents(from: &Path, to: &Path) -> Result<u32, String> {
 }
 
 fn profile_saves_dir(profile_id: &str, emu_id: &str) -> Option<PathBuf> {
+    // HARDENING (auditoria 2026-06): profile_id/emu_id viram componentes de path E alvo de
+    // junction (mklink /J). Sanitiza separadores e barra traversal ("..", "."  vazio) pra
+    // um id malicioso nao deslocar a pasta de saves pra fora de profiles/.
+    let pid = sanitize_filename(profile_id);
+    let eid = sanitize_filename(emu_id);
+    if matches!(pid.as_str(), "" | "." | "..") || matches!(eid.as_str(), "" | "." | "..") {
+        return None;
+    }
     let base = dirs::data_dir()?;
-    let dir = base.join("Ludex").join("profiles").join(profile_id).join("saves").join(emu_id);
+    let dir = base.join("Ludex").join("profiles").join(&pid).join("saves").join(&eid);
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir)
 }
@@ -4210,10 +4218,15 @@ fn save_thumb_path(rom_path: &str, slot: u32) -> Option<PathBuf> {
 fn libretro_save_state(rom_path: String, slot: u32, thumbnail_png: Option<Vec<u8>>) -> Result<String, String> {
     safe_call("libretro_save_state", move || {
         let path = save_state_path(&rom_path, slot).ok_or("path indisponivel")?;
-        let slot_lock = libretro_slot();
-        let g = slot_lock.lock().unwrap();
-        let core = g.as_ref().ok_or("nenhum core ativo")?;
-        let bytes = unsafe { core.serialize()? };
+        // HARDENING (auditoria 2026-06): serializa SOB o lock, mas SOLTA antes do fs::write.
+        // Antes o disco (save de PS2 pode ter dezenas de MB) era escrito com o lock do core
+        // segurado -> run_frame bloqueava = stutter/freeze. serialize precisa do lock; write não.
+        let bytes = {
+            let slot_lock = libretro_slot();
+            let g = slot_lock.lock().unwrap();
+            let core = g.as_ref().ok_or("nenhum core ativo")?;
+            unsafe { core.serialize()? }
+        };
         std::fs::write(&path, &bytes).map_err(|e| {
             log::error!("save_state: {}", e);
             format!("escrever state: {}", e)
@@ -4570,7 +4583,7 @@ struct UpdateInfo {
 
 #[tauri::command]
 async fn check_update_info() -> Result<UpdateInfo, String> {
-    const ENDPOINT: &str = "https://github.com/EllaeMyApp/ludex/releases/latest/download/latest.json";
+    const ENDPOINT: &str = "https://github.com/Paulothedeveloper/ludex/releases/latest/download/latest.json";
     let client = http_client_builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
@@ -4585,7 +4598,7 @@ async fn check_update_info() -> Result<UpdateInfo, String> {
     let exe_url = json["platforms"]["windows-x86_64"]["url"].as_str().unwrap_or("").to_string();
     // APK url segue convencao: substitui Ludex_X.X.X_x64-setup.exe -> Ludex_X.X.X.apk
     let apk_url = if !latest.is_empty() {
-        format!("https://github.com/EllaeMyApp/ludex/releases/download/v{0}/Ludex_{0}.apk", latest)
+        format!("https://github.com/Paulothedeveloper/ludex/releases/download/v{0}/Ludex_{0}.apk", latest)
     } else { String::new() };
     let current = env!("CARGO_PKG_VERSION").to_string();
     let available = !latest.is_empty() && version_is_newer(&latest, &current);
@@ -4596,6 +4609,12 @@ async fn check_update_info() -> Result<UpdateInfo, String> {
 #[tauri::command]
 async fn android_download_apk(apk_url: String) -> Result<String, String> {
     use tokio::io::AsyncWriteExt;
+    // HARDENING (auditoria 2026-06): so baixa APK do repo oficial de releases. Sem isso o
+    // comando aceitaria QUALQUER url (engenharia social de "update" apontando pra APK forjado).
+    // O updater real monta a url a partir de check_update_info (base GitHub fixa).
+    if !apk_url.starts_with("https://github.com/Paulothedeveloper/ludex/releases/") {
+        return Err(String::from("Origem de atualizacao nao permitida."));
+    }
     // Cache dir do app via Kotlin
     let cache_dir = android_update_cache_dir_inner()?;
     let dest_path = format!("{}/ludex-update.apk", cache_dir);
@@ -4824,6 +4843,11 @@ fn open_url(url: String) -> Result<(), String> {
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return Err("URL invalida (precisa http/https)".into());
     }
+    // HARDENING (auditoria 2026-06): rejeita metacaracteres/controle que poderiam encadear
+    // comando ou confundir o handler (a abertura nao passa mais por shell, mas defesa em profundidade).
+    if url.contains(['"', '\'', '\n', '\r', '\t', '\0', ' ', '&', '|', '^', '<', '>', '`', '$']) {
+        return Err("URL invalida (caracteres nao permitidos)".into());
+    }
     #[cfg(target_os = "android")]
     {
         use jni::objects::{JObject, JString};
@@ -4840,10 +4864,28 @@ fn open_url(url: String) -> Result<(), String> {
         ).map_err(|e| format!("JNI openUrl: {}", e))?;
         return Ok(());
     }
-    #[cfg(not(target_os = "android"))]
+    // Desktop: abre no navegador padrao SEM passar por shell (cada SO com seu launcher;
+    // a URL vai como argv unico literal -> nada de injecao via cmd /C start).
+    #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
-            .args(["/C", "start", "", &url])
+        Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", &url])
+            .spawn()
+            .map_err(|e| format!("abrir url: {}", e))?;
+        Ok(())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| format!("abrir url: {}", e))?;
+        Ok(())
+    }
+    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android"), not(target_os = "ios")))]
+    {
+        Command::new("xdg-open")
+            .arg(&url)
             .spawn()
             .map_err(|e| format!("abrir url: {}", e))?;
         Ok(())
@@ -4878,6 +4920,22 @@ fn delete_game_to_trash(system_id: String, game_name: String, game_path: String)
     } else {
         p
     };
+    // HARDENING (auditoria 2026-06): game_path vem do frontend. Sem containment, um path
+    // malicioso ("..", caminho absoluto fora do acervo) apagaria arquivos do usuario —
+    // critico no Android, que deleta direto SEM lixeira. Exige que o alvo esteja DENTRO
+    // da raiz de ROMs (canonicalize resolve "..", symlinks e prefixo UNC nos dois lados).
+    {
+        let canon_target = target.canonicalize().map_err(|e| format!("path invalido: {}", e))?;
+        let canon_root = current_roms_root()
+            .canonicalize()
+            .map_err(|e| format!("raiz de ROMs indisponivel: {}", e))?;
+        if !canon_target.starts_with(&canon_root) {
+            return Err(format!(
+                "Recusado por seguranca: '{}' esta fora da pasta de ROMs",
+                target.display()
+            ));
+        }
+    }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         trash::delete(&target).map_err(|e| format!("Lixeira: {}", e))?;
@@ -6019,7 +6077,7 @@ fn android_demo_status() -> AndroidDemoStatus {
 
 // v0.9.0: removido ANDROID_LATEST_JSON (nunca foi gerado). Vai direto pra REST API
 // do GitHub que ja serve a metadata correta (assets, tag_name, body).
-const ANDROID_LATEST_FALLBACK: &str = "https://api.github.com/repos/EllaeMyApp/ludex/releases/latest";
+const ANDROID_LATEST_FALLBACK: &str = "https://api.github.com/repos/Paulothedeveloper/ludex/releases/latest";
 
 #[derive(Serialize)]
 struct AndroidUpdateInfo {

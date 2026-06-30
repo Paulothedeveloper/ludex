@@ -97,9 +97,14 @@ pub fn get_proc_addr(name: *const c_char) -> *const c_void {
 /// + audio engasgando. Agora: a leitura do PBO retorna o frame ANTERIOR enquanto
 /// a GPU enfileira a do atual em paralelo. 1 frame de latencia (imperceptivel),
 /// 0 stall. Primeiro frame retorna None (PBO ainda vazio).
-pub fn read_pixels(width: u32, height: u32) -> Option<Vec<u8>> {
+pub fn read_pixels(width: u32, height: u32) -> Option<(Vec<u8>, u32, u32)> {
     let mut slot = ctx_slot().lock().unwrap();
     let ctx = slot.as_mut()?;
+    // HARDENING (auditoria 2026-06): clampa ao tamanho do FBO (2048²) — cores com upscale
+    // pediriam > FBO e o readback/copy passaria do conteúdo real (OOB). Retorna dims efetivas.
+    let width = width.min(ctx.width);
+    let height = height.min(ctx.height);
+    if width == 0 || height == 0 { return None; }
     if ctx.egl.make_current(ctx.display, Some(ctx.surface), Some(ctx.surface), Some(ctx.context)).is_err() {
         return None;
     }
@@ -154,7 +159,7 @@ pub fn read_pixels(width: u32, height: u32) -> Option<Vec<u8>> {
                     out[dst..dst + row].copy_from_slice(&ctx.readbuf[src..src + row]);
                     for px in 0..(width as usize) { out[dst + px * 4 + 3] = 0xFF; }
                 }
-                Some(out)
+                Some((out, width, height))
             }
         };
 

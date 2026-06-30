@@ -2,6 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import VirtualKeyboard from "./LudexOSK";
 import { t } from "./ludexI18n";
+import { GamepadIcon, CameraIcon, HeartIcon } from "./ludexIcons";
+
+// v1.1.5: helpers p/ icones inline no fluxo de texto (regra ZERO emoji)
+const GpadInline = () => <GamepadIcon style={{ width: "1em", height: "1em", verticalAlign: "-0.14em" }} />;
 
 // 10 avatares SVG procedurais (data URI) — sem assets externos.
 // Cada um tem cor/glyph diferente. Inicial do nome do user é desenhada por cima
@@ -175,7 +179,7 @@ const TOUR_STEPS = [
     // selector que não casa com nada → rect null → banner centralizado + blur cheio
     id: "end",
     selector: '[data-tour="__end__"]',
-    title: "Bom jogo! 🎮",
+    title: "Bom jogo!",
     body: "É isso! Sua biblioteca retro tá pronta. Aproveite — e bons jogos.",
     placement: "center",
   },
@@ -274,12 +278,12 @@ function TourBanner({ step, rect, idx, total, onNext, onPrev, onSkip }) {
       <p className="lx-tour-banner-body">{t(step.body)}</p>
       {step.id === "end" && (
         <div className="lx-tour-credit" style={{ display: "flex", alignItems: "center", gap: 8, margin: "2px 0 14px", fontSize: 13, color: "var(--theme-muted, #aaa)" }}>
-          <span>{t("Feito com 💜 por")} <strong style={{ color: "var(--theme-text, #fff)" }}>Paulo</strong></span>
+          <span>{t("Feito com")} <HeartIcon style={{ width: "1em", height: "1em", verticalAlign: "-0.14em", color: "#c084fc" }} /> {t("por")} <strong style={{ color: "var(--theme-text, #fff)" }}>Paulo</strong></span>
           <button
             onClick={() => invoke("open_url", { url: "https://instagram.com/paulo.videodev" }).catch(() => {})}
             style={{ marginLeft: "auto", background: "var(--lx-grad, linear-gradient(135deg,#7c3aed,#ec4899))", color: "#fff", border: 0, borderRadius: 999, padding: "5px 12px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", fontSize: 12.5 }}
             title="Instagram"
-          >📸 @paulo.videodev</button>
+          ><CameraIcon style={{ width: "1em", height: "1em", verticalAlign: "-0.14em" }} /> @paulo.videodev</button>
         </div>
       )}
       <div className="lx-tour-banner-actions">
@@ -298,7 +302,7 @@ function TourBanner({ step, rect, idx, total, onNext, onPrev, onSkip }) {
         </div>
       </div>
       <div className="lx-tour-banner-step" style={{ marginTop: 10, opacity: 0.75 }}>
-        🎮 <b>A</b> {t("próximo")} · <b>B</b> {t("anterior")} · <b>Start</b> {t("pular")}
+        <GpadInline /> <b>A</b> {t("próximo")} · <b>B</b> {t("anterior")} · <b>Start</b> {t("pular")}
       </div>
     </div>
   );
@@ -444,7 +448,7 @@ function ProfileForm({ initialName = "", onCreate, onBack }) {
       {!canContinue && (
         <p className="lx-firstrun-hint">{t("Digite pelo menos 2 letras pra continuar.")}</p>
       )}
-      <p className="lx-firstrun-hint">🎮 {t("No controle:")} <b>A</b> {t("digitar nome / Entrar")} · <b>←/→</b> {t("trocar avatar")} · <b>Start</b> {t("Entrar")}</p>
+      <p className="lx-firstrun-hint"><GpadInline /> {t("No controle:")} <b>A</b> {t("digitar nome / Entrar")} · <b>←/→</b> {t("trocar avatar")} · <b>Start</b> {t("Entrar")}</p>
     </div>
   );
 }
@@ -532,7 +536,7 @@ export default function LudexOnboarding({ onComplete, tourOnly = false }) {
               {t("Ver tour guiado (opcional)")}
             </button>
           </div>
-          <p className="lx-firstrun-hint" style={{ marginTop: 16 }}>🎮 {t("No controle:")} <b>A</b> {t("continuar")} · <b>Y</b> {t("ver tour")}</p>
+          <p className="lx-firstrun-hint" style={{ marginTop: 16 }}><GpadInline /> {t("No controle:")} <b>A</b> {t("continuar")} · <b>Y</b> {t("ver tour")}</p>
         </div>
       </div>
     );

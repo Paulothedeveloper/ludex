@@ -120,7 +120,7 @@ export default function LudexAchievementsOverlay({ open, onClose }) {
                           <span className="lxra-ach-desc">{a.description}</span>
                           <span className="lxra-ach-game">{a.game_title} · {a.console_name}</span>
                         </div>
-                        <span className="lxra-pts">{t("{points} pts", { points: a.points })}{a.hardcore ? " · 🔥" : ""}</span>
+                        <span className="lxra-pts">{t("{points} pts", { points: a.points })}{a.hardcore ? <span title="Hardcore" style={{ marginLeft: 5, fontSize: "0.78em", fontWeight: 800, color: "#ff7a59", letterSpacing: "0.04em" }}>HC</span> : ""}</span>
                       </li>
                     ))}
                   </ul>

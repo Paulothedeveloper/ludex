@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { t } from "./ludexI18n";
+import { GamepadIcon } from "./ludexIcons";
 
 /**
  * v0.9.39: diálogos in-app navegáveis por CONTROLE (substituem alert/confirm/prompt
@@ -125,7 +126,7 @@ export function LxDialogHost() {
             onMouseEnter={() => isConfirm && setFocusIdx(1)}
           >{dlg.okText}</button>
         </div>
-        <div className="lx-dlg-hint">🎮 <b>A</b> {isConfirm ? t("selecionar") : "OK"} · {isConfirm ? t("←/→ trocar · B cancelar") : t("B fechar")}</div>
+        <div className="lx-dlg-hint"><GamepadIcon style={{ width: "1em", height: "1em", verticalAlign: "-0.14em" }} /> <b>A</b> {isConfirm ? t("selecionar") : "OK"} · {isConfirm ? t("←/→ trocar · B cancelar") : t("B fechar")}</div>
       </div>
     </div>
   );

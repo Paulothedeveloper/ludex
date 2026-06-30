@@ -61,6 +61,9 @@ const IconPlay = () => (<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden
 const IconStar = ({ filled }) => (<svg viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9 12 2" /></svg>);
 const IconClose = () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>);
 const IconClock = () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>);
+// v1.1.5: substituem emojis de UI (regra ZERO emoji). 'style' inline p/ dimensionar no fluxo de texto.
+const IconCamera = (props) => (<svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>);
+const IconHeart = (props) => (<svg {...props} viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M12 21s-7.5-4.6-10-9.2C.4 8.4 2 4.8 5.4 4.8c2 0 3.4 1.2 4.6 2.8 1.2-1.6 2.6-2.8 4.6-2.8 3.4 0 5 3.6 3.4 7C19.5 16.4 12 21 12 21z" /></svg>);
 // v0.9.11: icones da nav flutuante — estilo console (PS5/Xbox), preenchidos e
 // arredondados, sem texto embaixo. Sistemas = gamepad (mais "console" que grade).
 const IconNavHome = () => (<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M11.3 3.3a1 1 0 0 1 1.4 0l8 7.3a1 1 0 0 1 .3.74V19a2 2 0 0 1-2 2h-3.5a1 1 0 0 1-1-1v-4.5a.8.8 0 0 0-.8-.8h-3.4a.8.8 0 0 0-.8.8V20a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2v-7.66a1 1 0 0 1 .3-.73z" /></svg>);
@@ -3033,7 +3036,7 @@ function MobileEmulatorView({ system, game, onClose }) {
                   <button key={`l${s}`} className="lmx-emu-menu-pill" onClick={() => { loadState(s); setMenuOpen(false); }}>{t("Carregar {slot}", { slot: s })}</button>
                 ))}
               </div>
-              <button className="lmx-emu-menu-pill" style={{ marginTop: 8 }} onClick={() => { takeScreenshot(); setMenuOpen(false); }}>📸 {t("Tirar screenshot")}</button>
+              <button className="lmx-emu-menu-pill" style={{ marginTop: 8 }} onClick={() => { takeScreenshot(); setMenuOpen(false); }}><IconCamera style={{ width: "1em", height: "1em", verticalAlign: "-0.14em" }} /> {t("Tirar screenshot")}</button>
             </div>
 
             <div className="lmx-emu-menu-section">
@@ -3460,11 +3463,11 @@ function TutorialBanner({ step, rect, idx, total, onNext, onPrev, onSkip }) {
       <p className="lmx-tour-body">{t(step.body)}</p>
       {step.id === "done" && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 12px", fontSize: 13, color: "rgba(255,255,255,0.6)" }}>
-          <span>{t("Feito com 💜 por")} <strong style={{ color: "#fff" }}>Paulo</strong></span>
+          <span>{t("Feito com")} <IconHeart style={{ width: "1em", height: "1em", verticalAlign: "-0.14em", color: "#c084fc" }} /> {t("por")} <strong style={{ color: "#fff" }}>Paulo</strong></span>
           <button
             onClick={() => { invoke("open_url", { url: "https://instagram.com/paulo.videodev" }).catch(() => {}); }}
             style={{ marginLeft: "auto", background: "var(--lx-grad, linear-gradient(135deg,#7c3aed,#ec4899))", color: "#fff", border: 0, borderRadius: 999, padding: "6px 12px", fontWeight: 700, fontFamily: "inherit", fontSize: 12.5 }}
-          >📸 @paulo.videodev</button>
+          ><IconCamera style={{ width: "1em", height: "1em", verticalAlign: "-0.14em" }} /> @paulo.videodev</button>
         </div>
       )}
       <div className="lmx-tour-actions">

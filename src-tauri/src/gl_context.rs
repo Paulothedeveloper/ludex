@@ -127,9 +127,16 @@ pub fn get_proc_addr(name: *const c_char) -> *const c_void {
 /// Le pixels do FBO via PBO async (1 frame de latencia, sem GPU stall).
 /// Frame N: dispara glReadPixels pro PBO atual (GPU async)
 /// Frame N+1: lê PBO do frame N (já completo)
-pub fn read_pixels(width: u32, height: u32) -> Option<Vec<u8>> {
+pub fn read_pixels(width: u32, height: u32) -> Option<(Vec<u8>, u32, u32)> {
     let mut slot = ctx_slot().lock().unwrap();
     let ctx = slot.as_mut()?;
+    // HARDENING (auditoria 2026-06): clampa ao tamanho do FBO (2048²). Cores com upscale
+    // (PCSX2/Dolphin 4x) podem pedir width/height > FBO -> glReadPixels leria fora do FBO e
+    // o map/copy assumiria 'bytes' maiores que o conteúdo real (OOB). Retorna as dims
+    // efetivas pra o caller montar o Frame coerente com o buffer.
+    let width = width.min(ctx.width);
+    let height = height.min(ctx.height);
+    if width == 0 || height == 0 { return None; }
     if !unsafe { wglMakeCurrent(ctx.hdc, ctx.hglrc) != 0 } { return None; }
     let bytes = (width as usize) * (height as usize) * 4;
     let idx_now = ctx.pbo_idx;
@@ -180,7 +187,7 @@ pub fn read_pixels(width: u32, height: u32) -> Option<Vec<u8>> {
                 }
             }
             gl::UnmapBuffer(gl::PIXEL_PACK_BUFFER);
-            Some(out)
+            Some((out, width, height))
         } else { None };
 
         gl::BindBuffer(gl::PIXEL_PACK_BUFFER, 0);

@@ -62,3 +62,9 @@ cores/
 
 # v0.9.40: vault Obsidian = NOTAS INTERNAS, NUNCA no repo publico (tinha credenciais).
 PlayBox - Vault/
+
+# Notas operacionais internas (PII + infra do Worker) — NUNCA no repo publico, ficam locais/vault
+CLAUDE.md
+PROMPTER-LUDEX.md
+# Backup pessoal de configs de emulador (caminhos D:\Playbox, nomes de ROM) — nao faz parte do produto
+configs-backup/

@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { SystemSettingsModal } from "./LudexExtras";
-import { CloseIcon, SystemIcon } from "./ludexIcons";
+import { CloseIcon, SystemIcon, CameraIcon } from "./ludexIcons";
 import { ToolsIcon as LxToolsIcon } from "./LudexExtras";
 import { hasOptionsForSystem, applySystemOptions, effectivePadMap, getFrontendConfig, SCREEN_LAYOUTS, loadSystemOptions, saveSystemOptions } from "./ludexSystemOptions";
 import { validRomExtension, invokeTimeout } from "./ludexUtils";
@@ -330,7 +330,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
     try {
       const dataUrl = c.toDataURL("image/png");
       await invoke("save_game_screenshot", { gameName: game.name || "game", dataUrl });
-      showStateMsg("ok", t("Screenshot salvo 📸"));
+      showStateMsg("ok", t("Screenshot salvo"));
     } catch (e) {
       console.warn("screenshot", e);
       showStateMsg("error", t("Falha no screenshot"));
@@ -563,7 +563,7 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
         className="pb-emulator-cheats"
         onClick={takeScreenshot}
         title={t("Tirar screenshot (F12)")}
-      >📸</button>
+      ><CameraIcon style={{ width: "1.1em", height: "1.1em" }} /></button>
       {cheatsOpen && (
         <CheatsModal systemId={system.id} gamePath={game.path} onClose={() => setCheatsOpen(false)} />
       )}

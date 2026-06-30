@@ -4,6 +4,12 @@
 
 // Bullets curtos e claros por versão (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "1.1.5": [
+    "Mais estável na emulação: correção de uma falha rara em jogos que trocam de resolução durante o jogo, e limpeza de arquivos temporários que ficavam pra trás.",
+    "Correção: a atualização automática no Android agora aponta pro lugar certo — você volta a receber as novas versões.",
+    "App e licenciamento mais seguros: proteções reforçadas (sem mudança no seu uso).",
+    "Acabamento visual: ícones próprios no lugar de emojis e textos em espanhol revisados.",
+  ],
   "1.1.4": [
     "Seletor de idioma mais claro: agora mostra o nome de cada idioma (Português, English, Español…) em vez de bandeirinhas — bandeira não representa idioma.",
   ],

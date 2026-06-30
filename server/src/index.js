@@ -27,9 +27,12 @@ const b64url = (bytes) =>
   btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
 function jsonResponse(obj, status = 200) {
+  // HARDENING (auditoria 2026-06): SEM CORS. O cliente real e o app nativo (reqwest, nao
+  // tem CORS). Header "*" so beneficiava um browser de terceiro chamando /token ou
+  // /deactivate a partir da pagina da vitima — superficie removida.
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { "content-type": "application/json", "access-control-allow-origin": "*" },
+    headers: { "content-type": "application/json" },
   });
 }
 
@@ -46,19 +49,23 @@ async function sha256Hex(str) {
 
 export default {
   async fetch(request, env) {
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        headers: {
-          "access-control-allow-origin": "*",
-          "access-control-allow-methods": "POST, OPTIONS",
-          "access-control-allow-headers": "content-type",
-        },
-      });
-    }
-    if (request.method !== "POST") return jsonResponse({ error: "POST only" }, 405);
+    // Sem CORS (API nativa, nao-browser): OPTIONS nao e necessario.
+    if (request.method !== "POST") return jsonResponse({ error: "method not allowed" }, 405);
     const url = new URL(request.url);
     if (url.pathname !== "/token" && url.pathname !== "/deactivate") {
       return jsonResponse({ error: "not found" }, 404);
+    }
+
+    // HARDENING (auditoria 2026-06): rate-limit best-effort por IP. Sem isso, /token vira
+    // oraculo publico de validacao de keys (brute-force/credential-stuffing) e abusa da
+    // quota do Gumroad. KV nao e atomico, mas segura abuso em massa.
+    if (env.DEVICES) {
+      const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+      const rlKey = `rl:${ip}`;
+      let count = 0;
+      try { count = parseInt((await env.DEVICES.get(rlKey)) || "0", 10) || 0; } catch (_) {}
+      if (count >= 30) return jsonResponse({ error: "rate limited" }, 429);
+      try { await env.DEVICES.put(rlKey, String(count + 1), { expirationTtl: 60 }); } catch (_) {}
     }
 
     let body;
@@ -102,7 +109,9 @@ export default {
     } catch (e) {
       return jsonResponse({ error: "gumroad unreachable" }, 502);
     }
-    if (!data.success) return jsonResponse({ error: data.message || "invalid license" }, 403);
+    // Erro GENERICO (auditoria 2026-06): nao repassar data.message do Gumroad ao cliente —
+    // junto com rate-limit, evita oraculo binario "key valida vs invalida".
+    if (!data.success) return jsonResponse({ error: "invalid license" }, 403);
 
     const purchase = data.purchase || {};
     if (purchase.refunded || purchase.chargebacked || purchase.disputed) {

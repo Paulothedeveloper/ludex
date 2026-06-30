@@ -32,7 +32,7 @@ import {
   GearIcon, CloseIcon, PowerIcon, FullscreenIcon, RefreshIcon, PlusIcon,
   TrashIcon, EditIcon, RotateIcon, UserIcon, SearchIcon, StarIcon, PlayIcon,
   FolderIcon, InfoIcon, SpeakerIcon, SpeakerMuteIcon, CheckIcon, ShieldIcon,
-  SortIcon, ImageIcon, GamepadIcon, SystemIcon,
+  SortIcon, ImageIcon, GamepadIcon, SystemIcon, DiscIcon,
 } from "./ludexIcons";
 // v0.8.51: EmulatorView + ResumePromptModal extraidos pra arquivo proprio (~680L removidas)
 import { EmulatorView, ResumePromptModal } from "./LudexEmulatorView";
@@ -1486,7 +1486,7 @@ function DiscPickerModal({ system, game, onCancel, onPick }) {
           <div className="pb-disc-grid">
             {(game.discs || []).map((d) => (
               <button key={d.path} className="pb-disc-card" onClick={() => onPick(d.path)}>
-                <span className="pb-disc-icon">💿</span>
+                <span className="pb-disc-icon"><DiscIcon style={{ width: "1em", height: "1em", verticalAlign: "-0.12em" }} /></span>
                 <span className="pb-disc-label">{d.label}</span>
               </button>
             ))}
@@ -1919,7 +1919,7 @@ const GameCardInner = React.memo(function GameCardInner({ hasCover, cover, name,
       )}
       {isFav && <span className="pb-card-fav"><StarIcon filled /></span>}
       {discsLen > 1 && (
-        <span className="pb-card-discs" title={t("{n} discos", { n: discsLen })}>💿×{discsLen}</span>
+        <span className="pb-card-discs" title={t("{n} discos", { n: discsLen })}><DiscIcon style={{ width: "1em", height: "1em", verticalAlign: "-0.12em" }} />×{discsLen}</span>
       )}
       {metaStatus && (
         <span className={`pb-card-status pb-card-status-${metaStatus}`} title={t(GAME_STATUS_LABELS[metaStatus])}>

@@ -817,7 +817,7 @@ export default function SettingsPanel({
                         <div className="pb-ra-ach-body">
                           <div className="pb-ra-ach-row">
                             <strong>{a.title}</strong>
-                            <span className="pb-ra-ach-points">{t("{points} pts", { points: a.points })}{a.hardcore ? " · 🔥" : ""}</span>
+                            <span className="pb-ra-ach-points">{t("{points} pts", { points: a.points })}{a.hardcore ? <span title="Hardcore" style={{ marginLeft: 5, fontSize: "0.78em", fontWeight: 800, color: "#ff7a59", letterSpacing: "0.04em" }}>HC</span> : ""}</span>
                           </div>
                           <span className="pb-ra-ach-desc">{a.description}</span>
                           <span className="pb-ra-ach-game">{a.game_title} · {a.console_name}</span>
