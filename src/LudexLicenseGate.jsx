@@ -90,8 +90,8 @@ export default function LudexLicenseGate({ onLicensed, reason }) {
               style={{
                 background: getLanguage() === lng.code ? "rgba(124,92,255,0.35)" : "rgba(255,255,255,0.06)",
                 border: getLanguage() === lng.code ? "1px solid rgba(124,92,255,0.8)" : "1px solid rgba(255,255,255,0.14)",
-                borderRadius: 8, padding: "5px 9px", cursor: "pointer", fontSize: 16, lineHeight: 1,
-              }}>{lng.flag}</button>
+                borderRadius: 8, padding: "5px 11px", cursor: "pointer", fontSize: 13, fontWeight: 600, lineHeight: 1, color: "#fff",
+              }}>{lng.label}</button>
           ))}
         </div>
         <div className="lx-licgate-logo"><img src="/ludex-wordmark.png" alt="Ludex" style={{ width: "min(320px, 78%)", height: "auto", display: "block", margin: "0 auto" }} /></div>

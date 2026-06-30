@@ -9,13 +9,15 @@
 // Idioma muda raramente (seletor) -> ao trocar salvamos + reload, então t() só lê
 // um módulo-var setado no startup.
 
+// v1.1.4: sem flag emoji (regra: ZERO emoji em UI de produção) + bandeira != idioma.
+// O seletor mostra o NOME NATIVO do idioma (e o código de 2 letras onde precisa ser compacto).
 export const LANGUAGES = [
-  { code: "pt", label: "Português", flag: "🇧🇷" },
-  { code: "en", label: "English", flag: "🇺🇸" },
-  { code: "es", label: "Español", flag: "🇪🇸" },
-  { code: "fr", label: "Français", flag: "🇫🇷" },
-  { code: "zh", label: "中文", flag: "🇨🇳" },
-  { code: "ru", label: "Русский", flag: "🇷🇺" },
+  { code: "pt", label: "Português" },
+  { code: "en", label: "English" },
+  { code: "es", label: "Español" },
+  { code: "fr", label: "Français" },
+  { code: "zh", label: "中文" },
+  { code: "ru", label: "Русский" },
 ];
 const CODES = LANGUAGES.map((l) => l.code);
 const STORAGE_KEY = "ludex.language";

@@ -160,7 +160,7 @@ function MobileWelcome({ onDone }) {
               onClick={() => { setLanguage(lng.code); try { sfx.confirm(); haptic(8); } catch {} }}
               style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 12, border: cur === lng.code ? "1px solid transparent" : "1px solid rgba(255,255,255,0.14)", background: cur === lng.code ? "var(--lx-grad, linear-gradient(135deg,#7c3aed,#ec4899))" : "rgba(255,255,255,0.06)", color: "#fff", fontFamily: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
             >
-              <span style={{ fontSize: 18 }}>{lng.flag}</span><span>{lng.label}</span>
+              <span>{lng.label}</span>
             </button>
           ))}
         </div>
@@ -1440,7 +1440,6 @@ function SettingsTab({ activeProfile, androidDemo, onAdminUnlock, onPickFolder, 
               onClick={() => { setLanguage(lng.code); sfx.confirm(); haptic(8); }}
               aria-label={lng.label}
             >
-              <span className="lmx-lang-flag">{lng.flag}</span>
               <span className="lmx-lang-name">{lng.label}</span>
             </button>
           ))}

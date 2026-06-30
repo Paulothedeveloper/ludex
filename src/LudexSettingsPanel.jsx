@@ -321,7 +321,7 @@ export default function SettingsPanel({
               <button key={lng.code}
                 className={`pb-settings-btn ${getLanguage() === lng.code ? "active" : ""}`}
                 onClick={() => setLanguage(lng.code)}>
-                {lng.flag} {lng.label}
+                {lng.label}
               </button>
             ))}
           </div>

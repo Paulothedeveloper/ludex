@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versão (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "1.1.4": [
+    "Seletor de idioma mais claro: agora mostra o nome de cada idioma (Português, English, Español…) em vez de bandeirinhas — bandeira não representa idioma.",
+  ],
   "1.1.3": [
     "Novo ícone do app: o símbolo \"L\" com o power pixel âmbar, redesenhado a partir de referências de design — identidade premium e consistente em todas as plataformas.",
   ],
