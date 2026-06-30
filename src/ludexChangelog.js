@@ -4,6 +4,9 @@
 
 // Bullets curtos e claros por versão (pt-BR). Manter a mais nova no topo.
 export const CHANGELOG = {
+  "1.1.6": [
+    "Correção visual: dentro do jogo, o botão de captura não fica mais sobreposto ao botão CHEATS.",
+  ],
   "1.1.5": [
     "Mais estável na emulação: correção de uma falha rara em jogos que trocam de resolução durante o jogo, e limpeza de arquivos temporários que ficavam pra trás.",
     "Correção: a atualização automática no Android agora aponta pro lugar certo — você volta a receber as novas versões.",
