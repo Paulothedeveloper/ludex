@@ -1359,10 +1359,19 @@
 .pb-emulator-view:hover .pb-emulator-disc { opacity: 1; }
 .pb-emulator-disc:hover { background: rgba(255, 230, 128, 0.15); }
 /* v0.9.2: botao CHEATS (segunda linha, abaixo do close pra nao colidir) */
-.pb-emulator-cheats {
+/* v1.1.5: row dos botoes de acao in-game (CHEATS + captura) com gap — evita colisao
+   (antes os 2 botoes .pb-emulator-cheats eram absolute no mesmo ponto). */
+.pb-emulator-actions {
   position: absolute;
   top: 66px;
   right: 18px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pb-emulator-cheats {
+  position: static;
   z-index: 2;
   height: 32px;
   padding: 0 14px;
@@ -1380,6 +1389,15 @@
 }
 .pb-emulator-view:hover .pb-emulator-cheats { opacity: 1; }
 .pb-emulator-cheats:hover { background: rgba(124, 92, 255, 0.25); }
+/* v1.1.5: botao de captura = icone quadrado (nao pill de texto) */
+.pb-emulator-shot {
+  width: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pb-emulator-shot svg { display: block; }
 .pb-emulator-info {
   position: absolute;
   top: 18px;

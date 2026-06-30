@@ -552,18 +552,23 @@ export function EmulatorView({ system, game, onClose, autoLoadSlot = null }) {
           <LxToolsIcon />
         </button>
       )}
-      <button
-        className="pb-emulator-cheats"
-        onClick={() => setCheatsOpen(true)}
-        title={t("Cheats (buscar online ou adicionar manualmente)")}
-      >
-        {t("CHEATS")}
-      </button>
-      <button
-        className="pb-emulator-cheats"
-        onClick={takeScreenshot}
-        title={t("Tirar screenshot (F12)")}
-      ><CameraIcon style={{ width: "1.1em", height: "1.1em" }} /></button>
+      {/* v1.1.5: CHEATS + screenshot num flex row (gap) — antes os 2 tinham a MESMA classe
+          position:absolute no mesmo ponto e colidiam (visivel com o icone novo). Flex = nunca
+          colide, independente da largura do texto "CHEATS" por idioma. */}
+      <div className="pb-emulator-actions">
+        <button
+          className="pb-emulator-cheats"
+          onClick={() => setCheatsOpen(true)}
+          title={t("Cheats (buscar online ou adicionar manualmente)")}
+        >
+          {t("CHEATS")}
+        </button>
+        <button
+          className="pb-emulator-cheats pb-emulator-shot"
+          onClick={takeScreenshot}
+          title={t("Tirar screenshot (F12)")}
+        ><CameraIcon style={{ width: "18px", height: "18px" }} /></button>
+      </div>
       {cheatsOpen && (
         <CheatsModal systemId={system.id} gamePath={game.path} onClose={() => setCheatsOpen(false)} />
       )}
