@@ -40,7 +40,7 @@ O mascote do Ludex — a luz de *press start* da sua coleção.
 
 <div align="center">
 
-[<img src="docs/lumi-thumb.jpg" alt="Lumi — mascote do Ludex (vídeo)" width="220" />](https://github.com/Paulothedeveloper/ludex/releases/download/v1.1.1/Ludex-Mascote-Lumi.mp4)
+[<img src="docs/lumi-thumb.png" alt="Lumi — mascote do Ludex (vídeo)" width="220" />](https://github.com/Paulothedeveloper/ludex/releases/download/v1.1.1/Ludex-Mascote-Lumi.mp4)
 
 ▶️ **[Ver o Lumi em movimento](https://github.com/Paulothedeveloper/ludex/releases/download/v1.1.1/Ludex-Mascote-Lumi.mp4)**
 
